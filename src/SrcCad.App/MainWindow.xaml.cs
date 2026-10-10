@@ -29,6 +29,8 @@ public partial class MainWindow : Window
     private bool _hasSolid;
     private double _extrudeDepth = 20.0;
     private bool _editingExtrude;
+    private readonly Stack<double> _featureUndo = new();
+    private readonly Stack<double> _featureRedo = new();
 
     private bool _middleDown;
     private bool _panMode;
@@ -2004,3 +2006,4 @@ public partial class MainWindow : Window
 
     private void Status(string text) => StatusText.Text = text;
 }
+

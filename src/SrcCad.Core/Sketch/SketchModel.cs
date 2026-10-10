@@ -1057,10 +1057,11 @@ public sealed class SketchModel
         if (!TryGetClosedLineLoops(out var loops)) return false;
 
         outerLoop = loops.OrderByDescending(loop => Math.Abs(SignedArea(loop))).First();
+        var boundary = outerLoop;
         foreach (var loop in loops)
         {
             if (ReferenceEquals(loop, outerLoop)) continue;
-            if (!loop.All(p => PointInPolygon(p, outerLoop))) return false;
+            if (!loop.All(p => PointInPolygon(p, boundary))) return false;
             polygonHoles.Add(loop);
         }
 
@@ -1120,18 +1121,6 @@ public sealed class SketchModel
         return true;
     }
 
-    private static double DistancePointToSegment(Point2d p, Point2d a, Point2d b)
-    {
-        var dx = b.X - a.X;
-        var dy = b.Y - a.Y;
-        var length2 = dx * dx + dy * dy;
-        if (length2 <= 1e-24) return Point2d.Distance(p, a);
-
-        var t = ((p.X - a.X) * dx + (p.Y - a.Y) * dy) / length2;
-        t = Math.Max(0.0, Math.Min(1.0, t));
-        return Point2d.Distance(p, new Point2d(a.X + t * dx, a.Y + t * dy));
-    }
-
     private static bool PointInPolygon(Point2d p, IReadOnlyList<Point2d> polygon)
     {
         var inside = false;
@@ -1153,3 +1142,4 @@ public sealed class SketchModel
 
 
 }
+
