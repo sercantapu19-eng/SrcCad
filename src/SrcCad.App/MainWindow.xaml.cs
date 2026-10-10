@@ -1651,13 +1651,24 @@ public partial class MainWindow : Window
 
         var p = _sketch.Plane;
         bool ok;
-        if (_sketch.TryGetExtrusionProfile(out var loop, out var holes))
+        if (_sketch.TryGetExtrusionProfile(out var loop, out var polygonHoles, out var holes))
         {
             var uv = new double[loop.Count * 2];
             for (var i = 0; i < loop.Count; i++)
             {
                 uv[i * 2] = loop[i].X;
                 uv[i * 2 + 1] = loop[i].Y;
+            }
+
+            var polygonHoleData = new List<double>();
+            foreach (var hole in polygonHoles)
+            {
+                polygonHoleData.Add(hole.Count);
+                foreach (var point in hole)
+                {
+                    polygonHoleData.Add(point.X);
+                    polygonHoleData.Add(point.Y);
+                }
             }
 
             var holeData = new double[holes.Count * 3];
@@ -1670,7 +1681,7 @@ public partial class MainWindow : Window
                 holeData[i * 3 + 2] = circle.Radius;
             }
 
-            ok = _viewer.PreviewExtrudeProfile(uv, holeData,
+            ok = _viewer.PreviewExtrudeProfile(uv, polygonHoleData.ToArray(), holeData,
                 p.Origin.X, p.Origin.Y, p.Origin.Z,
                 p.U.X, p.U.Y, p.U.Z,
                 p.V.X, p.V.Y, p.V.Z,
@@ -1776,13 +1787,24 @@ public partial class MainWindow : Window
 
         var p = _sketch.Plane;
         bool ok;
-        if (_sketch.TryGetExtrusionProfile(out var loop, out var holes))
+        if (_sketch.TryGetExtrusionProfile(out var loop, out var polygonHoles, out var holes))
         {
             var uv = new double[loop.Count * 2];
             for (var i = 0; i < loop.Count; i++)
             {
                 uv[i * 2] = loop[i].X;
                 uv[i * 2 + 1] = loop[i].Y;
+            }
+
+            var polygonHoleData = new List<double>();
+            foreach (var hole in polygonHoles)
+            {
+                polygonHoleData.Add(hole.Count);
+                foreach (var point in hole)
+                {
+                    polygonHoleData.Add(point.X);
+                    polygonHoleData.Add(point.Y);
+                }
             }
 
             var holeData = new double[holes.Count * 3];
@@ -1795,7 +1817,7 @@ public partial class MainWindow : Window
                 holeData[i * 3 + 2] = circle.Radius;
             }
 
-            ok = _viewer.PreviewExtrudeProfile(uv, holeData,
+            ok = _viewer.PreviewExtrudeProfile(uv, polygonHoleData.ToArray(), holeData,
                 p.Origin.X, p.Origin.Y, p.Origin.Z,
                 p.U.X, p.U.Y, p.U.Z,
                 p.V.X, p.V.Y, p.V.Z,
