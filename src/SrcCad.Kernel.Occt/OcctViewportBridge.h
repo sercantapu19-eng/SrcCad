@@ -90,6 +90,7 @@ namespace SrcCad::Kernel::Occt
                               double radius);
 
         bool PreviewExtrudeProfile(cli::array<double>^ outerUvPairs,
+                                   cli::array<double>^ innerLoopData,
                                    cli::array<double>^ circleHoles,
                                    double ox, double oy, double oz,
                                    double ux, double uy, double uz,
