@@ -27,6 +27,7 @@ public partial class MainWindow : Window
     private bool _inSketch;
     private bool _extrudeCommandActive;
     private bool _hasSolid;
+    private double _extrudeDepth = 20.0;
 
     private bool _middleDown;
     private bool _panMode;
@@ -1511,6 +1512,7 @@ public partial class MainWindow : Window
         }
 
         _extrudeCommandActive = true;
+        ExtrudeDepthTextBox.Text = _extrudeDepth.ToString("0.###", CultureInfo.CurrentCulture);
         ExtrudePanel.Visibility = Visibility.Visible;
         PropertyTitle.Text = "Ekstrüzyon";
         PropertyInfo.Text = "Kapalı Çizim1 profilini kendi düzlem normalinde gerçek OCCT B-Rep katıya dönüştürür.";
@@ -1588,6 +1590,9 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (TryReadDepth(out var committedDepth))
+            _extrudeDepth = committedDepth;
+
         _hasSolid = true;
         _extrudeCommandActive = false;
         ExtrudePanel.Visibility = Visibility.Collapsed;
@@ -1615,6 +1620,28 @@ public partial class MainWindow : Window
         ExtrudePanel.Visibility = Visibility.Collapsed;
         ManagerTabs.SelectedItem = FeatureManagerTab;
         Status("Ekstrüzyon iptal edildi.");
+    }
+
+    private void FeatureTree_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (FeatureTree.SelectedItem is not TreeViewItem item ||
+            item.Tag is not string tag ||
+            tag != "feature:extrude1" ||
+            _sketch is null ||
+            !_hasSolid)
+            return;
+
+        _viewer.ClearModel();
+        _hasSolid = false;
+        _extrudeCommandActive = true;
+        ExtrudeDepthTextBox.Text = _extrudeDepth.ToString("0.###", CultureInfo.CurrentCulture);
+        ExtrudePanel.Visibility = Visibility.Visible;
+        PropertyTitle.Text = "Ekstrüzyon1";
+        PropertyInfo.Text = "Mevcut özelliği düzenliyorsunuz. Derinliği değiştirin; önizleme gerçek B-Rep katıyı yeniden oluşturur.";
+        ManagerTabs.SelectedItem = PropertyManagerTab;
+        UpdateExtrudePreview();
+        Status($"Ekstrüzyon1 düzenleniyor • {_extrudeDepth:0.###} mm • mouse tekeri ±10 mm • ✓ ile onaylayın.");
+        e.Handled = true;
     }
 
     private void FeatureTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
