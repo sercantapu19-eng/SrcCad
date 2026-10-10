@@ -138,4 +138,23 @@ foreach (var plane in StandardPlanes.All)
         120), "Equal relation did not drive geometry.");
 }
 
+
+// Moving a dimension label must never change the driven geometry or its value.
+{
+    var sketch = new SketchModel(StandardPlanes.Front);
+    var p0 = sketch.CreatePointExact(new Point2d(0, 0));
+    var p1 = sketch.CreatePointExact(new Point2d(75, 0));
+    var line = sketch.AddLine(p0, p1);
+    var dim = sketch.AddDimension(
+        SketchDimensionType.LineLength,
+        new Point2d(30, 10),
+        entityA: line.Id);
+    Check(sketch.SetDimensionValue(dim.Id, 150), "Dimension setup failed.");
+    sketch.SetDimensionLabel(dim.Id, new Point2d(400, 250));
+    Check(Near(sketch.Measure(sketch.Dimension(dim.Id)!), 150),
+        "Moving a dimension label changed the driven geometry.");
+    Check(sketch.Dimension(dim.Id)!.LabelPosition == new Point2d(400, 250),
+        "Dimension label position was not updated.");
+}
+
 Console.WriteLine("SrcCad CAD core smoke tests: PASS");
