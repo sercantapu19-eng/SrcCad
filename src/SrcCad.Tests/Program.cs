@@ -202,4 +202,27 @@ foreach (var plane in StandardPlanes.All)
         "Overlapping circular holes were accepted.");
 }
 
+
+// Snapshot restore is the foundation of sketch Undo/Redo. IDs, geometry,
+// relations and dimensions must return exactly to the captured state.
+{
+    var sketch = new SketchModel(StandardPlanes.Front);
+    sketch.AddCornerRectangle(new Point2d(0, 0), new Point2d(100, 60), 0.01);
+    var snapshot = sketch.CaptureSnapshot();
+    var originalEntityCount = sketch.Entities.Count;
+    var originalRelationCount = sketch.Relations.Count;
+
+    var center = sketch.CreatePointExact(new Point2d(50, 30));
+    sketch.AddCircle(center, 10);
+    Check(sketch.Entities.Count == originalEntityCount + 1, "Snapshot mutation setup failed.");
+
+    sketch.RestoreSnapshot(snapshot);
+    Check(sketch.Entities.Count == originalEntityCount, "Undo snapshot did not restore entities.");
+    Check(sketch.Relations.Count == originalRelationCount, "Undo snapshot did not restore relations.");
+    Check(!sketch.Circles(false).Any(), "Undo snapshot left newly-created geometry behind.");
+
+    var nextPoint = sketch.CreatePointExact(new Point2d(10, 10));
+    Check(nextPoint == snapshot.NextPointId, "Snapshot restore did not restore deterministic point IDs.");
+}
+
 Console.WriteLine("SrcCad CAD core smoke tests: PASS");
