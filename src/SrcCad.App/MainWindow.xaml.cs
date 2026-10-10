@@ -43,6 +43,7 @@ public partial class MainWindow : Window
     private int _hoverSketchPointId = -1;
     private int _hoverSketchDimensionId = -1;
     private int _dragSketchPointId = -1;
+    private int _dragSketchDimensionId = -1;
 
     private bool _smartDimensionMode;
     private readonly List<int> _smartDimensionEntities = new();
@@ -213,7 +214,10 @@ public partial class MainWindow : Window
         }
 
         if (e.Button == WinForms.MouseButtons.Left)
+        {
             _dragSketchPointId = -1;
+            _dragSketchDimensionId = -1;
+        }
     }
 
     private void ViewportPanel_MouseMove(object? sender, WinForms.MouseEventArgs e)
@@ -238,6 +242,20 @@ public partial class MainWindow : Window
         if (_inSketch && _sketchCommand?.HasPendingStep == true)
         {
             UpdateSketchCommandPreview(e.X, e.Y);
+            return;
+        }
+
+        if (_inSketch &&
+            _sketchCommand is null &&
+            !_smartDimensionMode &&
+            _dragSketchDimensionId >= 0 &&
+            e.Button == WinForms.MouseButtons.Left &&
+            _sketch is not null &&
+            TryGetSketchCursor(e.X, e.Y, out var dimensionLabelUv, out _, snap: false))
+        {
+            _sketch.SetDimensionLabel(_dragSketchDimensionId, dimensionLabelUv);
+            RenderSketch();
+            Status($"Ölçü{_dragSketchDimensionId} konumu taşınıyor • sürücü değeri değişmedi.");
             return;
         }
 
@@ -416,9 +434,21 @@ public partial class MainWindow : Window
         var toggle = (WinForms.Control.ModifierKeys & WinForms.Keys.Control) == WinForms.Keys.Control;
         SelectSketchAt(x, y, toggle);
 
+        // Ölçü metni tek tıkla seçilip SOLIDWORKS'teki gibi sürüklenebilir.
+        // Değer yalnız çift tıklamada düzenlenir; sürükleme sadece label konumunu değiştirir.
+        if (dimensionId >= 0)
+        {
+            _dragSketchDimensionId = dimensionId;
+            _dragSketchPointId = -1;
+            return;
+        }
+
         var pointId = _sketch.FindPointNear(uv, tolerance);
         if (pointId > 0 && !_sketch.Point(pointId).Fixed)
+        {
             _dragSketchPointId = pointId;
+            _dragSketchDimensionId = -1;
+        }
     }
 
     private void HandleSmartDimensionPick(Point2d uv, double tolerance)
