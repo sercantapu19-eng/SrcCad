@@ -109,6 +109,8 @@ namespace SrcCad::Kernel::Occt
                                   double nx, double ny, double nz,
                                   double depth);
         bool CommitExtrusion();
+        void HideCommittedSolid();
+        void ShowCommittedSolid();
         void CancelExtrusionPreview();
         void ClearModel();
 
