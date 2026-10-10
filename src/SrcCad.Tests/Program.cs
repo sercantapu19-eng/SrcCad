@@ -157,4 +157,49 @@ foreach (var plane in StandardPlanes.All)
         "Dimension label position was not updated.");
 }
 
+
+// Acceptance case from the real workflow: 250x200 plate + 3xØ15 must be
+// interpreted as one outer region and three EMPTY circular holes.
+{
+    var sketch = new SketchModel(StandardPlanes.Front);
+    sketch.AddCornerRectangle(new Point2d(-125, -100), new Point2d(125, 100), 0.01);
+    foreach (var centerPos in new[]
+    {
+        new Point2d(-80, 0),
+        new Point2d(0, 0),
+        new Point2d(80, 0)
+    })
+    {
+        var centerId = sketch.CreatePointExact(centerPos);
+        sketch.AddCircle(centerId, 7.5);
+    }
+
+    Check(sketch.TryGetExtrusionProfile(out var outer, out var holes),
+        "250x200 + 3xØ15 extrusion profile was rejected.");
+    Check(outer.Count == 4, "250x200 plate must have one 4-edge outer loop.");
+    Check(holes.Count == 3 && holes.All(h => Near(h.Radius * 2.0, 15)),
+        "Three Ø15 circles must be recognized as three empty holes.");
+}
+
+// Invalid inner contours must be rejected before OCCT preview.
+{
+    var sketch = new SketchModel(StandardPlanes.Front);
+    sketch.AddCornerRectangle(new Point2d(-50, -50), new Point2d(50, 50), 0.01);
+    var c0 = sketch.CreatePointExact(new Point2d(45, 0));
+    sketch.AddCircle(c0, 10); // crosses the outer boundary
+    Check(!sketch.TryGetExtrusionProfile(out _, out _),
+        "A hole crossing the outer boundary was accepted.");
+}
+
+{
+    var sketch = new SketchModel(StandardPlanes.Front);
+    sketch.AddCornerRectangle(new Point2d(-50, -50), new Point2d(50, 50), 0.01);
+    var c0 = sketch.CreatePointExact(new Point2d(-5, 0));
+    var c1 = sketch.CreatePointExact(new Point2d(5, 0));
+    sketch.AddCircle(c0, 10);
+    sketch.AddCircle(c1, 10); // overlaps first hole
+    Check(!sketch.TryGetExtrusionProfile(out _, out _),
+        "Overlapping circular holes were accepted.");
+}
+
 Console.WriteLine("SrcCad CAD core smoke tests: PASS");
