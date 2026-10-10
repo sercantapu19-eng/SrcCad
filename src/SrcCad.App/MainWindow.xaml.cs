@@ -46,6 +46,8 @@ public partial class MainWindow : Window
     private int _hoverSketchDimensionId = -1;
     private int _dragSketchPointId = -1;
     private int _dragSketchDimensionId = -1;
+    private SketchSnapshot? _dragSketchSnapshot;
+    private bool _dragSketchChanged;
 
     private bool _smartDimensionMode;
     private readonly List<int> _smartDimensionEntities = new();
@@ -250,8 +252,16 @@ public partial class MainWindow : Window
 
         if (e.Button == WinForms.MouseButtons.Left)
         {
+            if (_dragSketchChanged && _dragSketchSnapshot is not null)
+            {
+                _sketchUndo.Push(_dragSketchSnapshot);
+                _sketchRedo.Clear();
+            }
+
             _dragSketchPointId = -1;
             _dragSketchDimensionId = -1;
+            _dragSketchSnapshot = null;
+            _dragSketchChanged = false;
         }
     }
 
@@ -289,6 +299,7 @@ public partial class MainWindow : Window
             TryGetSketchCursor(e.X, e.Y, out var dimensionLabelUv, out _, snap: false))
         {
             _sketch.SetDimensionLabel(_dragSketchDimensionId, dimensionLabelUv);
+            _dragSketchChanged = true;
             RenderSketch();
             Status($"Ölçü{_dragSketchDimensionId} konumu taşınıyor • sürücü değeri değişmedi.");
             return;
@@ -306,6 +317,7 @@ public partial class MainWindow : Window
             {
                 _sketch.SetPointPosition(_dragSketchPointId, dragUv);
                 _sketch.SolveRelations();
+                _dragSketchChanged = true;
                 RenderSketch();
                 Status($"P{_dragSketchPointId} sürükleniyor • ilişkiler ve sürücü ölçüler korunuyor.");
             }
@@ -475,6 +487,8 @@ public partial class MainWindow : Window
         {
             _dragSketchDimensionId = dimensionId;
             _dragSketchPointId = -1;
+            _dragSketchSnapshot = _sketch.CaptureSnapshot();
+            _dragSketchChanged = false;
             return;
         }
 
@@ -483,6 +497,8 @@ public partial class MainWindow : Window
         {
             _dragSketchPointId = pointId;
             _dragSketchDimensionId = -1;
+            _dragSketchSnapshot = _sketch.CaptureSnapshot();
+            _dragSketchChanged = false;
         }
     }
 
@@ -492,6 +508,22 @@ public partial class MainWindow : Window
 
         var pointId = _sketch.FindPointNear(uv, tolerance);
         var entityId = pointId < 0 ? _sketch.FindEntityNear(uv, tolerance) : -1;
+
+        if (_smartDimensionWaitingPlacement &&
+            _smartDimensionEntities.Count == 1 &&
+            _sketch.Entity(_smartDimensionEntities[0]) is SketchLine)
+        {
+            // When the first angle leg is already selected, endpoints of the
+            // second leg must not steal the click. Prefer a nearby line hit.
+            var lineHit = _sketch.FindEntityNear(uv, tolerance);
+            if (lineHit >= 0 &&
+                lineHit != _smartDimensionEntities[0] &&
+                _sketch.Entity(lineHit) is SketchLine)
+            {
+                entityId = lineHit;
+                pointId = -1;
+            }
+        }
 
         if (_smartDimensionWaitingPlacement)
         {
@@ -548,7 +580,7 @@ public partial class MainWindow : Window
                 _smartDimensionEntities.Clear();
                 _smartDimensionEntities.Add(entityId);
                 _smartDimensionWaitingPlacement = true;
-                Status("Akıllı Ölçülendirme: ölçünün konumunu tıklayın • açı için Ctrl+ikinci çizgi.");
+                Status("Akıllı Ölçülendirme: ölçünün konumunu tıklayın • açı için ikinci çizgiyi normal tıklayın.");
             }
             RenderSketch();
             return;
