@@ -225,4 +225,30 @@ foreach (var plane in StandardPlanes.All)
     Check(nextPoint == snapshot.NextPointId, "Snapshot restore did not restore deterministic point IDs.");
 }
 
+
+// Collinear must project the second line onto the first line without changing topology.
+{
+    var sketch = new SketchModel(StandardPlanes.Front);
+    var a = sketch.CreatePointExact(new Point2d(0, 0));
+    var b = sketch.CreatePointExact(new Point2d(100, 0));
+    var c = sketch.CreatePointExact(new Point2d(20, 30));
+    var d = sketch.CreatePointExact(new Point2d(80, 45));
+    var first = sketch.AddLine(a, b);
+    var second = sketch.AddLine(c, d);
+    Check(sketch.ApplyRelationToSelection(SketchRelationType.Collinear, new[] { first.Id, second.Id }, Array.Empty<int>()), "Collinear relation rejected valid lines.");
+    Check(Math.Abs(sketch.Point(c).Position.Y) < 1e-8 && Math.Abs(sketch.Point(d).Position.Y) < 1e-8, "Collinear relation did not project second line.");
+}
+
+// Concentric must drive two circle centers together while preserving both radii.
+{
+    var sketch = new SketchModel(StandardPlanes.Front);
+    var c1 = sketch.CreatePointExact(new Point2d(10, 20));
+    var c2 = sketch.CreatePointExact(new Point2d(80, 90));
+    var a = sketch.AddCircle(c1, 15);
+    var b = sketch.AddCircle(c2, 30);
+    Check(sketch.ApplyRelationToSelection(SketchRelationType.Concentric, new[] { a.Id, b.Id }, Array.Empty<int>()), "Concentric relation rejected valid circles.");
+    Check(Point2d.Distance(sketch.Point(c1).Position, sketch.Point(c2).Position) < 1e-8, "Concentric relation did not merge circle centers.");
+    Check(Math.Abs(((SketchCircle)sketch.Entity(a.Id)!).Radius - 15) < 1e-8 && Math.Abs(((SketchCircle)sketch.Entity(b.Id)!).Radius - 30) < 1e-8, "Concentric relation changed circle radii.");
+}
+
 Console.WriteLine("SrcCad CAD core smoke tests: PASS");
