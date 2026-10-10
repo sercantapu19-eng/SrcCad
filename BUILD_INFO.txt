@@ -1,0 +1,62 @@
+SrcCad V1.2 CAD Alpha
+=====================
+
+Hedef ortam:
+- Visual Studio Community 2026 / MSVC v145
+- Debug|x64
+- .NET 8 WPF + C++/CLI
+- OCCT: D:\SrcCadV11\vcpkg_installed\x64-windows
+
+Bu pakette yapılan otomatik/statik kontroller:
+- XAML/XML proje dosyaları parse edildi.
+- MainWindow XAML event handler referansları kontrol edildi; eksik handler yok.
+- C#/C++ blok/parantez dengesi kontrol edildi.
+- Proje referansları ve solution yolları kontrol edildi.
+- Eski SketchTool UI-state yaklaşımı kaldırıldı; ISketchCommand/CadCommandManager kullanılıyor.
+- BASLAT.bat build sonrasında SrcCad.Tests smoke testini otomatik çalıştırıyor.
+
+Bu çalışma ortamı Windows/MSBuild içermediğinden V1.2'nin gerçek C++/CLI derlemesi burada
+çalıştırılamadı. Kullanıcının aynı makinesinde V1.1 Foundation C# -> C++/CLI -> OCCT zinciri
+başarıyla derlenmiş ve Open CASCADE 8.0.0 ile BRepPrimAPI_MakeBox testi geçmiştir.
+
+Sorun olursa tek dosya için COLLECT_DIAGNOSTICS.bat çalıştırın.
+
+V1.2.1 BUILD FIX
+- Windows SDK IServiceProvider / C++/CLI namespace çakışması giderildi.
+- NOMINMAX + WIN32_LEAN_AND_MEAN etkinleştirildi.
+- Windows max/min makrolarının OCCT std::max kullanımlarını bozması engellendi.
+- Native Windows/OCCT header'ları managed header'lardan önce derleniyor.
+
+V1.2.2 BUILD FIX
+- WPF + WinForms implicit global using çakışması giderildi.
+- SrcCad.App için ImplicitUsings kapatıldı; gerekli System namespace açıkça eklendi.
+- App sınıfı System.Windows.Application olarak açıkça belirtildi.
+- KeyEventArgs System.Windows.Input.KeyEventArgs olarak açıkça belirtildi.
+- Gereksiz WIN32_LEAN_AND_MEAN tekrar tanımı kaldırıldı; NOMINMAX korunuyor.
+
+V1.2.3 RESTORE FIX
+- BASLAT.bat artık MSBuild /restore ile başlıyor.
+- project.assets.json eksikliği (NETSDK1004) otomatik gideriliyor.
+- RestoreIgnoreFailedSources=true eklendi; yalnızca yerel framework referanslarıyla restore çalışabilir.
+
+V1.3 PARAMETRIC SKETCH ALPHA
+- Solid face/edge/vertex click selection made persistent and local-subshape highlight colors set.
+- Right-click context menu added for model and sketch.
+- Sketch hit-test is model-based, not per-WPF-element event binding.
+- Sketch selection, hover pre-highlight and Delete added.
+- Horizontal, Vertical, Coincident, Parallel, Perpendicular, Equal and Fixed relations added.
+- Smart Dimension added: line length, circle diameter, point distance and line angle.
+- Dimension labels are rendered inside the OCCT viewport.
+- Double-click/edit changes real sketch geometry.
+- Center rectangle keeps its center while width/height dimension changes.
+- Under-defined point dragging keeps relations and driving dimensions.
+- Parametric sketch smoke tests added.
+
+V1.4 USABLE PART ALPHA
+- Smart Dimension placement flow changed: select -> live preview -> place -> enter value.
+- Selection-first Smart Dimension supported.
+- A second line becomes an angle target only with Ctrl; ordinary second click places dimension.
+- Linear dimensions render extension lines + dimension line instead of diagonal leader.
+- Extrusion supports outer polyline + one or more internal circular holes.
+- During Extrude preview, mouse wheel changes depth by exactly 10 mm per notch.
+- Extrude PropertyManager shows wheel behavior.

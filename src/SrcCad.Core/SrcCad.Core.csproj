@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>SrcCad.Core</AssemblyName>
+    <RootNamespace>SrcCad.Core</RootNamespace>
+  </PropertyGroup>
+</Project>

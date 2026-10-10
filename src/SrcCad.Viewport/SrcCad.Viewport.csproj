@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>SrcCad.Viewport</AssemblyName>
+    <RootNamespace>SrcCad.Viewport</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SrcCad.Core\SrcCad.Core.csproj" />
+  </ItemGroup>
+</Project>

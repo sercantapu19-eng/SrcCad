@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>SrcCad.App</AssemblyName>
+    <RootNamespace>SrcCad.App</RootNamespace>
+    <StartupObject>SrcCad.App.App</StartupObject>
+    <OcctRuntimeDir>$(MSBuildThisFileDirectory)..\..\..\vcpkg_installed\x64-windows\bin</OcctRuntimeDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SrcCad.Core\SrcCad.Core.csproj" />
+    <ProjectReference Include="..\SrcCad.Commands\SrcCad.Commands.csproj" />
+    <ProjectReference Include="..\SrcCad.Kernel\SrcCad.Kernel.csproj" />
+    <ProjectReference Include="..\SrcCad.Viewport\SrcCad.Viewport.csproj" />
+    <ProjectReference Include="..\SrcCad.Kernel.Occt\SrcCad.Kernel.Occt.vcxproj" />
+    <Resource Include="Assets\SrcCadLogo.png" />
+  </ItemGroup>
+
+  <Target Name="CopyOcctRuntime" AfterTargets="Build" Condition="Exists('$(OcctRuntimeDir)')">
+    <ItemGroup>
+      <OcctRuntimeDll Include="$(OcctRuntimeDir)\*.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(OcctRuntimeDll)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

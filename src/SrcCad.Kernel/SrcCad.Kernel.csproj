@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>SrcCad.Kernel</AssemblyName>
+    <RootNamespace>SrcCad.Kernel</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SrcCad.Core\SrcCad.Core.csproj" />
+  </ItemGroup>
+</Project>

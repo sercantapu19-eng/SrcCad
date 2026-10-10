@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>SrcCad.Solver</AssemblyName>
+    <RootNamespace>SrcCad.Solver</RootNamespace>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>SrcCad.Tests</AssemblyName>
+    <RootNamespace>SrcCad.Tests</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SrcCad.Core\SrcCad.Core.csproj" />
+    <ProjectReference Include="..\SrcCad.Commands\SrcCad.Commands.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>SrcCad.Commands</AssemblyName>
+    <RootNamespace>SrcCad.Commands</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SrcCad.Core\SrcCad.Core.csproj" />
+  </ItemGroup>
+</Project>
