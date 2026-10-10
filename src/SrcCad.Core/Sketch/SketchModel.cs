@@ -61,6 +61,18 @@ public sealed record SketchDefinitionInfo(
     bool IsConflicting,
     string Text);
 
+public sealed record SketchSnapshot(
+    int NextPointId,
+    int NextEntityId,
+    int NextRelationId,
+    int NextDimensionId,
+    IReadOnlyDictionary<int, SketchPoint> Points,
+    IReadOnlyList<SketchEntity> Entities,
+    IReadOnlyList<SketchRelation> Relations,
+    IReadOnlyList<SketchDimension> Dimensions,
+    IReadOnlyList<CenterRectangleDefinition> CenterRectangles);
+
+
 public sealed class SketchModel
 {
     private int _nextPointId = 1;
@@ -84,6 +96,39 @@ public sealed class SketchModel
     public SketchPoint Point(int id) => Points[id];
     public SketchEntity? Entity(int id) => Entities.FirstOrDefault(x => x.Id == id);
     public SketchDimension? Dimension(int id) => Dimensions.FirstOrDefault(x => x.Id == id);
+
+    public SketchSnapshot CaptureSnapshot()
+        => new(
+            _nextPointId,
+            _nextEntityId,
+            _nextRelationId,
+            _nextDimensionId,
+            new Dictionary<int, SketchPoint>(Points),
+            Entities.ToList(),
+            Relations.ToList(),
+            Dimensions.ToList(),
+            CenterRectangles.ToList());
+
+    public void RestoreSnapshot(SketchSnapshot snapshot)
+    {
+        _nextPointId = snapshot.NextPointId;
+        _nextEntityId = snapshot.NextEntityId;
+        _nextRelationId = snapshot.NextRelationId;
+        _nextDimensionId = snapshot.NextDimensionId;
+
+        Points.Clear();
+        foreach (var pair in snapshot.Points)
+            Points[pair.Key] = pair.Value;
+
+        Entities.Clear();
+        Entities.AddRange(snapshot.Entities);
+        Relations.Clear();
+        Relations.AddRange(snapshot.Relations);
+        Dimensions.Clear();
+        Dimensions.AddRange(snapshot.Dimensions);
+        CenterRectangles.Clear();
+        CenterRectangles.AddRange(snapshot.CenterRectangles);
+    }
 
     public void SetPointPosition(int id, Point2d position, bool ignoreFixed = false)
     {
