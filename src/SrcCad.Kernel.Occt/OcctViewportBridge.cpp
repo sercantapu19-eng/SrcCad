@@ -32,6 +32,9 @@
 #include <BRepBuilderAPI_MakeFace.hxx>
 #include <BRepBuilderAPI_MakeVertex.hxx>
 #include <BRepPrimAPI_MakePrism.hxx>
+#include <BRepCheck_Analyzer.hxx>
+#include <BRepGProp.hxx>
+#include <GProp_GProps.hxx>
 #include <Geom_Circle.hxx>
 #include <gp_Ax2.hxx>
 #include <gp_Circ.hxx>
@@ -599,7 +602,7 @@ namespace SrcCad::Kernel::Occt
                                               double nx, double ny, double nz,
                                               double depth)
     {
-        if (outerUvPairs == nullptr || outerUvPairs->Length < 6 || (outerUvPairs->Length % 2) != 0)
+        if (!std::isfinite(depth) || std::abs(depth) < 1e-9 || outerUvPairs == nullptr || outerUvPairs->Length < 6 || (outerUvPairs->Length % 2) != 0)
             return TopoDS_Shape();
 
         BRepBuilderAPI_MakePolygon polygon;
@@ -674,7 +677,10 @@ namespace SrcCad::Kernel::Occt
         if (!faceMaker.IsDone()) return TopoDS_Shape();
         gp_Vec extrusion(nx * depth, ny * depth, nz * depth);
         BRepPrimAPI_MakePrism prism(faceMaker.Face(), extrusion, true, true);
-        return prism.Shape();
+        TopoDS_Shape solid = prism.Shape();
+        if (solid.IsNull() || solid.ShapeType() != TopAbs_SOLID || !BRepCheck_Analyzer(solid).IsValid())
+            return TopoDS_Shape();
+        return solid;
     }
 
     static TopoDS_Shape makePrismFromPolyline(array<double>^ uvPairs,
@@ -690,6 +696,28 @@ namespace SrcCad::Kernel::Occt
                                     vx, vy, vz,
                                     nx, ny, nz,
                                     depth);
+    }
+
+    double OcctViewportBridge::MeasureExtrudedProfileVolume(array<double>^ outerUvPairs,
+                                                   array<double>^ innerLoopData,
+                                                   array<double>^ circleHoles,
+                                                   double ox, double oy, double oz,
+                                                   double ux, double uy, double uz,
+                                                   double vx, double vy, double vz,
+                                                   double nx, double ny, double nz,
+                                                   double depth)
+    {
+        // Uses the exact production prism builder; no viewer, mesh or approximation.
+        try
+        {
+            TopoDS_Shape shape = makePrismFromProfile(outerUvPairs, innerLoopData, circleHoles,
+                ox, oy, oz, ux, uy, uz, vx, vy, vz, nx, ny, nz, depth);
+            if (shape.IsNull()) return -1.0;
+            GProp_GProps properties;
+            BRepGProp::VolumeProperties(shape, properties);
+            return properties.Mass();
+        }
+        catch (const Standard_Failure&) { return -1.0; }
     }
 
     bool OcctViewportBridge::PreviewExtrudeProfile(array<double>^ outerUvPairs,
@@ -711,7 +739,7 @@ namespace SrcCad::Kernel::Occt
                                                        vx, vy, vz,
                                                        nx, ny, nz,
                                                        depth);
-            if (shape.IsNull()) return false;
+            if (shape.IsNull() || shape.ShapeType() != TopAbs_SOLID || !BRepCheck_Analyzer(shape).IsValid()) return false;
             myState->PreviewSolidShape = shape;
             myState->PreviewSolid = displayShape(myState, shape, rgb(0.20, 0.75, 0.35), AIS_Shaded, false, 0.55);
             myState->Context->UpdateCurrentViewer();
@@ -736,7 +764,7 @@ namespace SrcCad::Kernel::Occt
             CancelExtrusionPreview();
             TopoDS_Shape shape = makePrismFromPolyline(uvPairs, ox, oy, oz, ux, uy, uz,
                                                         vx, vy, vz, nx, ny, nz, depth);
-            if (shape.IsNull()) return false;
+            if (shape.IsNull() || shape.ShapeType() != TopAbs_SOLID || !BRepCheck_Analyzer(shape).IsValid()) return false;
             myState->PreviewSolidShape = shape;
             myState->PreviewSolid = displayShape(myState, shape, rgb(0.20, 0.75, 0.35), AIS_Shaded, false, 0.55);
             myState->Context->UpdateCurrentViewer();
@@ -755,7 +783,9 @@ namespace SrcCad::Kernel::Occt
                                                   double nx, double ny, double nz,
                                                   double depth)
     {
-        if (!IsInitialized() || radius <= 0.0 || std::abs(depth) < 1e-9) return false;
+        if (!IsInitialized()) return false;
+        CancelExtrusionPreview();
+        if (!std::isfinite(radius) || !std::isfinite(depth) || radius <= 0.0 || std::abs(depth) < 1e-9) return false;
         try
         {
             CancelExtrusionPreview();
@@ -771,7 +801,7 @@ namespace SrcCad::Kernel::Occt
             if (!faceMaker.IsDone()) return false;
             BRepPrimAPI_MakePrism prism(faceMaker.Face(), gp_Vec(nx * depth, ny * depth, nz * depth), true, true);
             TopoDS_Shape shape = prism.Shape();
-            if (shape.IsNull()) return false;
+            if (shape.IsNull() || shape.ShapeType() != TopAbs_SOLID || !BRepCheck_Analyzer(shape).IsValid()) return false;
             myState->PreviewSolidShape = shape;
             myState->PreviewSolid = displayShape(myState, shape, rgb(0.20, 0.75, 0.35), AIS_Shaded, false, 0.55);
             myState->Context->UpdateCurrentViewer();
@@ -788,6 +818,7 @@ namespace SrcCad::Kernel::Occt
         if (!IsInitialized() || myState->PreviewSolidShape.IsNull()) return false;
         try
         {
+            if (!BRepCheck_Analyzer(myState->PreviewSolidShape).IsValid()) return false;
             if (!myState->PreviewSolid.IsNull())
             {
                 myState->Context->Remove(myState->PreviewSolid, false);
@@ -866,3 +897,4 @@ namespace SrcCad::Kernel::Occt
         myState->Context->UpdateCurrentViewer();
     }
 }
+

@@ -27,7 +27,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-set "TEST=%~dp0src\SrcCad.Tests\bin\x64\Debug\net8.0-windows\SrcCad.Tests.exe"
+set "TEST=%~dp0src\SrcCad.Tests\bin\x64\Debug\net8.0\SrcCad.Tests.exe"
 if not exist "%TEST%" (
   echo [HATA] SrcCad.Tests.exe bulunamadi.
   pause
@@ -53,3 +53,4 @@ if not exist "%APP%" (
 
 start "SrcCad" "%APP%"
 exit /b 0
+

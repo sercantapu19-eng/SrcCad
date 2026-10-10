@@ -80,6 +80,16 @@ public partial class MainWindow : Window
         _viewportPanel.MouseUp += ViewportPanel_MouseUp;
         _viewportPanel.MouseMove += ViewportPanel_MouseMove;
         _viewportPanel.MouseWheel += ViewportPanel_MouseWheel;
+        // Native HWND focus does not reliably route keys through WPF PreviewKeyDown.
+        _viewportPanel.KeyDown += (_, e) =>
+        {
+            var source = PresentationSource.FromVisual(this);
+            if (source is null) return;
+            var key = KeyInterop.KeyFromVirtualKey((int)e.KeyCode);
+            var routed = new System.Windows.Input.KeyEventArgs(Keyboard.PrimaryDevice, source, 0, key);
+            Window_PreviewKeyDown(this, routed);
+            if (routed.Handled) { e.Handled = true; e.SuppressKeyPress = true; }
+        };
 
         BuildViewportContextMenu();
     }
@@ -117,6 +127,9 @@ public partial class MainWindow : Window
 
     private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
+        // A value editor owns Delete, F and text Undo/Redo while it has focus.
+        if (Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase && e.Key != Key.Escape)
+            return;
         if (_inSketch && Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && e.Key == Key.Z)
         {
             UndoSketch();
@@ -317,8 +330,11 @@ public partial class MainWindow : Window
         {
             if (!_sketch.Point(_dragSketchPointId).Fixed)
             {
-                _sketch.SetPointPosition(_dragSketchPointId, dragUv);
-                _sketch.SolveRelations();
+                if (!_sketch.TryMovePoint(_dragSketchPointId, dragUv))
+                {
+                    Status("Nokta bu konuma taşınamadı; ilişkiler korunarak işlem geri alındı.");
+                    return;
+                }
                 _dragSketchChanged = true;
                 RenderSketch();
                 Status($"P{_dragSketchPointId} sürükleniyor • ilişkiler ve sürücü ölçüler korunuyor.");
@@ -744,9 +760,7 @@ public partial class MainWindow : Window
             return false;
         }
 
-        if (!removeOnCancel)
-            PushSketchUndo();
-
+        var beforeEdit = _sketch.CaptureSnapshot();
         if (!_sketch.SetDimensionValue(dimensionId, dialog.Value))
         {
             MessageBox.Show(
@@ -755,7 +769,15 @@ public partial class MainWindow : Window
                 "SrcCad",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
-            _sketch.SetDimensionDriving(dimensionId, false);
+            if (removeOnCancel) _sketch.DeleteDimension(dimensionId);
+            RenderSketch();
+            UpdateSketchPropertyPanel();
+            return false;
+        }
+        if (!removeOnCancel && !SameSketch(beforeEdit, _sketch.CaptureSnapshot()))
+        {
+            _sketchUndo.Push(beforeEdit);
+            _sketchRedo.Clear();
         }
 
         _selectedSketchDimensionId = dimensionId;
@@ -860,6 +882,23 @@ public partial class MainWindow : Window
         _viewportContextMenu.Items.Add(item);
     }
 
+    private void ResetSketchInteraction()
+    {
+        _sketchCommand?.CancelStep();
+        _viewer.ClearPreview();
+        _dragSketchPointId = _dragSketchDimensionId = -1;
+        _hoverSketchPointId = _hoverSketchEntityId = _hoverSketchDimensionId = -1;
+        _dragSketchSnapshot = null;
+        _dragSketchChanged = false;
+    }
+
+    private static bool SameSketch(SketchSnapshot a, SketchSnapshot b)
+        => a.NextPointId == b.NextPointId && a.NextEntityId == b.NextEntityId &&
+           a.NextRelationId == b.NextRelationId && a.NextDimensionId == b.NextDimensionId &&
+           a.Points.OrderBy(p => p.Key).SequenceEqual(b.Points.OrderBy(p => p.Key)) &&
+           a.Entities.SequenceEqual(b.Entities) && a.Relations.SequenceEqual(b.Relations) &&
+           a.Dimensions.SequenceEqual(b.Dimensions) && a.CenterRectangles.SequenceEqual(b.CenterRectangles);
+
     private void PushSketchUndo()
     {
         if (_sketch is null) return;
@@ -875,6 +914,7 @@ public partial class MainWindow : Window
             return;
         }
 
+        ResetSketchInteraction();
         _sketchRedo.Push(_sketch.CaptureSnapshot());
         _sketch.RestoreSnapshot(_sketchUndo.Pop());
         ClearSketchSelection(false);
@@ -893,6 +933,7 @@ public partial class MainWindow : Window
             return;
         }
 
+        ResetSketchInteraction();
         _sketchUndo.Push(_sketch.CaptureSnapshot());
         _sketch.RestoreSnapshot(_sketchRedo.Pop());
         ClearSketchSelection(false);
@@ -946,14 +987,22 @@ public partial class MainWindow : Window
             Math.Max(1e-6, _viewer.PixelToWorldLength(10)),
             clickCount);
 
+        var before = _sketch.CaptureSnapshot();
         try
         {
-            PushSketchUndo();
             _sketchCommand.Pick(pick);
+            if (!SameSketch(before, _sketch.CaptureSnapshot()))
+            {
+                _sketchUndo.Push(before);
+                _sketchRedo.Clear();
+            }
             _viewer.ClearPreview();
         }
         catch (Exception ex)
         {
+            _sketch.RestoreSnapshot(before);
+            _sketchCommand.CancelStep();
+            RenderSketch();
             Status($"{_sketchCommand.Title}: {ex.Message}");
         }
 
@@ -1778,14 +1827,21 @@ public partial class MainWindow : Window
     private bool TryReadDepth(out double depth)
     {
         var text = ExtrudeDepthTextBox.Text.Trim();
-        if (double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out depth)) return true;
-        return double.TryParse(text.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out depth);
+        var parsed = double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out depth) ||
+                     double.TryParse(text.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out depth);
+        return parsed && double.IsFinite(depth) && Math.Abs(depth) >= 1e-9;
     }
 
     private void UpdateExtrudePreview()
     {
-        if (_sketch is null || !_extrudeCommandActive || !TryReadDepth(out var depth) || Math.Abs(depth) < 1e-9)
+        if (_sketch is null || !_extrudeCommandActive) return;
+        // Invalid input must invalidate the old candidate; OK cannot commit stale geometry.
+        _viewer.CancelExtrusionPreview();
+        if (!TryReadDepth(out var depth))
+        {
+            Status("Sonlu, sıfırdan farklı bir derinlik girin.");
             return;
+        }
 
         var p = _sketch.Plane;
         bool ok;
@@ -1843,14 +1899,14 @@ public partial class MainWindow : Window
 
     private void ExtrudeOk_Click(object sender, RoutedEventArgs e)
     {
-        if (!_extrudeCommandActive) return;
+        if (!_extrudeCommandActive || !TryReadDepth(out var committedDepth)) return;
+        UpdateExtrudePreview();
         if (!_viewer.CommitExtrusion())
         {
             Status("Ekstrüzyon onaylanamadı.");
             return;
         }
 
-        if (TryReadDepth(out var committedDepth))
         {
             if (_editingExtrude && Math.Abs(committedDepth - _extrudeDepth) > 1e-9)
             {
@@ -1972,6 +2028,10 @@ public partial class MainWindow : Window
         _commandContext = null;
         _viewer.ClearModel();
         _sketch = null;
+        ResetSketchInteraction();
+        _sketchUndo.Clear();
+        _sketchRedo.Clear();
+        _extrudeDepth = 20.0;
         _inSketch = false;
         _smartDimensionMode = false;
         ResetSmartDimensionTargets();

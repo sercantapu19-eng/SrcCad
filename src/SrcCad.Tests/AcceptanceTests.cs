@@ -46,7 +46,13 @@ internal static class AcceptanceTests
         foreach(var type in new[]{SketchRelationType.Parallel,SketchRelationType.Perpendicular,SketchRelationType.Equal,SketchRelationType.Collinear})
             Test(type+" iki çizgi",()=>{var s=New();var a=Line(s,dx:50,dy:0);var b=Line(s,0,80);Require(s.ApplyRelationToSelection(type,new[]{a.Id,b.Id},Array.Empty<int>()));var p=s.Point(b.StartPointId).Position;var q=s.Point(b.EndPointId).Position;Require(type switch {SketchRelationType.Parallel=>Near(p.Y,q.Y),SketchRelationType.Perpendicular=>Near(p.X,q.X),SketchRelationType.Equal=>Near(Point2d.Distance(p,q),50),_=>Near(p.Y,0)&&Near(q.Y,0)});});
         Test("Eşmerkezli iki daire",()=>{var s=New();var a=s.AddCircle(0,10);var c=s.CreatePointExact(new(40,60));var b=s.AddCircle(c,20);Require(s.ApplyRelationToSelection(SketchRelationType.Concentric,new[]{a.Id,b.Id},Array.Empty<int>()));Require(s.Point(c).Position==new Point2d(0,0));});
-        Test("Sabitle ve sürüklemeyi engelle",()=>{var s=New();var l=Line(s);s.ApplyRelationToSelection(SketchRelationType.Fixed,Array.Empty<int>(),new[]{l.EndPointId});var p=s.Point(l.EndPointId).Position;s.SetPointPosition(l.EndPointId,new(999,999));Require(s.Point(l.EndPointId).Position==p);});
+        Test("Sabitle ve sürüklemeyi engelle",()=>{var s=New();var l=Line(s);s.ApplyRelationToSelection(SketchRelationType.Fixed,Array.Empty<int>(),new[]{l.EndPointId});var p=s.Point(l.EndPointId).Position;s.SetPointPosition(l.EndPointId,new(999,999));Require(s.Point(l.EndPointId).Position==p);
+            var r=New(); var ids=r.AddCenterRectangle(new(0,0),new(20,10)); var def=r.CenterRectangles[0];
+            r.SetPointFixed(def.P0,true);var fixedPosition=r.Point(def.P0).Position;
+            var d=r.AddDimension(SketchDimensionType.LineLength,new(2,2),entityA:ids[0]);var before=State(r);
+            Require(!r.SetDimensionValue(d.Id,80)&&State(r)==before&&r.Point(def.P0).Position==fixedPosition);
+            Require(!r.TryMovePoint(def.P0,new(999,999)));
+        });
         foreach(var type in new[]{SketchRelationType.Parallel,SketchRelationType.Perpendicular,SketchRelationType.Collinear})
             Test(type+" daire seçimi reddi",()=>{var s=New();var a=s.AddCircle(0,10);var b=s.AddCircle(0,20);var before=State(s);Require(!s.ApplyRelationToSelection(type,new[]{a.Id,b.Id},Array.Empty<int>())&&State(s)==before);});
         Test("Eşmerkezli çizgi seçimi reddi",()=>{var s=New();var a=Line(s);var b=Line(s,0,80);Require(!s.ApplyRelationToSelection(SketchRelationType.Concentric,new[]{a.Id,b.Id},Array.Empty<int>()));});

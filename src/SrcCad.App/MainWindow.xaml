@@ -43,10 +43,10 @@
                 <Separator/>
                 <MenuItem Header="Çıkış" Click="Exit_Click"/>
             </MenuItem>
-            <MenuItem Header="Düzenle"/>
-            <MenuItem Header="Görünüm"/>
-            <MenuItem Header="Araçlar"/>
-            <MenuItem Header="Yardım"/>
+            <MenuItem Header="Düzenle" IsEnabled="False"/>
+            <MenuItem Header="Görünüm" IsEnabled="False"/>
+            <MenuItem Header="Araçlar" IsEnabled="False"/>
+            <MenuItem Header="Yardım" IsEnabled="False"/>
         </Menu>
 
         <TabControl Grid.Row="2" x:Name="CommandTabs" Background="#F5F7F9" BorderBrush="#C8D1D9">
@@ -190,3 +190,4 @@
         </Border>
     </Grid>
 </Window>
+

@@ -5,6 +5,14 @@
     <AssemblyName>SrcCad.Tests</AssemblyName>
     <RootNamespace>SrcCad.Tests</RootNamespace>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(EnableNativeAcceptance)' == 'true'">
+    <DefineConstants>$(DefineConstants);NATIVE_ACCEPTANCE</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(EnableNativeAcceptance)' == 'true'">
+    <Reference Include="SrcCad.Kernel.Occt">
+      <HintPath>$(NativeBridgePath)</HintPath>
+    </Reference>
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\SrcCad.Core\SrcCad.Core.csproj" />
     <ProjectReference Include="..\SrcCad.Commands\SrcCad.Commands.csproj" />

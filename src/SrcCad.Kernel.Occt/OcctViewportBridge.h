@@ -89,6 +89,15 @@ namespace SrcCad::Kernel::Occt
                               double ux, double uy, double uz,
                               double radius);
 
+        static double MeasureExtrudedProfileVolume(cli::array<double>^ outerUvPairs,
+                                   cli::array<double>^ innerLoopData,
+                                   cli::array<double>^ circleHoles,
+                                   double ox, double oy, double oz,
+                                   double ux, double uy, double uz,
+                                   double vx, double vy, double vz,
+                                   double nx, double ny, double nz,
+                                   double depth);
+
         bool PreviewExtrudeProfile(cli::array<double>^ outerUvPairs,
                                    cli::array<double>^ innerLoopData,
                                    cli::array<double>^ circleHoles,
@@ -120,3 +129,4 @@ namespace SrcCad::Kernel::Occt
         void ReleaseNative();
     };
 }
+

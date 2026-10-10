@@ -78,7 +78,7 @@ public sealed class DimensionEditDialog : Window
             return;
         }
 
-        if (value <= 0)
+        if (!double.IsFinite(value) || value <= 0)
         {
             MessageBox.Show(this, "Ölçü sıfırdan büyük olmalıdır.", "SrcCad", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
@@ -88,3 +88,4 @@ public sealed class DimensionEditDialog : Window
         DialogResult = true;
     }
 }
+

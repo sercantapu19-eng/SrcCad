@@ -140,6 +140,18 @@ public sealed class SketchModel
         Points[id] = point with { Position = position };
     }
 
+    public bool TryMovePoint(int id, Point2d position)
+    {
+        if (!Points.TryGetValue(id, out var point) || point.Fixed ||
+            !double.IsFinite(position.X) || !double.IsFinite(position.Y)) return false;
+        var before = CaptureSnapshot();
+        SetPointPosition(id, position);
+        SolveRelations();
+        if (ConstraintsSatisfied()) return true;
+        RestoreSnapshot(before);
+        return false;
+    }
+
     public void SetPointFixed(int id, bool isFixed)
     {
         if (id == 0) return;
@@ -514,6 +526,13 @@ public sealed class SketchModel
         if (Points.Values.Any(p => !double.IsFinite(p.Position.X) || !double.IsFinite(p.Position.Y))) return false;
         if (Lines().Any(l => Point2d.Distance(Point(l.StartPointId).Position, Point(l.EndPointId).Position) <= 1e-9)) return false;
         if (Dimensions.Any(d => d.Driving && (!double.IsFinite(Measure(d)) || Math.Abs(Measure(d)-d.Value)>eps))) return false;
+        foreach (var rectangle in CenterRectangles)
+        {
+            var c = Point(rectangle.CenterPointId).Position;
+            var a = Point(rectangle.P0).Position;
+            var b = Point(rectangle.P2).Position;
+            if (Math.Abs((a.X+b.X)/2-c.X)>eps || Math.Abs((a.Y+b.Y)/2-c.Y)>eps) return false;
+        }
         foreach (var r in Relations)
         {
             var a = Entity(r.EntityA) as SketchLine;
@@ -959,10 +978,10 @@ public sealed class SketchModel
         double halfWidth,
         double halfHeight)
     {
-        SetPointPosition(def.P0, new Point2d(center.X - halfWidth, center.Y - halfHeight), true);
-        SetPointPosition(def.P1, new Point2d(center.X + halfWidth, center.Y - halfHeight), true);
-        SetPointPosition(def.P2, new Point2d(center.X + halfWidth, center.Y + halfHeight), true);
-        SetPointPosition(def.P3, new Point2d(center.X - halfWidth, center.Y + halfHeight), true);
+        SetPointPosition(def.P0, new Point2d(center.X - halfWidth, center.Y - halfHeight));
+        SetPointPosition(def.P1, new Point2d(center.X + halfWidth, center.Y - halfHeight));
+        SetPointPosition(def.P2, new Point2d(center.X + halfWidth, center.Y + halfHeight));
+        SetPointPosition(def.P3, new Point2d(center.X - halfWidth, center.Y + halfHeight));
     }
 
     public double Measure(SketchDimension dimension)

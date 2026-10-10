@@ -1,3 +1,8 @@
+> **Geliştirme durumu (2026-10-10): Katı Model tamamlanmadı.** Güncel doğrulama kaydı:
+> [120 senaryolu kabul kapısı](docs/SOLID_ACCEPTANCE_120.md).
+> 60 managed test çalıştırıldı; Windows/WPF ve gerçek OCCT doğrulaması bekliyor.
+> Aşağıdaki eski sürüm notları güncel kabul sonucu olarak değerlendirilmemelidir.
+
 # SrcCad V1.2 CAD Alpha
 
 Bu paket, SrcCad V1.1 Foundation testinin üzerine kurulan **ilk çizim yapılabilir OCCT sürümüdür**.
@@ -157,3 +162,4 @@ Ekstrüzyon önizlemesi açıkken mouse tekeri:
 - minimum: 10 mm
 
 Normal modelleme modunda mouse tekeri yine zoom yapar.
+
