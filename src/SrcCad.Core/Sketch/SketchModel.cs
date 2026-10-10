@@ -993,11 +993,11 @@ public sealed class SketchModel
         return circles.Count == 1 && !Lines(false).Any();
     }
 
-    public bool TryGetClosedPolyline(out List<Point2d> orderedPoints)
+    private bool TryGetClosedLineLoops(out List<List<Point2d>> loops)
     {
-        orderedPoints = new List<Point2d>();
+        loops = new List<List<Point2d>>();
         var lines = Lines(false).ToList();
-        if (lines.Count < 3) return false;
+        if (lines.Count == 0) return false;
 
         var adjacency = new Dictionary<int, List<SketchLine>>();
         foreach (var line in lines)
@@ -1007,57 +1007,96 @@ public sealed class SketchModel
             a.Add(line);
             b.Add(line);
         }
+        if (adjacency.Values.Any(v => v.Count != 2)) return false;
 
-        if (adjacency.Count < 3 || adjacency.Values.Any(v => v.Count != 2)) return false;
-
-        var used = new HashSet<int>();
-        var firstLine = lines[0];
-        var startPoint = firstLine.StartPointId;
-        var currentPoint = startPoint;
-        SketchLine? previous = null;
-
-        for (var i = 0; i < lines.Count; i++)
+        var unused = new HashSet<int>(lines.Select(l => l.Id));
+        while (unused.Count > 0)
         {
-            orderedPoints.Add(Point(currentPoint).Position);
-            var nextLine = adjacency[currentPoint].FirstOrDefault(l => previous is null || l.Id != previous.Id);
-            if (nextLine is null || used.Contains(nextLine.Id)) return false;
-            used.Add(nextLine.Id);
-            var nextPoint = nextLine.StartPointId == currentPoint ? nextLine.EndPointId : nextLine.StartPointId;
-            previous = nextLine;
-            currentPoint = nextPoint;
-        }
+            var first = lines.First(l => unused.Contains(l.Id));
+            var startPoint = first.StartPointId;
+            var currentPoint = startPoint;
+            SketchLine? previous = null;
+            var loop = new List<Point2d>();
 
-        return currentPoint == startPoint && used.Count == lines.Count;
+            while (true)
+            {
+                loop.Add(Point(currentPoint).Position);
+                var next = adjacency[currentPoint]
+                    .FirstOrDefault(l => unused.Contains(l.Id) && (previous is null || l.Id != previous.Id));
+                if (next is null) return false;
+                unused.Remove(next.Id);
+                var nextPoint = next.StartPointId == currentPoint ? next.EndPointId : next.StartPointId;
+                previous = next;
+                currentPoint = nextPoint;
+                if (currentPoint == startPoint) break;
+                if (loop.Count > lines.Count) return false;
+            }
+
+            if (loop.Count < 3) return false;
+            loops.Add(loop);
+        }
+        return loops.Count > 0;
+    }
+
+    public bool TryGetClosedPolyline(out List<Point2d> orderedPoints)
+    {
+        orderedPoints = new List<Point2d>();
+        if (!TryGetClosedLineLoops(out var loops) || loops.Count != 1) return false;
+        orderedPoints = loops[0];
+        return true;
     }
 
     public bool TryGetExtrusionProfile(
         out List<Point2d> outerLoop,
+        out List<List<Point2d>> polygonHoles,
         out List<SketchCircle> circularHoles)
     {
+        outerLoop = new List<Point2d>();
+        polygonHoles = new List<List<Point2d>>();
         circularHoles = new List<SketchCircle>();
-        if (!TryGetClosedPolyline(out outerLoop))
-            return false;
+        if (!TryGetClosedLineLoops(out var loops)) return false;
+
+        outerLoop = loops.OrderByDescending(loop => Math.Abs(SignedArea(loop))).First();
+        foreach (var loop in loops)
+        {
+            if (ReferenceEquals(loop, outerLoop)) continue;
+            if (!loop.All(p => PointInPolygon(p, outerLoop))) return false;
+            polygonHoles.Add(loop);
+        }
 
         foreach (var circle in Circles(false))
         {
             var center = Point(circle.CenterPointId).Position;
             if (!CircleInsidePolygon(center, circle.Radius, outerLoop))
                 return false;
-
-            // OCCT cannot build a valid planar face when two inner wires
-            // intersect/touch. Reject that sketch before preview instead of
-            // producing a misleading solid.
             foreach (var existing in circularHoles)
             {
                 var otherCenter = Point(existing.CenterPointId).Position;
                 if (Point2d.Distance(center, otherCenter) <= circle.Radius + existing.Radius + 1e-9)
                     return false;
             }
-
+            if (polygonHoles.Any(hole => PointInPolygon(center, hole)))
+                return false;
             circularHoles.Add(circle);
         }
-
         return true;
+    }
+
+    public bool TryGetExtrusionProfile(
+        out List<Point2d> outerLoop,
+        out List<SketchCircle> circularHoles)
+        => TryGetExtrusionProfile(out outerLoop, out _, out circularHoles);
+
+    private static double SignedArea(IReadOnlyList<Point2d> loop)
+    {
+        double area = 0;
+        for (var i = 0; i < loop.Count; i++)
+        {
+            var a = loop[i];
+            var b = loop[(i + 1) % loop.Count];
+            area += a.X * b.Y - b.X * a.Y;
+        }
+        return area * 0.5;
     }
 
     private static bool CircleInsidePolygon(
