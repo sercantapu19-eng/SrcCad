@@ -28,6 +28,7 @@ public partial class MainWindow : Window
     private bool _extrudeCommandActive;
     private bool _hasSolid;
     private double _extrudeDepth = 20.0;
+    private bool _editingExtrude;
 
     private bool _middleDown;
     private bool _panMode;
@@ -1594,6 +1595,7 @@ public partial class MainWindow : Window
             _extrudeDepth = committedDepth;
 
         _hasSolid = true;
+        _editingExtrude = false;
         _extrudeCommandActive = false;
         ExtrudePanel.Visibility = Visibility.Collapsed;
         _viewer.ClearSketch();
@@ -1616,10 +1618,22 @@ public partial class MainWindow : Window
     private void CancelExtrude()
     {
         _viewer.CancelExtrusionPreview();
+        if (_editingExtrude)
+        {
+            _viewer.ShowCommittedSolid();
+            _hasSolid = true;
+            _editingExtrude = false;
+            Status($"Ekstrüzyon1 düzenlemesi iptal edildi • önceki {_extrudeDepth:0.###} mm katı geri yüklendi.");
+        }
+        else
+        {
+            Status("Ekstrüzyon iptal edildi.");
+        }
+
         _extrudeCommandActive = false;
         ExtrudePanel.Visibility = Visibility.Collapsed;
         ManagerTabs.SelectedItem = FeatureManagerTab;
-        Status("Ekstrüzyon iptal edildi.");
+        RefreshCommandState();
     }
 
     private void FeatureTree_MouseDoubleClick(object sender, MouseButtonEventArgs e)
@@ -1631,8 +1645,10 @@ public partial class MainWindow : Window
             !_hasSolid)
             return;
 
-        _viewer.ClearModel();
-        _hasSolid = false;
+        // Keep the last committed B-Rep alive so Cancel/Escape is lossless.
+        // Only hide its presentation while the candidate replacement is previewed.
+        _viewer.HideCommittedSolid();
+        _editingExtrude = true;
         _extrudeCommandActive = true;
         ExtrudeDepthTextBox.Text = _extrudeDepth.ToString("0.###", CultureInfo.CurrentCulture);
         ExtrudePanel.Visibility = Visibility.Visible;
@@ -1695,6 +1711,7 @@ public partial class MainWindow : Window
         ResetSmartDimensionTargets();
         ClearSketchSelection(false);
         _hasSolid = false;
+        _editingExtrude = false;
         _extrudeCommandActive = false;
         ExtrudePanel.Visibility = Visibility.Collapsed;
         SketchTab.IsEnabled = false;
