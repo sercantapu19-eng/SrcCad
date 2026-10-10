@@ -430,18 +430,18 @@ public partial class MainWindow : Window
 
         if (_smartDimensionWaitingPlacement)
         {
-            // SOLIDWORKS benzeri akış: tek geometri seçildikten sonraki normal tık
-            // artık ÖLÇÜ KONUMUDUR. İkinci çizgiyi açı için eklemek istenirse Ctrl basılı tutulur.
-            var ctrl = (WinForms.Control.ModifierKeys & WinForms.Keys.Control) == WinForms.Keys.Control;
-            if (ctrl &&
-                _smartDimensionEntities.Count == 1 &&
+            // SOLIDWORKS akışı: ilk çizgiden sonra farklı bir çizgiye normal tıklamak
+            // doğrudan açı ölçüsünü kurar. Ctrl zorunlu değildir. Boş alana tıklamak
+            // ise tek seçimin ölçü konumunu yerleştirir.
+            if (_smartDimensionEntities.Count == 1 &&
                 _sketch.Entity(_smartDimensionEntities[0]) is SketchLine &&
                 entityId >= 0 &&
                 entityId != _smartDimensionEntities[0] &&
                 _sketch.Entity(entityId) is SketchLine)
             {
                 _smartDimensionEntities.Add(entityId);
-                Status("Akıllı Ölçülendirme: açı ölçüsünün konumunu tıklayın.");
+                _smartDimensionWaitingPlacement = true;
+                Status("Akıllı Ölçülendirme: iki çizgi seçildi • açı ölçüsünün konumunu tıklayın.");
                 RenderSketch();
                 return;
             }
