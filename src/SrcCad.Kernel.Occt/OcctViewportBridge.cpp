@@ -591,6 +591,7 @@ namespace SrcCad::Kernel::Occt
     }
 
     static TopoDS_Shape makePrismFromProfile(array<double>^ outerUvPairs,
+                                              array<double>^ innerLoopData,
                                               array<double>^ circleHoles,
                                               double ox, double oy, double oz,
                                               double ux, double uy, double uz,
@@ -615,6 +616,31 @@ namespace SrcCad::Kernel::Occt
         TopoDS_Wire outerWire = polygon.Wire();
         BRepBuilderAPI_MakeFace faceMaker(outerWire, true);
         if (!faceMaker.IsDone()) return TopoDS_Shape();
+
+        if (innerLoopData != nullptr)
+        {
+            int cursor = 0;
+            while (cursor < innerLoopData->Length)
+            {
+                const int count = (int)innerLoopData[cursor++];
+                if (count < 3 || cursor + count * 2 > innerLoopData->Length)
+                    return TopoDS_Shape();
+
+                BRepBuilderAPI_MakePolygon holePolygon;
+                for (int i = 0; i < count; ++i)
+                {
+                    const double u = innerLoopData[cursor++];
+                    const double v = innerLoopData[cursor++];
+                    holePolygon.Add(planePoint(u, v, ox, oy, oz, ux, uy, uz, vx, vy, vz));
+                }
+                holePolygon.Close();
+                if (!holePolygon.IsDone()) return TopoDS_Shape();
+
+                TopoDS_Wire innerWire = holePolygon.Wire();
+                innerWire.Reverse();
+                faceMaker.Add(innerWire);
+            }
+        }
 
         if (circleHoles != nullptr)
         {
@@ -658,7 +684,7 @@ namespace SrcCad::Kernel::Occt
                                                double nx, double ny, double nz,
                                                double depth)
     {
-        return makePrismFromProfile(uvPairs, nullptr,
+        return makePrismFromProfile(uvPairs, nullptr, nullptr,
                                     ox, oy, oz,
                                     ux, uy, uz,
                                     vx, vy, vz,
@@ -667,6 +693,7 @@ namespace SrcCad::Kernel::Occt
     }
 
     bool OcctViewportBridge::PreviewExtrudeProfile(array<double>^ outerUvPairs,
+                                                   array<double>^ innerLoopData,
                                                    array<double>^ circleHoles,
                                                    double ox, double oy, double oz,
                                                    double ux, double uy, double uz,
@@ -678,7 +705,7 @@ namespace SrcCad::Kernel::Occt
         try
         {
             CancelExtrusionPreview();
-            TopoDS_Shape shape = makePrismFromProfile(outerUvPairs, circleHoles,
+            TopoDS_Shape shape = makePrismFromProfile(outerUvPairs, innerLoopData, circleHoles,
                                                        ox, oy, oz,
                                                        ux, uy, uz,
                                                        vx, vy, vz,
