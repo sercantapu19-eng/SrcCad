@@ -18,6 +18,8 @@ public enum SketchRelationType
     Parallel,
     Perpendicular,
     Equal,
+    Collinear,
+    Concentric,
     Fixed
 }
 
@@ -501,6 +503,8 @@ public sealed class SketchModel
             case SketchRelationType.Parallel:
             case SketchRelationType.Perpendicular:
             case SketchRelationType.Equal:
+            case SketchRelationType.Collinear:
+            case SketchRelationType.Concentric:
                 if (selectedEntities.Count != 2) return false;
                 AddRelation(type, selectedEntities[0], selectedEntities[1]);
                 return true;
@@ -597,6 +601,14 @@ public sealed class SketchModel
                 MakeEqual(relation.EntityA, relation.EntityB);
                 break;
 
+            case SketchRelationType.Collinear:
+                MakeCollinear(relation.EntityA, relation.EntityB);
+                break;
+
+            case SketchRelationType.Concentric:
+                MakeConcentric(relation.EntityA, relation.EntityB);
+                break;
+
             case SketchRelationType.Fixed:
                 if (relation.PointA >= 0) SetPointFixed(relation.PointA, true);
                 break;
@@ -617,6 +629,41 @@ public sealed class SketchModel
         var candidate = new Point2d(b0.X + Math.Cos(angle) * length, b0.Y + Math.Sin(angle) * length);
         if (!Point(second.EndPointId).Fixed)
             SetPointPosition(second.EndPointId, candidate);
+    }
+
+    private void MakeCollinear(int firstId, int secondId)
+    {
+        if (Entity(firstId) is not SketchLine first || Entity(secondId) is not SketchLine second) return;
+        var a = Point(first.StartPointId).Position;
+        var b = Point(first.EndPointId).Position;
+        var c = Point(second.StartPointId).Position;
+        var d = Point(second.EndPointId).Position;
+        var dx = b.X - a.X;
+        var dy = b.Y - a.Y;
+        var len = Math.Sqrt(dx * dx + dy * dy);
+        if (len < 1e-12) return;
+        var ux = dx / len;
+        var uy = dy / len;
+
+        Point2d Project(Point2d p)
+        {
+            var t = (p.X - a.X) * ux + (p.Y - a.Y) * uy;
+            return new Point2d(a.X + ux * t, a.Y + uy * t);
+        }
+
+        if (!Point(second.StartPointId).Fixed) SetPointPosition(second.StartPointId, Project(c));
+        if (!Point(second.EndPointId).Fixed) SetPointPosition(second.EndPointId, Project(d));
+    }
+
+    private void MakeConcentric(int firstId, int secondId)
+    {
+        if (Entity(firstId) is not SketchCircle first || Entity(secondId) is not SketchCircle second) return;
+        var firstCenter = Point(first.CenterPointId);
+        var secondCenter = Point(second.CenterPointId);
+        if (!secondCenter.Fixed)
+            SetPointPosition(second.CenterPointId, firstCenter.Position);
+        else if (!firstCenter.Fixed)
+            SetPointPosition(first.CenterPointId, secondCenter.Position);
     }
 
     private void MakeEqual(int firstId, int secondId)
