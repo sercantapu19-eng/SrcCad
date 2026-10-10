@@ -127,6 +127,22 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (!_inSketch && _hasSolid && !_extrudeCommandActive &&
+            Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && e.Key == Key.Z)
+        {
+            UndoFeature();
+            e.Handled = true;
+            return;
+        }
+
+        if (!_inSketch && _hasSolid && !_extrudeCommandActive &&
+            Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && e.Key == Key.Y)
+        {
+            RedoFeature();
+            e.Handled = true;
+            return;
+        }
+
         if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && e.Key == Key.N)
         {
             NewPart_Click(this, new RoutedEventArgs());
@@ -1587,6 +1603,99 @@ public partial class MainWindow : Window
         if (_sketch is not null) ActivateSketchCommand(new CircleSketchCommand(_sketch));
     }
 
+    private bool RebuildExtrusion(double depth)
+    {
+        if (_sketch is null || Math.Abs(depth) < 1e-9) return false;
+
+        var p = _sketch.Plane;
+        bool ok;
+        if (_sketch.TryGetExtrusionProfile(out var loop, out var holes))
+        {
+            var uv = new double[loop.Count * 2];
+            for (var i = 0; i < loop.Count; i++)
+            {
+                uv[i * 2] = loop[i].X;
+                uv[i * 2 + 1] = loop[i].Y;
+            }
+
+            var holeData = new double[holes.Count * 3];
+            for (var i = 0; i < holes.Count; i++)
+            {
+                var circle = holes[i];
+                var center = _sketch.Point(circle.CenterPointId).Position;
+                holeData[i * 3] = center.X;
+                holeData[i * 3 + 1] = center.Y;
+                holeData[i * 3 + 2] = circle.Radius;
+            }
+
+            ok = _viewer.PreviewExtrudeProfile(uv, holeData,
+                p.Origin.X, p.Origin.Y, p.Origin.Z,
+                p.U.X, p.U.Y, p.U.Z,
+                p.V.X, p.V.Y, p.V.Z,
+                p.Normal.X, p.Normal.Y, p.Normal.Z,
+                depth);
+        }
+        else if (_sketch.TryGetSingleCircle(out var circle))
+        {
+            var center = _sketch.Point(circle.CenterPointId).Position;
+            ok = _viewer.PreviewExtrudeCircle(center.X, center.Y, circle.Radius,
+                p.Origin.X, p.Origin.Y, p.Origin.Z,
+                p.U.X, p.U.Y, p.U.Z,
+                p.V.X, p.V.Y, p.V.Z,
+                p.Normal.X, p.Normal.Y, p.Normal.Z,
+                depth);
+        }
+        else return false;
+
+        if (!ok || !_viewer.CommitExtrusion()) return false;
+        _extrudeDepth = depth;
+        _hasSolid = true;
+        _viewer.ClearSketch();
+        _viewer.ClearPreview();
+        _viewer.SetSelectionMode(CadSelectionMode.Face);
+        return true;
+    }
+
+    private void UndoFeature()
+    {
+        if (_featureUndo.Count == 0)
+        {
+            Status("Geri alınacak özellik değişikliği yok.");
+            return;
+        }
+
+        var target = _featureUndo.Pop();
+        _featureRedo.Push(_extrudeDepth);
+        if (RebuildExtrusion(target))
+            Status($"Ekstrüzyon1 geri alındı • {target:0.###} mm.");
+        else
+        {
+            _featureRedo.Pop();
+            _featureUndo.Push(target);
+            Status("Ekstrüzyon1 geri alınamadı.");
+        }
+    }
+
+    private void RedoFeature()
+    {
+        if (_featureRedo.Count == 0)
+        {
+            Status("Yinelenecek özellik değişikliği yok.");
+            return;
+        }
+
+        var target = _featureRedo.Pop();
+        _featureUndo.Push(_extrudeDepth);
+        if (RebuildExtrusion(target))
+            Status($"Ekstrüzyon1 yinelendi • {target:0.###} mm.");
+        else
+        {
+            _featureUndo.Pop();
+            _featureRedo.Push(target);
+            Status("Ekstrüzyon1 yinelenemedi.");
+        }
+    }
+
     private void Extrude_Click(object sender, RoutedEventArgs e)
     {
         if (_sketch is null || _inSketch) return;
@@ -1676,7 +1785,14 @@ public partial class MainWindow : Window
         }
 
         if (TryReadDepth(out var committedDepth))
+        {
+            if (_editingExtrude && Math.Abs(committedDepth - _extrudeDepth) > 1e-9)
+            {
+                _featureUndo.Push(_extrudeDepth);
+                _featureRedo.Clear();
+            }
             _extrudeDepth = committedDepth;
+        }
 
         _hasSolid = true;
         _editingExtrude = false;
@@ -1796,6 +1912,8 @@ public partial class MainWindow : Window
         ClearSketchSelection(false);
         _hasSolid = false;
         _editingExtrude = false;
+        _featureUndo.Clear();
+        _featureRedo.Clear();
         _extrudeCommandActive = false;
         ExtrudePanel.Visibility = Visibility.Collapsed;
         SketchTab.IsEnabled = false;
