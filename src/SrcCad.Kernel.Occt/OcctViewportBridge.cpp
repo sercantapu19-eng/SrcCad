@@ -787,6 +787,30 @@ namespace SrcCad::Kernel::Occt
         }
     }
 
+    void OcctViewportBridge::HideCommittedSolid()
+    {
+        if (!IsInitialized() || myState->SolidPresentation.IsNull()) return;
+        myState->Context->Erase(myState->SolidPresentation, false);
+        myState->Context->UpdateCurrentViewer();
+    }
+
+    void OcctViewportBridge::ShowCommittedSolid()
+    {
+        if (!IsInitialized() || myState->SolidPresentation.IsNull() || myState->SolidShape.IsNull()) return;
+        myState->Context->Display(myState->SolidPresentation, false);
+        myState->Context->Deactivate(myState->SolidPresentation);
+        int selectionMode = AIS_Shape::SelectionMode(TopAbs_FACE);
+        switch (myState->SelectionMode)
+        {
+            case CadSelectionMode::Vertex: selectionMode = AIS_Shape::SelectionMode(TopAbs_VERTEX); break;
+            case CadSelectionMode::Edge: selectionMode = AIS_Shape::SelectionMode(TopAbs_EDGE); break;
+            case CadSelectionMode::Face: selectionMode = AIS_Shape::SelectionMode(TopAbs_FACE); break;
+            default: selectionMode = 0; break;
+        }
+        myState->Context->Activate(myState->SolidPresentation, selectionMode, true);
+        myState->Context->UpdateCurrentViewer();
+    }
+
     void OcctViewportBridge::CancelExtrusionPreview()
     {
         if (myState == nullptr || myState->Context.IsNull()) return;
