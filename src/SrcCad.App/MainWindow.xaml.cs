@@ -1405,6 +1405,8 @@ public partial class MainWindow : Window
             SketchRelationType.Parallel => $"Paralel • E{relation.EntityA} ↔ E{relation.EntityB}",
             SketchRelationType.Perpendicular => $"Dik • E{relation.EntityA} ↔ E{relation.EntityB}",
             SketchRelationType.Equal => $"Eşit • E{relation.EntityA} ↔ E{relation.EntityB}",
+            SketchRelationType.Collinear => $"Eşdoğrusal • E{relation.EntityA} ↔ E{relation.EntityB}",
+            SketchRelationType.Concentric => $"Eşmerkezli • E{relation.EntityA} ↔ E{relation.EntityB}",
             SketchRelationType.Fixed => $"Sabit • P{relation.PointA}",
             _ => relation.Type.ToString()
         };
@@ -1484,6 +1486,12 @@ public partial class MainWindow : Window
     private void FixRelation_Click(object sender, RoutedEventArgs e)
         => ApplySketchRelation(SketchRelationType.Fixed);
 
+    private void CollinearRelation_Click(object sender, RoutedEventArgs e)
+        => ApplySketchRelation(SketchRelationType.Collinear);
+
+    private void ConcentricRelation_Click(object sender, RoutedEventArgs e)
+        => ApplySketchRelation(SketchRelationType.Concentric);
+
     private void ApplySketchRelation(SketchRelationType type)
     {
         if (_sketch is null || !_inSketch) return;
@@ -1502,8 +1510,10 @@ public partial class MainWindow : Window
                     "Bu ilişki için tek bir çizgi seçin.",
                 SketchRelationType.Coincident =>
                     "Çakışık için iki nokta seçin (Ctrl ile çoklu seçim).",
-                SketchRelationType.Parallel or SketchRelationType.Perpendicular or SketchRelationType.Equal =>
-                    "Bu ilişki için iki obje seçin (Ctrl ile çoklu seçim).",
+                SketchRelationType.Parallel or SketchRelationType.Perpendicular or SketchRelationType.Equal or SketchRelationType.Collinear =>
+                    "Bu ilişki için iki çizgi seçin (Ctrl ile çoklu seçim).",
+                SketchRelationType.Concentric =>
+                    "Eşmerkezli için iki daire seçin (Ctrl ile çoklu seçim).",
                 SketchRelationType.Fixed =>
                     "Sabitlemek için en az bir nokta seçin.",
                 _ => "Seçim bu ilişkiye uygun değil."
