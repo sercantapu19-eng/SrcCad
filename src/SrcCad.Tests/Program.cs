@@ -97,4 +97,45 @@ foreach (var plane in StandardPlanes.All)
         "Circular hole was not recognized.");
 }
 
-Console.WriteLine("SrcCad V1.4 usable part smoke tests: PASS");
+
+
+// Two connected lines: angle dimension must rotate real geometry around the shared vertex.
+{
+    var sketch = new SketchModel(StandardPlanes.Front);
+    var pivot = sketch.CreatePointExact(new Point2d(0, 0));
+    var p1 = sketch.CreatePointExact(new Point2d(100, 0));
+    var p2 = sketch.CreatePointExact(new Point2d(0, 80));
+    var first = sketch.AddLine(pivot, p1);
+    var second = sketch.AddLine(pivot, p2);
+    var dim = sketch.AddDimension(
+        SketchDimensionType.Angle,
+        new Point2d(30, 30),
+        entityA: first.Id,
+        entityB: second.Id);
+
+    Check(sketch.SetDimensionValue(dim.Id, 30), "Driving angle dimension failed.");
+    Check(Near(sketch.Measure(sketch.Dimension(dim.Id)!), 30),
+        "Driving angle changed the label but not the geometry.");
+    Check(Near(Point2d.Distance(sketch.Point(pivot).Position, sketch.Point(p2).Position), 80),
+        "Angle edit changed the driven line length.");
+}
+
+// Equal relation must really make the second line the same length.
+{
+    var sketch = new SketchModel(StandardPlanes.Front);
+    var a0 = sketch.CreatePointExact(new Point2d(0, 0));
+    var a1 = sketch.CreatePointExact(new Point2d(120, 0));
+    var b0 = sketch.CreatePointExact(new Point2d(0, 50));
+    var b1 = sketch.CreatePointExact(new Point2d(40, 50));
+    var first = sketch.AddLine(a0, a1);
+    var second = sketch.AddLine(b0, b1);
+    Check(sketch.ApplyRelationToSelection(
+        SketchRelationType.Equal,
+        new[] { first.Id, second.Id },
+        Array.Empty<int>()), "Equal relation could not be applied.");
+    Check(Near(
+        Point2d.Distance(sketch.Point(second.StartPointId).Position, sketch.Point(second.EndPointId).Position),
+        120), "Equal relation did not drive geometry.");
+}
+
+Console.WriteLine("SrcCad CAD core smoke tests: PASS");
