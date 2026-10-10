@@ -134,6 +134,7 @@ public sealed class SketchModel
 
     public void SetPointPosition(int id, Point2d position, bool ignoreFixed = false)
     {
+        ValidatePoint(position);
         if (!Points.TryGetValue(id, out var point)) return;
         if (point.Fixed && !ignoreFixed) return;
         Points[id] = point with { Position = position };
@@ -229,8 +230,15 @@ public sealed class SketchModel
         return CreatePointExact(p);
     }
 
+    private static void ValidatePoint(Point2d p)
+    {
+        if (!double.IsFinite(p.X) || !double.IsFinite(p.Y))
+            throw new ArgumentException("Nokta koordinatları sonlu olmalıdır.");
+    }
+
     public int CreatePointExact(Point2d p)
     {
+        ValidatePoint(p);
         var id = _nextPointId++;
         Points[id] = new SketchPoint(id, p);
         return id;
@@ -238,7 +246,9 @@ public sealed class SketchModel
 
     public SketchLine AddLine(int startPointId, int endPointId, bool construction = false)
     {
-        if (startPointId == endPointId)
+        if (!Points.ContainsKey(startPointId) || !Points.ContainsKey(endPointId))
+            throw new ArgumentException("Çizgi noktası bulunamadı.");
+        if (startPointId == endPointId || Point2d.Distance(Point(startPointId).Position, Point(endPointId).Position) <= 1e-9)
             throw new InvalidOperationException("Sıfır uzunluklu çizgi oluşturulamaz.");
         var line = new SketchLine(_nextEntityId++, startPointId, endPointId, construction);
         Entities.Add(line);
@@ -247,7 +257,8 @@ public sealed class SketchModel
 
     public SketchCircle AddCircle(int centerPointId, double radius, bool construction = false)
     {
-        if (radius <= 1e-9) throw new InvalidOperationException("Daire yarıçapı sıfır olamaz.");
+        if (!Points.ContainsKey(centerPointId)) throw new ArgumentException("Daire merkezi bulunamadı.");
+        if (!double.IsFinite(radius) || radius <= 1e-9) throw new InvalidOperationException("Daire yarıçapı sıfır olamaz.");
         var circle = new SketchCircle(_nextEntityId++, centerPointId, radius, construction);
         Entities.Add(circle);
         return circle;
@@ -310,11 +321,13 @@ public sealed class SketchModel
 
     public bool SetDimensionValue(int dimensionId, double value)
     {
-        if (value <= 1e-9) return false;
+        if (!double.IsFinite(value) || value <= 1e-9) return false;
         var index = Dimensions.FindIndex(x => x.Id == dimensionId);
         if (index < 0) return false;
 
         var dim = Dimensions[index];
+        if (dim.Type == SketchDimensionType.Angle && value >= 180) return false;
+        var before = CaptureSnapshot();
         if (!dim.Driving)
         {
             Dimensions[index] = dim with { Value = Measure(dim) };
@@ -325,11 +338,16 @@ public sealed class SketchModel
         var ok = EnforceDimension(Dimensions[index]);
         if (!ok)
         {
-            Dimensions[index] = dim;
+            RestoreSnapshot(before);
             return false;
         }
 
         SolveRelations();
+        if (!ConstraintsSatisfied())
+        {
+            RestoreSnapshot(before);
+            return false;
+        }
         RefreshDimensionValues();
         return true;
     }
@@ -400,7 +418,11 @@ public sealed class SketchModel
             used.Add(center.CenterPointId);
 
         foreach (var pointId in Points.Keys.Where(id => !used.Contains(id)).ToList())
+        {
             Points.Remove(pointId);
+            Relations.RemoveAll(r => r.PointA == pointId || r.PointB == pointId);
+            Dimensions.RemoveAll(d => d.PointA == pointId || d.PointB == pointId);
+        }
     }
 
     public IReadOnlyList<int> AddCornerRectangle(Point2d a, Point2d b, double snapTolerance)
@@ -476,7 +498,53 @@ public sealed class SketchModel
             AddRelation(SketchRelationType.Vertical, lineId);
     }
 
-    public bool ApplyRelationToSelection(
+    public bool ApplyRelationToSelection(SketchRelationType type,
+        IReadOnlyList<int> selectedEntities, IReadOnlyList<int> selectedPoints)
+    {
+        var before = CaptureSnapshot();
+        if (ApplyRelationToSelectionCore(type, selectedEntities, selectedPoints) && ConstraintsSatisfied())
+            return true;
+        RestoreSnapshot(before);
+        return false;
+    }
+
+    private bool ConstraintsSatisfied()
+    {
+        const double eps = 1e-6;
+        if (Points.Values.Any(p => !double.IsFinite(p.Position.X) || !double.IsFinite(p.Position.Y))) return false;
+        if (Lines().Any(l => Point2d.Distance(Point(l.StartPointId).Position, Point(l.EndPointId).Position) <= 1e-9)) return false;
+        if (Dimensions.Any(d => d.Driving && (!double.IsFinite(Measure(d)) || Math.Abs(Measure(d)-d.Value)>eps))) return false;
+        foreach (var r in Relations)
+        {
+            var a = Entity(r.EntityA) as SketchLine;
+            var b = Entity(r.EntityB) as SketchLine;
+            var ca = Entity(r.EntityA) as SketchCircle;
+            var cb = Entity(r.EntityB) as SketchCircle;
+            Point2d A(SketchLine l) => Point(l.StartPointId).Position;
+            Point2d B(SketchLine l) => Point(l.EndPointId).Position;
+            double Angle(SketchLine l, SketchLine k) => MeasureAngle(l,k);
+            bool valid = r.Type switch
+            {
+                SketchRelationType.Horizontal => a is not null && Math.Abs(A(a).Y-B(a).Y)<eps,
+                SketchRelationType.Vertical => a is not null && Math.Abs(A(a).X-B(a).X)<eps,
+                SketchRelationType.Coincident => Points.ContainsKey(r.PointA) && Points.ContainsKey(r.PointB) && Point2d.Distance(Point(r.PointA).Position,Point(r.PointB).Position)<eps,
+                SketchRelationType.Fixed => Points.ContainsKey(r.PointA) && Point(r.PointA).Fixed,
+                SketchRelationType.Parallel => a is not null && b is not null && Math.Min(Angle(a,b),180-Angle(a,b))<eps,
+                SketchRelationType.Perpendicular => a is not null && b is not null && Math.Abs(Angle(a,b)-90)<eps,
+                SketchRelationType.Equal => a is not null && b is not null ? Math.Abs(Point2d.Distance(A(a),B(a))-Point2d.Distance(A(b),B(b)))<eps : ca is not null && cb is not null && Math.Abs(ca.Radius-cb.Radius)<eps,
+                SketchRelationType.Concentric => ca is not null && cb is not null && Point2d.Distance(Point(ca.CenterPointId).Position,Point(cb.CenterPointId).Position)<eps,
+                SketchRelationType.Collinear => a is not null && b is not null && LineDistance(A(b),A(a),B(a))<eps && LineDistance(B(b),A(a),B(a))<eps,
+                _ => false
+            };
+            if (!valid) return false;
+        }
+        return true;
+    }
+
+    private static double LineDistance(Point2d p, Point2d a, Point2d b)
+        => Math.Abs((b.X-a.X)*(p.Y-a.Y)-(b.Y-a.Y)*(p.X-a.X))/Math.Max(1e-12,Point2d.Distance(a,b));
+
+    private bool ApplyRelationToSelectionCore(
         SketchRelationType type,
         IReadOnlyList<int> selectedEntities,
         IReadOnlyList<int> selectedPoints)
@@ -491,7 +559,7 @@ public sealed class SketchModel
                 return true;
 
             case SketchRelationType.Fixed:
-                if (selectedPoints.Count == 0) return false;
+                if (selectedPoints.Count == 0 || selectedPoints.Any(id => !Points.ContainsKey(id))) return false;
                 foreach (var pointId in selectedPoints)
                 {
                     SetPointFixed(pointId, true);
@@ -505,12 +573,18 @@ public sealed class SketchModel
             case SketchRelationType.Equal:
             case SketchRelationType.Collinear:
             case SketchRelationType.Concentric:
-                if (selectedEntities.Count != 2) return false;
+                if (selectedEntities.Count != 2 || selectedEntities[0] == selectedEntities[1]) return false;
+                var a = Entity(selectedEntities[0]);
+                var b = Entity(selectedEntities[1]);
+                var lines = a is SketchLine && b is SketchLine;
+                var circles = a is SketchCircle && b is SketchCircle;
+                if (type == SketchRelationType.Concentric ? !circles :
+                    type == SketchRelationType.Equal ? !(lines || circles) : !lines) return false;
                 AddRelation(type, selectedEntities[0], selectedEntities[1]);
                 return true;
 
             case SketchRelationType.Coincident:
-                if (selectedPoints.Count != 2) return false;
+                if (selectedPoints.Count != 2 || selectedPoints[0] == selectedPoints[1] || selectedPoints.Any(id => !Points.ContainsKey(id))) return false;
                 AddRelation(type, pointA: selectedPoints[0], pointB: selectedPoints[1]);
                 return true;
 
@@ -824,6 +898,8 @@ public sealed class SketchModel
         var length = Point2d.Distance(pivot, moving);
         if (length < 1e-9) return false;
 
+        // Measurement uses directed edges; moving the start reverses that edge.
+        if (movingId == second.StartPointId) baseAngle += Math.PI;
         var current = Math.Atan2(moving.Y - pivot.Y, moving.X - pivot.X);
         var sign = NormalizeAngle(current - baseAngle) >= 0 ? 1.0 : -1.0;
         var target = baseAngle + sign * degrees * Math.PI / 180.0;
@@ -948,11 +1024,13 @@ public sealed class SketchModel
     private void RefreshDimensionValues()
     {
         for (var i = 0; i < Dimensions.Count; i++)
-            Dimensions[i] = Dimensions[i] with { Value = Measure(Dimensions[i]) };
+            if (!Dimensions[i].Driving)
+                Dimensions[i] = Dimensions[i] with { Value = Measure(Dimensions[i]) };
     }
 
     public SketchDefinitionInfo DefinitionInfo()
     {
+        if (!ConstraintsSatisfied()) return new SketchDefinitionInfo(0, false, true, "Çakışan ilişkiler / ölçüler");
         // Alpha-stage DOF accounting. It is intentionally conservative:
         // points=2 variables, circle radius=1; explicit constraints/dimensions remove DOF.
         var dof = Points.Values.Where(p => p.Id != 0 && !p.Fixed).Count() * 2
@@ -976,8 +1054,8 @@ public sealed class SketchModel
 
         dof = Math.Max(0, dof);
         return dof == 0
-            ? new SketchDefinitionInfo(0, true, false, "Tam Tanımlı")
-            : new SketchDefinitionInfo(dof, false, false, $"Eksik Tanımlı ({dof} DOF)");
+            ? new SketchDefinitionInfo(0, false, false, "Tahmini DOF: 0 • tam tanım doğrulanmadı")
+            : new SketchDefinitionInfo(dof, false, false, $"Eksik Tanımlı (tahmini {dof} DOF)");
     }
 
     public IEnumerable<SketchLine> Lines(bool includeConstruction = true)
@@ -1032,7 +1110,8 @@ public sealed class SketchModel
                 if (loop.Count > lines.Count) return false;
             }
 
-            if (loop.Count < 3) return false;
+            if (loop.Count < 3 || !SimpleLoop(loop)) return false;
+            if (SignedArea(loop) < 0) loop.Reverse();
             loops.Add(loop);
         }
         return loops.Count > 0;
@@ -1061,7 +1140,8 @@ public sealed class SketchModel
         foreach (var loop in loops)
         {
             if (ReferenceEquals(loop, outerLoop)) continue;
-            if (!loop.All(p => PointInPolygon(p, boundary))) return false;
+            if (!loop.All(p => PointInPolygon(p, boundary)) || LoopsTouch(loop, boundary)) return false;
+            if (polygonHoles.Any(h => LoopsTouch(loop,h) || PointInPolygon(loop[0],h) || PointInPolygon(h[0],loop))) return false;
             polygonHoles.Add(loop);
         }
 
@@ -1076,7 +1156,9 @@ public sealed class SketchModel
                 if (Point2d.Distance(center, otherCenter) <= circle.Radius + existing.Radius + 1e-9)
                     return false;
             }
-            if (polygonHoles.Any(hole => PointInPolygon(center, hole)))
+            if (polygonHoles.Any(hole => PointInPolygon(center, hole) ||
+                hole.Any(p => Point2d.Distance(center,p) <= circle.Radius + 1e-9) ||
+                hole.Where((p,i) => DistancePointToSegment(center,p,hole[(i+1)%hole.Count]) <= circle.Radius + 1e-9).Any()))
                 return false;
             circularHoles.Add(circle);
         }
@@ -1087,6 +1169,37 @@ public sealed class SketchModel
         out List<Point2d> outerLoop,
         out List<SketchCircle> circularHoles)
         => TryGetExtrusionProfile(out outerLoop, out _, out circularHoles);
+
+    private static bool SegmentsTouch(Point2d a, Point2d b, Point2d c, Point2d d)
+    {
+        const double eps = 1e-9;
+        if (DistancePointToSegment(a,c,d)<=eps || DistancePointToSegment(b,c,d)<=eps ||
+            DistancePointToSegment(c,a,b)<=eps || DistancePointToSegment(d,a,b)<=eps) return true;
+        double Cross(Point2d p,Point2d q,Point2d r) => (q.X-p.X)*(r.Y-p.Y)-(q.Y-p.Y)*(r.X-p.X);
+        return Math.Sign(Cross(a,b,c)) != Math.Sign(Cross(a,b,d)) && Math.Sign(Cross(c,d,a)) != Math.Sign(Cross(c,d,b));
+    }
+
+    private static bool LoopsTouch(IReadOnlyList<Point2d> a,IReadOnlyList<Point2d> b)
+    {
+        for (int i=0;i<a.Count;i++) for (int j=0;j<b.Count;j++)
+            if (SegmentsTouch(a[i],a[(i+1)%a.Count],b[j],b[(j+1)%b.Count])) return true;
+        return false;
+    }
+
+    private static bool SimpleLoop(IReadOnlyList<Point2d> p)
+    {
+        if (Math.Abs(SignedArea(p)) <= 1e-9) return false;
+        for (int i=0;i<p.Count;i++)
+        {
+            if (Point2d.Distance(p[i],p[(i+1)%p.Count])<=1e-9) return false;
+            for (int j=i+1;j<p.Count;j++)
+            {
+                if (j==i+1 || (i==0 && j==p.Count-1)) continue;
+                if (SegmentsTouch(p[i],p[(i+1)%p.Count],p[j],p[(j+1)%p.Count])) return false;
+            }
+        }
+        return true;
+    }
 
     private static double SignedArea(IReadOnlyList<Point2d> loop)
     {

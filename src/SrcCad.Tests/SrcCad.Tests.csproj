@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
     <OutputType>Exe</OutputType>
     <AssemblyName>SrcCad.Tests</AssemblyName>
     <RootNamespace>SrcCad.Tests</RootNamespace>
@@ -9,3 +10,4 @@
     <ProjectReference Include="..\SrcCad.Commands\SrcCad.Commands.csproj" />
   </ItemGroup>
 </Project>
+

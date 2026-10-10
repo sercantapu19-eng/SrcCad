@@ -252,3 +252,6 @@ foreach (var plane in StandardPlanes.All)
 }
 
 Console.WriteLine("SrcCad CAD core smoke tests: PASS");
+
+
+AcceptanceTests.Run();
