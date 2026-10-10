@@ -951,6 +951,17 @@ public sealed class SketchModel
             var center = Point(circle.CenterPointId).Position;
             if (!CircleInsidePolygon(center, circle.Radius, outerLoop))
                 return false;
+
+            // OCCT cannot build a valid planar face when two inner wires
+            // intersect/touch. Reject that sketch before preview instead of
+            // producing a misleading solid.
+            foreach (var existing in circularHoles)
+            {
+                var otherCenter = Point(existing.CenterPointId).Position;
+                if (Point2d.Distance(center, otherCenter) <= circle.Radius + existing.Radius + 1e-9)
+                    return false;
+            }
+
             circularHoles.Add(circle);
         }
 
@@ -962,20 +973,32 @@ public sealed class SketchModel
         double radius,
         IReadOnlyList<Point2d> polygon)
     {
-        if (radius <= 0 || polygon.Count < 3) return false;
+        if (radius <= 0 || polygon.Count < 3 || !PointInPolygon(center, polygon))
+            return false;
 
-        // Check center plus 8 points on the circumference. This prevents an
-        // inner circle crossing the outer profile boundary.
-        var samples = new List<Point2d> { center };
-        for (var i = 0; i < 8; i++)
+        // Exact boundary clearance is stronger than sampling a few points on
+        // the circumference and also works for concave line profiles.
+        for (var i = 0; i < polygon.Count; i++)
         {
-            var a = i * Math.PI / 4.0;
-            samples.Add(new Point2d(
-                center.X + Math.Cos(a) * radius,
-                center.Y + Math.Sin(a) * radius));
+            var a = polygon[i];
+            var b = polygon[(i + 1) % polygon.Count];
+            if (DistancePointToSegment(center, a, b) <= radius + 1e-9)
+                return false;
         }
 
-        return samples.All(p => PointInPolygon(p, polygon));
+        return true;
+    }
+
+    private static double DistancePointToSegment(Point2d p, Point2d a, Point2d b)
+    {
+        var dx = b.X - a.X;
+        var dy = b.Y - a.Y;
+        var length2 = dx * dx + dy * dy;
+        if (length2 <= 1e-24) return Point2d.Distance(p, a);
+
+        var t = ((p.X - a.X) * dx + (p.Y - a.Y) * dy) / length2;
+        t = Math.Max(0.0, Math.Min(1.0, t));
+        return Point2d.Distance(p, new Point2d(a.X + t * dx, a.Y + t * dy));
     }
 
     private static bool PointInPolygon(Point2d p, IReadOnlyList<Point2d> polygon)
