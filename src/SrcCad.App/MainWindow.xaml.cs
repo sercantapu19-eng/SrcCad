@@ -52,6 +52,9 @@ public partial class MainWindow : Window
     private readonly List<int> _smartDimensionPoints = new();
     private bool _smartDimensionWaitingPlacement;
 
+    private readonly Stack<SketchSnapshot> _sketchUndo = new();
+    private readonly Stack<SketchSnapshot> _sketchRedo = new();
+
     private readonly WinForms.ContextMenuStrip _viewportContextMenu = new();
 
     public MainWindow()
@@ -110,6 +113,20 @@ public partial class MainWindow : Window
 
     private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
+        if (_inSketch && Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && e.Key == Key.Z)
+        {
+            UndoSketch();
+            e.Handled = true;
+            return;
+        }
+
+        if (_inSketch && Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && e.Key == Key.Y)
+        {
+            RedoSketch();
+            e.Handled = true;
+            return;
+        }
+
         if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && e.Key == Key.N)
         {
             NewPart_Click(this, new RoutedEventArgs());
@@ -578,6 +595,7 @@ public partial class MainWindow : Window
     {
         if (_sketch is null) return;
 
+        var before = _sketch.CaptureSnapshot();
         SketchDimension? dimension = null;
 
         if (_smartDimensionEntities.Count == 2 &&
@@ -642,7 +660,11 @@ public partial class MainWindow : Window
         if (!EditDimension(dimension.Id, removeOnCancel: true))
             Status("Ölçü oluşturma iptal edildi.");
         else
+        {
+            _sketchUndo.Push(before);
+            _sketchRedo.Clear();
             Status($"Ölçü{dimension.Id} oluşturuldu ve geometriye uygulandı.");
+        }
     }
 
     private void ResetSmartDimensionTargets()
@@ -671,6 +693,9 @@ public partial class MainWindow : Window
             UpdateSketchPropertyPanel();
             return false;
         }
+
+        if (!removeOnCancel)
+            PushSketchUndo();
 
         if (!_sketch.SetDimensionValue(dimensionId, dialog.Value))
         {
@@ -785,9 +810,58 @@ public partial class MainWindow : Window
         _viewportContextMenu.Items.Add(item);
     }
 
+    private void PushSketchUndo()
+    {
+        if (_sketch is null) return;
+        _sketchUndo.Push(_sketch.CaptureSnapshot());
+        _sketchRedo.Clear();
+    }
+
+    private void UndoSketch()
+    {
+        if (_sketch is null || _sketchUndo.Count == 0)
+        {
+            Status("Geri alınacak çizim işlemi yok.");
+            return;
+        }
+
+        _sketchRedo.Push(_sketch.CaptureSnapshot());
+        _sketch.RestoreSnapshot(_sketchUndo.Pop());
+        ClearSketchSelection(false);
+        ResetSmartDimensionTargets();
+        RenderSketch();
+        UpdateSketchPropertyPanel();
+        RefreshCommandState();
+        Status("Çizim işlemi geri alındı • Ctrl+Y ile yineleyebilirsiniz.");
+    }
+
+    private void RedoSketch()
+    {
+        if (_sketch is null || _sketchRedo.Count == 0)
+        {
+            Status("Yinelenecek çizim işlemi yok.");
+            return;
+        }
+
+        _sketchUndo.Push(_sketch.CaptureSnapshot());
+        _sketch.RestoreSnapshot(_sketchRedo.Pop());
+        ClearSketchSelection(false);
+        ResetSmartDimensionTargets();
+        RenderSketch();
+        UpdateSketchPropertyPanel();
+        RefreshCommandState();
+        Status("Çizim işlemi yinelendi • Ctrl+Z ile geri alabilirsiniz.");
+    }
+
     private void DeleteSketchSelection()
     {
         if (_sketch is null) return;
+        if (_selectedSketchDimensionId < 0 &&
+            _selectedSketchEntities.Count == 0 &&
+            !_selectedSketchPoints.Any(id => id != 0))
+            return;
+
+        PushSketchUndo();
 
         if (_selectedSketchDimensionId >= 0)
             _sketch.DeleteDimension(_selectedSketchDimensionId);
@@ -824,6 +898,7 @@ public partial class MainWindow : Window
 
         try
         {
+            PushSketchUndo();
             _sketchCommand.Pick(pick);
             _viewer.ClearPreview();
         }
@@ -1365,6 +1440,7 @@ public partial class MainWindow : Window
     {
         if (_sketch is null || !_inSketch) return;
 
+        var before = _sketch.CaptureSnapshot();
         var ok = _sketch.ApplyRelationToSelection(
             type,
             _selectedSketchEntities.OrderBy(x => x).ToList(),
@@ -1387,6 +1463,8 @@ public partial class MainWindow : Window
             return;
         }
 
+        _sketchUndo.Push(before);
+        _sketchRedo.Clear();
         _sketch.SolveRelations();
         RenderSketch();
         UpdateSketchPropertyPanel();
@@ -1399,6 +1477,7 @@ public partial class MainWindow : Window
         if (_sketch is null || SketchRelationsList.SelectedItem is not ListBoxItem item || item.Tag is not int relationId)
             return;
 
+        PushSketchUndo();
         _sketch.RemoveRelation(relationId);
         _sketch.SolveRelations();
         RenderSketch();
@@ -1426,6 +1505,11 @@ public partial class MainWindow : Window
         }
 
         _sketch ??= new SketchModel(_selectedPlane);
+        if (!_inSketch)
+        {
+            _sketchUndo.Clear();
+            _sketchRedo.Clear();
+        }
         _inSketch = true;
         _smartDimensionMode = false;
         ResetSmartDimensionTargets();
