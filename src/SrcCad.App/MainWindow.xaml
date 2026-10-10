@@ -88,7 +88,7 @@
             <TabControl Grid.Column="0" x:Name="ManagerTabs" BorderBrush="#BAC5CE" Background="#F8FAFB">
                 <TabItem Header="FeatureManager" x:Name="FeatureManagerTab">
                     <TreeView x:Name="FeatureTree" BorderThickness="0" Background="#FAFBFC"
-                              SelectedItemChanged="FeatureTree_SelectedItemChanged">
+                              SelectedItemChanged="FeatureTree_SelectedItemChanged" MouseDoubleClick="FeatureTree_MouseDoubleClick">
                         <TreeViewItem Header="Parça1" x:Name="PartNode" IsExpanded="True">
                             <TreeViewItem Header="Geçmiş"/>
                             <TreeViewItem Header="Sensörler"/>
