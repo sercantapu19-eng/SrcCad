@@ -10,3 +10,7 @@ Baseline and hover rerun: 572 managed checks PASS, 0 FAIL. This does NOT validat
 ## Selection input repair
 
 A selectable WinForms viewport panel now owns focus; Delete/Esc/Space are input keys. Ctrl state is read from both WPF and WinForms. An explicit Seç (Esc) command leaves drawing mode without losing selected geometry. Ctrl selection no longer starts point dragging. Windows acceptance is PENDING: click the canvas, Esc, hover/click a line or center, Ctrl-click a second, click blank space; persistent selection and clearing must match the visible geometry.
+
+## Delete and Windows event regression
+
+Delete now routes list focus to the selected relation/dimension, and canvas focus to sketch geometry. Existing snapshot Undo/Redo and feature-tree deletion remain in use. `tools/Run-WindowsInteraction.ps1 -AppPath <built SrcCad.App.exe>` starts an isolated opt-in app process on an interactive Windows desktop. It sends HWND mouse/key messages, exercises native screen projection and checks the live application model for hover, selection, Delete and Ctrl+Z/Y. It uses actual Ctrl key injection briefly: do not type into other applications during this run. It writes JSON, fails on exceptions/timeouts and never converts pending tests into PASS. Current status: NOT RUN (Linux environment). Manual highlight rendering and usability still require Windows observation.

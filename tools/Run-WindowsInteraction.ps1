@@ -1,0 +1,16 @@
+param([Parameter(Mandatory=$true)][string]$AppPath,[string]$ReportPath=(Join-Path $PWD 'windows-interaction.json'))
+$ErrorActionPreference='Stop'
+if(-not $IsWindows -and $PSVersionTable.PSEdition -eq 'Core'){throw 'Interactive Windows desktop required.'}
+$AppPath=(Resolve-Path $AppPath).Path
+$ReportPath=[IO.Path]::GetFullPath($ReportPath)
+if(Test-Path $ReportPath){Remove-Item $ReportPath}
+$previous=$env:SRCCAD_UI_REGRESSION_REPORT
+try {
+    $env:SRCCAD_UI_REGRESSION_REPORT=$ReportPath
+    $process=Start-Process -FilePath $AppPath -WorkingDirectory (Split-Path $AppPath) -PassThru
+    if(-not $process.WaitForExit(60000)){ $process.Kill(); throw 'UI regression timed out (60s)' }
+    if(-not(Test-Path $ReportPath)){throw 'Application produced no UI regression report'}
+    $report=Get-Content -Raw $ReportPath | ConvertFrom-Json
+    $report | ConvertTo-Json -Depth 5
+    if($process.ExitCode -ne 0 -or $report.Failed -ne 0 -or $report.Passed -lt 12){throw 'Windows interaction regression failed'}
+} finally { $env:SRCCAD_UI_REGRESSION_REPORT=$previous }

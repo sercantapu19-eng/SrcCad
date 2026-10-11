@@ -111,6 +111,8 @@ public partial class MainWindow : Window
         FrontPlaneNode.IsSelected = true;
         RefreshCommandState();
         Status("Ön Düzlem seçili. Çizim komutuyla başlayabilirsiniz.");
+        if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("SRCCAD_UI_REGRESSION_REPORT")))
+            Dispatcher.BeginInvoke(new Action(RunWindowsInteractionRegression));
     }
 
     private void Window_Closing(object? sender, CancelEventArgs e)
@@ -203,7 +205,16 @@ public partial class MainWindow : Window
 
         if (e.Key == Key.Delete && _inSketch)
         {
-            DeleteSketchSelection();
+            if (SketchRelationsList.IsKeyboardFocusWithin)
+                DeleteRelation_Click(this,new RoutedEventArgs());
+            else if (SketchDimensionsList.IsKeyboardFocusWithin && SketchDimensionsList.SelectedItem is ListBoxItem selected && selected.Tag is int id)
+            {
+                PushSketchUndo();
+                _sketch?.DeleteDimension(id);
+                ClearSketchSelection();
+                UpdateSketchPropertyPanel();
+            }
+            else DeleteSketchSelection();
             e.Handled = true;
             return;
         }
