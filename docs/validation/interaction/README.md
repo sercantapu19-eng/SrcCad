@@ -71,3 +71,10 @@ FAIL on `be76ed4`. See [findings and coverage](08-delete-history.md).
 Managed: 1015 PASS / 0 FAIL. Windows: 108 checks PENDING (original 78 retained).
 Native: 75 checks PENDING (9 new deletion/restore volume checks).
 Do not count this correction as Windows PASS before rerunning the script.
+
+## 2026-10-11 Foreground gate follow-up
+
+User Windows validation of a3e9d146: managed 1015 PASS; native 75 PASS; UI 10 PASS,
+1 FAIL at foreground/focus gate before Ctrl+Z injection. [Focus correction](09-focus.md)
+adds deferred activation/focus sequencing, launcher permission, bounded retry and
+HWND/thread diagnostics. UI remains PENDING WINDOWS; all 108 checks retained.

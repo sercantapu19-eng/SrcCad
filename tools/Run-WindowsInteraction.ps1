@@ -7,7 +7,23 @@ if(Test-Path $ReportPath){Remove-Item $ReportPath}
 $previous=$env:SRCCAD_UI_REGRESSION_REPORT
 try {
     $env:SRCCAD_UI_REGRESSION_REPORT=$ReportPath
+    # The interactive foreground launcher grants the child permission to activate.
+    # Do not spoof Alt keys or attach to another application's input thread.
+    if(-not ('SrcCadAcceptance.Foreground' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+namespace SrcCadAcceptance {
+    public static class Foreground {
+        [DllImport("user32.dll", SetLastError=true)]
+        public static extern bool AllowSetForegroundWindow(uint processId);
+    }
+}
+'@
+    }
     $process=Start-Process -FilePath $AppPath -WorkingDirectory (Split-Path $AppPath) -PassThru
+    $activationGranted=[SrcCadAcceptance.Foreground]::AllowSetForegroundWindow([uint32]$process.Id)
+    Write-Host "UI activation grant: PID=$($process.Id), accepted=$activationGranted"
     if(-not $process.WaitForExit(60000)){
         $process.Kill()
         $last=if(Test-Path $ReportPath){Get-Content -Raw $ReportPath}else{'No startup checkpoint written'}

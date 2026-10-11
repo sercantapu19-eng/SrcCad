@@ -21,13 +21,21 @@ public partial class MainWindow
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] private static extern IntPtr GetFocus();
 
+    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
+    [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hwnd);
+    [DllImport("user32.dll")] private static extern bool IsWindowEnabled(IntPtr hwnd);
+    [DllImport("user32.dll")] private static extern bool IsIconic(IntPtr hwnd);
+    [DllImport("user32.dll")] private static extern bool ShowWindowAsync(IntPtr hwnd, int command);
+
     // Opt-in separate process. Tests HWND messages, WPF/WinForms adapters, native
     // projection and live model together; it is not a substitute for manual UX QA.
     private async void RunWindowsInteractionRegression()
     {
         var report=Environment.GetEnvironmentVariable("SRCCAD_UI_REGRESSION_REPORT")!;
         var checks=new List<string>();string? failure=null;
-        void Step(string name) => WindowsRegressionJournal.Write(new {Completed=false,Passed=checks.Count,Failed=0,Step=name,Checks=checks,KeyRoute=_lastKeyRoute,HistoryCommand=_lastHistoryCommand,UndoDepth=_sketchUndo.Count,RedoDepth=_sketchRedo.Count});
+        object? focusDiagnostic=null;
+        void Step(string name) => WindowsRegressionJournal.Write(new {Completed=false,Passed=checks.Count,Failed=0,Step=name,Checks=checks,Focus=focusDiagnostic,KeyRoute=_lastKeyRoute,HistoryCommand=_lastHistoryCommand,UndoDepth=_sketchUndo.Count,RedoDepth=_sketchRedo.Count});
         void Check(bool ok,string name) {if(!ok)throw new InvalidOperationException(name);checks.Add(name);Step(name);}
         void Key(WinForms.Keys key)
         {
@@ -36,15 +44,41 @@ public partial class MainWindow
             SendMessage(_viewportPanel.Handle,0x100,(IntPtr)(int)key,IntPtr.Zero);
             SendMessage(_viewportPanel.Handle,0x101,(IntPtr)(int)key,IntPtr.Zero);
         }
+        async Task EnsureKeyboardTarget(bool viewport)
+        {
+            var window = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+            // Activation and WPF focus restoration are asynchronous. Focus the child
+            // only AFTER the activation/dispatcher work, then verify it stays there.
+            for (int attempt=1; attempt<=12; attempt++)
+            {
+                if (IsIconic(window)) ShowWindowAsync(window,9); // SW_RESTORE
+                var activated=Activate();
+                var foregroundAccepted=SetForegroundWindow(window);
+                await Dispatcher.InvokeAsync(()=>{},System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                await Task.Delay(50);
+                if (viewport) { _viewportPanel.Select(); _viewportPanel.Focus(); SetFocus(_viewportPanel.Handle); }
+                else { SketchRelationsList.Focus(); System.Windows.Input.Keyboard.Focus(SketchRelationsList); }
+                await Dispatcher.InvokeAsync(()=>{},System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                await Task.Delay(75);
+                var foreground=GetForegroundWindow(); var focus=GetFocus();
+                var foregroundThread=GetWindowThreadProcessId(foreground,out var foregroundPid);
+                var targetThread=GetWindowThreadProcessId(_viewportPanel.Handle,out var targetPid);
+                bool targetFocused=viewport ? focus==_viewportPanel.Handle : SketchRelationsList.IsKeyboardFocusWithin;
+                focusDiagnostic=new {Attempt=attempt,MainHwnd=window.ToInt64(),TargetHwnd=_viewportPanel.Handle.ToInt64(),
+                    ForegroundHwnd=foreground.ToInt64(),FocusHwnd=focus.ToInt64(),ForegroundPid=foregroundPid,
+                    ForegroundThread=foregroundThread,TargetPid=targetPid,TargetThread=targetThread,
+                    CurrentThread=GetCurrentThreadId(),Activated=activated,ForegroundAccepted=foregroundAccepted,
+                    TargetVisible=IsWindowVisible(_viewportPanel.Handle),TargetEnabled=IsWindowEnabled(_viewportPanel.Handle),
+                    WpfFocus=System.Windows.Input.Keyboard.FocusedElement?.GetType().FullName,TargetFocused=targetFocused};
+                Step("Keyboard activation/focus attempt " + attempt);
+                if (foreground==window && targetFocused) return;
+            }
+            throw new InvalidOperationException("Keyboard test requires foreground SrcCad and target focus (12 bounded attempts; see Focus diagnostics)");
+        }
         async Task Chord(WinForms.Keys key, bool viewport = true)
         {
             Step("Physical Ctrl+" + key);
-            var window = new System.Windows.Interop.WindowInteropHelper(this).Handle;
-            Activate(); SetForegroundWindow(window);
-            if (viewport) SetFocus(_viewportPanel.Handle);
-            await Task.Delay(50);
-            if (GetForegroundWindow() != window || (viewport && GetFocus() != _viewportPanel.Handle))
-                throw new InvalidOperationException("Keyboard test requires foreground SrcCad and target focus");
+            await EnsureKeyboardTarget(viewport);
             // The whole chord goes through the OS input queue. Mixing injected Ctrl
             // with SendMessage(Z) bypasses accelerator preprocessing and key state.
             try
@@ -272,7 +306,7 @@ public partial class MainWindow
                 else if (scenario == "relation")
                 {
                     SketchRelationsList.SelectedItem = SketchRelationsList.Items.OfType<System.Windows.Controls.ListBoxItem>().Single(i=>Equals(i.Tag,relation.Id));
-                    SketchRelationsList.Focus();
+                    await EnsureKeyboardTarget(viewport:false);
                     // Keyboard routed by WPF from the actual PropertyManager focus.
                     keybd_event((byte)WinForms.Keys.Delete,0,0,UIntPtr.Zero);
                     keybd_event((byte)WinForms.Keys.Delete,0,2,UIntPtr.Zero);
@@ -295,7 +329,7 @@ public partial class MainWindow
         finally
         {
             keybd_event(0x11,0,2,UIntPtr.Zero);
-            WindowsRegressionJournal.Write(new {Completed=true,Scope="Windows HWND interaction; manual visual acceptance separate",Passed=checks.Count,Failed=failure is null?0:1,Checks=checks,Failure=failure,KeyRoute=_lastKeyRoute,HistoryCommand=_lastHistoryCommand,UndoDepth=_sketchUndo.Count,RedoDepth=_sketchRedo.Count});
+            WindowsRegressionJournal.Write(new {Completed=true,Scope="Windows HWND interaction; manual visual acceptance separate",Passed=checks.Count,Failed=failure is null?0:1,Checks=checks,Failure=failure,Focus=focusDiagnostic,KeyRoute=_lastKeyRoute,HistoryCommand=_lastHistoryCommand,UndoDepth=_sketchUndo.Count,RedoDepth=_sketchRedo.Count});
             Application.Current.Shutdown(failure is null?0:1);
         }
     }
