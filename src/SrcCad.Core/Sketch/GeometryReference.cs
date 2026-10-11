@@ -64,16 +64,43 @@ public sealed partial class SketchModel
     }
     public bool ApplyReferenceRelation(SketchRelationType type, IReadOnlyList<GeometryReference> selection)
     {
-        if(selection.Count==2 && selection.All(r=>r.IsPointLike) && selection[0]!=selection[1] &&
-           type is SketchRelationType.Horizontal or SketchRelationType.Vertical or SketchRelationType.Coincident)
+        if(selection.Count==2 && selection[0]!=selection[1])
         {
-            var before=CaptureSnapshot();
-            // Resolve before mutation, reject stale references without corrupting history.
-            try { foreach(var r in selection) ResolvePoint(r); } catch(ArgumentException) { return false; } catch(KeyNotFoundException) { return false; }
-            if(Relations.Any(r=>r.Type==type && ((r.ReferenceA==selection[0]&&r.ReferenceB==selection[1])||(r.ReferenceA==selection[1]&&r.ReferenceB==selection[0])))) return true;
-            Relations.Add(new SketchRelation(_nextRelationId++,type,ReferenceA:selection[0],ReferenceB:selection[1]));
-            if(SolveNumerically() && ConstraintsSatisfied()) return true;
-            RestoreSnapshot(before);return false;
+            var a=selection[0];var b=selection[1];
+            if(a.IsLine && b.IsPointLike || a.Kind==GeometryReferenceKind.Circle && b.IsLine) (a,b)=(b,a);
+            bool pair=a.IsPointLike&&b.IsPointLike && type is SketchRelationType.Horizontal or SketchRelationType.Vertical or SketchRelationType.Coincident;
+            bool pointLine=a.IsPointLike&&b.IsLine && type is SketchRelationType.Coincident or SketchRelationType.Midpoint;
+            bool tangent=type==SketchRelationType.Tangent && (a.IsLine&&b.Kind==GeometryReferenceKind.Circle || a.Kind==GeometryReferenceKind.Circle&&b.Kind==GeometryReferenceKind.Circle);
+            if(pair||pointLine||tangent)
+            {
+                var before=CaptureSnapshot();
+                try
+                {
+                    foreach(var r in new[]{a,b})
+                    {
+                        if(r.IsPointLike) ResolvePoint(r);
+                        else if(r.IsLine?Entity(r.Id) is not SketchLine:Entity(r.Id) is not SketchCircle) return false;
+                    }
+                    if(Relations.Any(r=>r.Type==type&&((r.ReferenceA==a&&r.ReferenceB==b)||(r.ReferenceA==b&&r.ReferenceB==a)))) return true;
+                    double sense=1;bool inner=false;
+                    if(tangent && a.IsLine)
+                    {
+                        var l=(SketchLine)Entity(a.Id)!;var c=(SketchCircle)Entity(b.Id)!;
+                        sense=SignedLineDistance(Point(c.CenterPointId).Position,Point(l.StartPointId).Position,Point(l.EndPointId).Position)<0?-1:1;
+                    }
+                    if(tangent && !a.IsLine)
+                    {
+                        var c=(SketchCircle)Entity(a.Id)!;var d=(SketchCircle)Entity(b.Id)!;
+                        var distance=Point2d.Distance(Point(c.CenterPointId).Position,Point(d.CenterPointId).Position);
+                        inner=Math.Abs(distance-Math.Abs(c.Radius-d.Radius))<Math.Abs(distance-c.Radius-d.Radius);
+                    }
+                    Relations.Add(new SketchRelation(_nextRelationId++,type,ReferenceA:a,ReferenceB:b,Sense:sense,InternalTangency:inner));
+                    if(SolveNumerically()&&ConstraintsSatisfied())return true;
+                }
+                catch(ArgumentException) { }
+                catch(KeyNotFoundException) { }
+                RestoreSnapshot(before);return false;
+            }
         }
         return ApplyRelationToSelection(type,selection.Where(r=>!r.IsPointLike).Select(r=>r.Id).ToArray(),selection.Where(r=>r.IsPointLike).Select(ReferencePointId).ToArray());
     }

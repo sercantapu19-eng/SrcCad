@@ -189,3 +189,10 @@ SM-105 için tek mevcut Ekstrüzyon1'in kaynak çizimi artık Çizimi Düzenle d
 18 managed işlem kontrolü geçti (`docs/validation/source-sketch-tests.log`). Native suite'e üç düzlemde önce/düzenle/geri yükle/yeniden uygula için 12 gerçek hacim kontrolü eklendi; **bu yeni native kontroller henüz Windows'ta çalıştırılmadı**. Önceki 12 PASS bildirimi yeni testlere aktarılmaz.
 
 Windows'ta: 100×60×20 katı oluştur; Çizim1'i düzenleyip genişliği150 yap, çıkışta katı150×60×20 olmalı; Ctrl+Z/Y ile iki geometriye dön. Tek kenarı silip çıkmayı dene: başarısız rebuild sonrası düzeltme veya iptal mümkün olmalı. İptal eski100/150 genişliği korumalı ve redo geçmişini silmemeli. SM-105 ve tam SM-073–120 kabulü bu akış doğrulanana kadar açık.
+
+
+## Issue #3 Faz A bağlantısı
+
+Kullanıcı Windows'ta Core60 + History12 + Interaction50 + SourceSketch18 + Native12 + NativeSource12, FAIL0 bildirdi; baseline kapısı geçildi. Buna rağmen merkez ilişkileri, Origin ölçü akışı, Fully Defined ve Centerline manuel olarak başarısız bildirildi. Bu akışlar eski otomatik PASS ile kapatılmadı.
+
+Yeni ortak reference/selection/solver çalışması ve kanıtlar: `validation/ISSUE_3_PHASE_A.md`. Uzun vadeli200 madde: `CAD_ACCEPTANCE_200.md`. Mevcut SM matrisi bunların yerine kaldırılmadı; Windows manuel maddeler hâlâ doğrulama bekliyor.

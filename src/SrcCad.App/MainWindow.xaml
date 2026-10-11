@@ -137,6 +137,8 @@
                                     <Button Content="Eşit" Margin="0,0,4,4" Click="EqualRelation_Click"/>
                                     <Button Content="Eşdoğrusal" Margin="0,0,4,4" Click="CollinearRelation_Click"/>
                                     <Button Content="Eşmerkezli" Margin="0,0,4,4" Click="ConcentricRelation_Click"/>
+                                    <Button Content="Orta Nokta" Click="MidpointRelation_Click" Margin="2" Padding="6,3"/>
+                                    <Button Content="Teğet" Click="TangentRelation_Click" Margin="2" Padding="6,3"/>
                                     <Button Content="Sabitle" Margin="0,0,4,4" Click="FixRelation_Click"/>
                                 </WrapPanel>
 

@@ -52,6 +52,7 @@ try {
         '^SOURCE SKETCH EDIT: 18 PASS ',
         '^SKETCH FOUNDATION: [1-9][0-9]* PASS ',
         '^PART ROUNDTRIP: [1-9][0-9]* PASS ',
+        '^GENERAL CONSTRAINTS: [1-9][0-9]* PASS ',
         '^NATIVE REFERENCE ROUNDTRIP: 12/12 PASS$',
         '^NATIVE SOURCE SKETCH REGRESSION: 12/12 PASS '
     )) {

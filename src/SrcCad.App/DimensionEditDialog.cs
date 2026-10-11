@@ -8,11 +8,13 @@ namespace SrcCad.App;
 public sealed class DimensionEditDialog : Window
 {
     private readonly TextBox _valueBox;
+    private readonly bool _allowZero;
 
     public double Value { get; private set; }
 
-    public DimensionEditDialog(string title, double currentValue, string unit)
+    public DimensionEditDialog(string title, double currentValue, string unit, bool allowZero = false)
     {
+        _allowZero = allowZero;
         Title = title;
         Width = 320;
         Height = 165;
@@ -78,9 +80,9 @@ public sealed class DimensionEditDialog : Window
             return;
         }
 
-        if (!double.IsFinite(value) || value <= 0)
+        if (!double.IsFinite(value) || value < 0 || (!_allowZero && value == 0))
         {
-            MessageBox.Show(this, "Ölçü sıfırdan büyük olmalıdır.", "SrcCad", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, _allowZero ? "Ölçü negatif olamaz." : "Ölçü sıfırdan büyük olmalıdır.", "SrcCad", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 

@@ -600,7 +600,8 @@ public partial class MainWindow : Window
             return false;
 
         var unit = dimension.Type == SketchDimensionType.Angle ? "°" : "mm";
-        var dialog = new DimensionEditDialog("Ölçüyü Değiştir", _sketch.Measure(dimension), unit)
+        var dialog = new DimensionEditDialog("Ölçüyü Değiştir", _sketch.Measure(dimension), unit,
+            dimension.Type is SketchDimensionType.HorizontalDistance or SketchDimensionType.VerticalDistance or SketchDimensionType.PointLineDistance)
         {
             Owner = this
         };
@@ -1394,6 +1395,12 @@ public partial class MainWindow : Window
 
     private void EqualRelation_Click(object sender, RoutedEventArgs e)
         => ApplySketchRelation(SketchRelationType.Equal);
+
+    private void TangentRelation_Click(object sender, RoutedEventArgs e)
+        => ApplySketchRelation(SketchRelationType.Tangent);
+
+    private void MidpointRelation_Click(object sender, RoutedEventArgs e)
+        => ApplySketchRelation(SketchRelationType.Midpoint);
 
     private void FixRelation_Click(object sender, RoutedEventArgs e)
         => ApplySketchRelation(SketchRelationType.Fixed);

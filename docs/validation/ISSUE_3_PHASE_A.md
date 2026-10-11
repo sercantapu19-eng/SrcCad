@@ -36,3 +36,14 @@ Bu checkpoint **Issue #3 tamamlandı değildir**. Genel referans migration devam
 - Mevcut140 + Foundation102 + Roundtrip33 = **275 managed PASS**, 0 FAIL.
 
 Windows tekrar: Origin→köşe X/Y, iki merkez Ctrl-seç→Yatay/Dikey, merkez→kenar iki seçim sırası, Fix olmadan Fully Defined örneği, merkez çizgisi profilden dışlanması, .scpart aç→ölçü edit→katı rebuild; ardından `Run-SolidAcceptance.ps1` Debug/Release. Yeni native round-trip12 sonucunu ayrıca kaydedin.
+
+
+## Üçüncü checkpoint: genel ilişkiler ve kabul matrisi
+
+Point-line Coincident/Midpoint; line-circle ve circle-circle Tangent ilişkileri ortak referans residual sistemine eklendi. Tangency internal/external dalı ve line tarafı snapshot/dosyada saklanır. Midpoint+Tangent gibi çakışmalar atomik reddedilir. Rank tanısı bağımlı denklem sayısını da raporlar; bu henüz tek tek redundant constraint teşhisi değildir.
+
+51 yeni kontrol: üç düzlemde midpoint sonrası length edit, tangent sonrası diameter edit ve round-trip, çakışmada rollback, ters sırada duplicate relation, Origin–oblique line Coincident, oblique point-line driving distance, duplicate equation rank. Toplam **326 managed PASS / 0 FAIL**. Native36 bu yeni kaynakta PENDING.
+
+`docs/CAD_ACCEPTANCE_200.md` tam200 benzersiz ID ve requirement/type/test/status/implementation/failure-notes alanlarını içerir. PARTIAL/PENDING/TODO maddeleri tamamlandı sayılmaz. Diğer modüllere geçilmedi.
+
+Sıfır eksen mesafesi de desteklendi: Origin ile aynı X/Y üzerindeki noktaya 0 ölçüsü konulup sonradan15 mm yapılabilir. Uzunluk/çap/açı için pozitif değer kuralı korunur.

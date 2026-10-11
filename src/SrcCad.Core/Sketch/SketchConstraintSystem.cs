@@ -6,7 +6,26 @@ public sealed partial class SketchModel
 {
     private double[] ReferenceRelationResidual(SketchRelation r)
     {
-        var a=ResolvePoint(r.ReferenceA!);var b=ResolvePoint(r.ReferenceB!);
+        if(r.Type==SketchRelationType.Tangent)
+        {
+            var circleB=(SketchCircle)Entity(r.ReferenceB!.Id)!;
+            if(r.ReferenceA!.IsLine)
+            {
+                var line=(SketchLine)Entity(r.ReferenceA.Id)!;
+                return new[]{SignedLineDistance(Point(circleB.CenterPointId).Position,Point(line.StartPointId).Position,Point(line.EndPointId).Position)-r.Sense*circleB.Radius};
+            }
+            var c=(SketchCircle)Entity(r.ReferenceA.Id)!;
+            var target=r.InternalTangency?Math.Abs(c.Radius-circleB.Radius):c.Radius+circleB.Radius;
+            return new[]{Point2d.Distance(Point(c.CenterPointId).Position,Point(circleB.CenterPointId).Position)-target};
+        }
+        var a=ResolvePoint(r.ReferenceA!);
+        if(r.ReferenceB!.IsLine)
+        {
+            var line=(SketchLine)Entity(r.ReferenceB.Id)!;
+            var p=Point(line.StartPointId).Position;var q=Point(line.EndPointId).Position;
+            return r.Type==SketchRelationType.Midpoint?new[]{a.X-(p.X+q.X)/2,a.Y-(p.Y+q.Y)/2}:new[]{SignedLineDistance(a,p,q)};
+        }
+        var b=ResolvePoint(r.ReferenceB!);
         return r.Type switch
         {
             SketchRelationType.Horizontal => new[]{b.Y-a.Y},
@@ -145,6 +164,9 @@ public sealed partial class SketchModel
         var vars=SolverVariables();var residual=ConstraintResiduals();
         if(!ConstraintsSatisfied()) return new(vars.Count,false,true,"Çakışan ilişkiler / ölçüler");
         var rank=Rank(Jacobian(vars,residual));var dof=vars.Count-rank;
-        return new(dof,dof==0,false,dof==0?"Tam Tanımlı (0 DOF)":$"Eksik Tanımlı ({dof} DOF)");
+        var redundant=Math.Max(0,residual.Length-rank);
+        var text=dof==0?"Tam Tanımlı (0 DOF)":$"Eksik Tanımlı ({dof} DOF)";
+        if(redundant>0)text+=$" • {redundant} bağımlı denklem";
+        return new(dof,dof==0,false,text,redundant);
     }
 }

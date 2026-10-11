@@ -23,7 +23,9 @@ public enum SketchRelationType
     Equal,
     Collinear,
     Concentric,
-    Fixed
+    Fixed,
+    Midpoint,
+    Tangent
 }
 
 public sealed record SketchRelation(
@@ -34,7 +36,9 @@ public sealed record SketchRelation(
     int PointA = -1,
     int PointB = -1,
     GeometryReference? ReferenceA = null,
-    GeometryReference? ReferenceB = null);
+    GeometryReference? ReferenceB = null,
+    double Sense = 1,
+    bool InternalTangency = false);
 
 public enum SketchDimensionType
 {
@@ -70,7 +74,8 @@ public sealed record SketchDefinitionInfo(
     int DegreesOfFreedom,
     bool IsFullyDefined,
     bool IsConflicting,
-    string Text);
+    string Text,
+    int RedundantEquationCount = 0);
 
 public sealed record SketchSnapshot(
     int NextPointId,
@@ -342,11 +347,12 @@ public sealed partial class SketchModel
 
     public bool SetDimensionValue(int dimensionId, double value)
     {
-        if (!double.IsFinite(value) || value <= 1e-9) return false;
+        if (!double.IsFinite(value) || value < 0) return false;
         var index = Dimensions.FindIndex(x => x.Id == dimensionId);
         if (index < 0) return false;
 
         var dim = Dimensions[index];
+        if (value <= 1e-9 && dim.Type is not SketchDimensionType.HorizontalDistance and not SketchDimensionType.VerticalDistance and not SketchDimensionType.PointLineDistance) return false;
         if (dim.Type == SketchDimensionType.Angle && value >= 180) return false;
         var before = CaptureSnapshot();
         if (!dim.Driving)
