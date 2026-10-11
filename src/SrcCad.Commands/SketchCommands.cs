@@ -55,9 +55,10 @@ public sealed class LineSketchCommand : SketchCommandBase
     private int? _startPointId;
     private int? _chainFirstPointId;
 
-    public LineSketchCommand(SketchModel sketch) : base(sketch) { }
-    public override string Id => "sketch.line";
-    public override string Title => "Çizgi";
+    private readonly bool construction;
+    public LineSketchCommand(SketchModel sketch, bool construction = false) : base(sketch) { this.construction = construction; }
+    public override string Id => construction ? "sketch.centerline" : "sketch.line";
+    public override string Title => construction ? "Merkez Çizgisi" : "Çizgi";
     public override bool HasPendingStep => _startPointId.HasValue;
 
     public override void Begin(CommandContext context)
@@ -89,7 +90,7 @@ public sealed class LineSketchCommand : SketchCommandBase
             return;
         }
 
-        var newLine = Sketch.AddLine(_startPointId.Value, endId);
+        var newLine = Sketch.AddLine(_startPointId.Value, endId, construction);
         Sketch.AddAutomaticLineRelation(newLine.Id);
         var closes = _chainFirstPointId.HasValue &&
                      endId == _chainFirstPointId.Value &&
@@ -256,3 +257,4 @@ public sealed class CircleSketchCommand : SketchCommandBase
 
     public override void CancelStep() => _center = null;
 }
+

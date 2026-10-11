@@ -50,6 +50,7 @@ try {
         '^FEATURE HISTORY: 12/12 PASS ',
         '^INTERACTION REGRESSION: 50 PASS ',
         '^SOURCE SKETCH EDIT: 18 PASS ',
+        '^SKETCH FOUNDATION: [1-9][0-9]* PASS ',
         '^NATIVE SOURCE SKETCH REGRESSION: 12/12 PASS '
     )) {
         if (@(Select-String -Path "$logs\solid-acceptance.log" -Pattern $summary).Count -ne 1) {

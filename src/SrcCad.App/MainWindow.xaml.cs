@@ -54,9 +54,8 @@ public partial class MainWindow : Window
     private bool _dragSketchChanged;
 
     private bool _smartDimensionMode;
-    private readonly List<int> _smartDimensionEntities = new();
-    private readonly List<int> _smartDimensionPoints = new();
-    private bool _smartDimensionWaitingPlacement;
+    private readonly SmartDimensionSession _dimensionSession = new();
+    private bool _smartDimensionWaitingPlacement => _dimensionSession.CanPlace;
 
     private readonly Stack<SketchSnapshot> _sketchUndo = new();
     private readonly Stack<SketchSnapshot> _sketchRedo = new();
@@ -440,8 +439,9 @@ public partial class MainWindow : Window
         var tolerance = Math.Max(1e-6, _viewer.PixelToWorldLength(10));
 
         var dimensionId = _sketch.FindDimensionNear(uv, tolerance);
-        var pointId = dimensionId < 0 ? _sketch.FindPointNear(uv, tolerance) : -1;
-        var entityId = dimensionId < 0 && pointId < 0 ? _sketch.FindEntityNear(uv, tolerance) : -1;
+        var reference = dimensionId < 0 ? _sketch.HitReference(uv, tolerance) : null;
+        var pointId = reference is { IsPointLike: true } ? _sketch.ReferencePointId(reference) : -1;
+        var entityId = reference is { IsPointLike: false } ? reference.Id : -1;
 
         if (dimensionId == _hoverSketchDimensionId &&
             pointId == _hoverSketchPointId &&
@@ -460,8 +460,9 @@ public partial class MainWindow : Window
         var tolerance = Math.Max(1e-6, _viewer.PixelToWorldLength(10));
 
         var dimensionId = _sketch.FindDimensionNear(uv, tolerance);
-        var pointId = dimensionId < 0 ? _sketch.FindPointNear(uv, tolerance) : -1;
-        var entityId = dimensionId < 0 && pointId < 0 ? _sketch.FindEntityNear(uv, tolerance) : -1;
+        var reference = dimensionId < 0 ? _sketch.HitReference(uv, tolerance) : null;
+        var pointId = reference is { IsPointLike: true } ? _sketch.ReferencePointId(reference) : -1;
+        var entityId = reference is { IsPointLike: false } ? reference.Id : -1;
 
         var alreadySelected =
             dimensionId >= 0 && _selectedSketchDimensionId == dimensionId ||
@@ -551,208 +552,38 @@ public partial class MainWindow : Window
     private void HandleSmartDimensionPick(Point2d uv, double tolerance)
     {
         if (_sketch is null) return;
-
-        var pointId = _sketch.FindPointNear(uv, tolerance);
-        var entityId = pointId < 0 ? _sketch.FindEntityNear(uv, tolerance) : -1;
-
-        if (_smartDimensionWaitingPlacement &&
-            _smartDimensionEntities.Count == 1 &&
-            _sketch.Entity(_smartDimensionEntities[0]) is SketchLine)
+        if (_dimensionSession.Pick(_sketch, uv, tolerance)) CreateSmartDimensionAt(uv);
+        else
         {
-            // When the first angle leg is already selected, endpoints of the
-            // second leg must not steal the click. Prefer a nearby line hit.
-            var lineHit = _sketch.FindEntityNear(uv, tolerance);
-            if (lineHit >= 0 &&
-                lineHit != _smartDimensionEntities[0] &&
-                _sketch.Entity(lineHit) is SketchLine)
-            {
-                entityId = lineHit;
-                pointId = -1;
-            }
-        }
-
-        if (_smartDimensionWaitingPlacement)
-        {
-            // SOLIDWORKS akışı: ilk çizgiden sonra farklı bir çizgiye normal tıklamak
-            // doğrudan açı ölçüsünü kurar. Ctrl zorunlu değildir. Boş alana tıklamak
-            // ise tek seçimin ölçü konumunu yerleştirir.
-            if (_smartDimensionEntities.Count == 1 &&
-                _sketch.Entity(_smartDimensionEntities[0]) is SketchLine &&
-                entityId >= 0 &&
-                entityId != _smartDimensionEntities[0] &&
-                _sketch.Entity(entityId) is SketchLine)
-            {
-                _smartDimensionEntities.Add(entityId);
-                _smartDimensionWaitingPlacement = true;
-                Status("Akıllı Ölçülendirme: iki çizgi seçildi • açı ölçüsünün konumunu tıklayın.");
-                RenderSketch();
-                return;
-            }
-
-            CreateSmartDimensionAt(uv);
-            return;
-        }
-
-        if (pointId >= 0)
-        {
-            if (!_smartDimensionPoints.Contains(pointId))
-                _smartDimensionPoints.Add(pointId);
-
-            if (_smartDimensionPoints.Count >= 2)
-            {
-                _smartDimensionWaitingPlacement = true;
-                Status("Akıllı Ölçülendirme: ölçünün konumunu tıklayın.");
-            }
-            else
-            {
-                Status("Akıllı Ölçülendirme: ikinci noktayı seçin.");
-            }
+            Status(_dimensionSession.CanPlace ? "Ölçüyü üst/alta veya sağ/sola taşıyın; konumu tıklayın." : "Nokta, merkez, Origin veya kenar seçin.");
             RenderSketch();
-            return;
         }
-
-        if (entityId >= 0)
-        {
-            var entity = _sketch.Entity(entityId);
-            if (entity is SketchCircle)
-            {
-                _smartDimensionEntities.Clear();
-                _smartDimensionEntities.Add(entityId);
-                _smartDimensionWaitingPlacement = true;
-                Status("Akıllı Ölçülendirme: çap ölçüsünün konumunu tıklayın.");
-            }
-            else if (entity is SketchLine)
-            {
-                _smartDimensionEntities.Clear();
-                _smartDimensionEntities.Add(entityId);
-                _smartDimensionWaitingPlacement = true;
-                Status("Akıllı Ölçülendirme: ölçünün konumunu tıklayın • açı için ikinci çizgiyi normal tıklayın.");
-            }
-            RenderSketch();
-            return;
-        }
-
-        Status("Akıllı Ölçülendirme: önce çizgi, daire veya nokta seçin.");
     }
 
     private SketchDimension? BuildPendingSmartDimension(Point2d label)
-    {
-        if (_sketch is null) return null;
-
-        if (_smartDimensionEntities.Count == 2 &&
-            _sketch.Entity(_smartDimensionEntities[0]) is SketchLine &&
-            _sketch.Entity(_smartDimensionEntities[1]) is SketchLine)
-        {
-            return new SketchDimension(
-                -1, SketchDimensionType.Angle, 0, label,
-                EntityA: _smartDimensionEntities[0],
-                EntityB: _smartDimensionEntities[1]);
-        }
-
-        if (_smartDimensionEntities.Count == 1)
-        {
-            var entity = _sketch.Entity(_smartDimensionEntities[0]);
-            if (entity is SketchLine)
-                return new SketchDimension(
-                    -1, SketchDimensionType.LineLength, 0, label,
-                    EntityA: entity.Id);
-
-            if (entity is SketchCircle)
-                return new SketchDimension(
-                    -1, SketchDimensionType.CircleDiameter, 0, label,
-                    EntityA: entity.Id);
-        }
-
-        if (_smartDimensionPoints.Count == 2)
-        {
-            var a = _sketch.Point(_smartDimensionPoints[0]).Position;
-            var b = _sketch.Point(_smartDimensionPoints[1]).Position;
-            var type = SmartDimensionPlacement.BetweenPoints(a, b, label);
-
-            return new SketchDimension(
-                -1, type, 0, label,
-                PointA: _smartDimensionPoints[0],
-                PointB: _smartDimensionPoints[1]);
-        }
-
-        return null;
-    }
+        => _sketch is null ? null : _dimensionSession.Preview(_sketch, label);
 
     private void CreateSmartDimensionAt(Point2d label)
     {
         if (_sketch is null) return;
-
+        var candidate = _dimensionSession.Preview(_sketch, label);
+        if (candidate is null) { Status("Bu referanslar arasında ölçü oluşturulamadı."); return; }
         var before = _sketch.CaptureSnapshot();
-        SketchDimension? dimension = null;
-
-        if (_smartDimensionEntities.Count == 2 &&
-            _sketch.Entity(_smartDimensionEntities[0]) is SketchLine &&
-            _sketch.Entity(_smartDimensionEntities[1]) is SketchLine)
-        {
-            dimension = _sketch.AddDimension(
-                SketchDimensionType.Angle,
-                label,
-                entityA: _smartDimensionEntities[0],
-                entityB: _smartDimensionEntities[1]);
-        }
-        else if (_smartDimensionEntities.Count == 1)
-        {
-            var entity = _sketch.Entity(_smartDimensionEntities[0]);
-            if (entity is SketchLine)
-            {
-                dimension = _sketch.AddDimension(
-                    SketchDimensionType.LineLength,
-                    label,
-                    entityA: entity.Id);
-            }
-            else if (entity is SketchCircle)
-            {
-                dimension = _sketch.AddDimension(
-                    SketchDimensionType.CircleDiameter,
-                    label,
-                    entityA: entity.Id);
-            }
-        }
-        else if (_smartDimensionPoints.Count == 2)
-        {
-            var a = _sketch.Point(_smartDimensionPoints[0]).Position;
-            var b = _sketch.Point(_smartDimensionPoints[1]).Position;
-            var type = SmartDimensionPlacement.BetweenPoints(a, b, label);
-
-            dimension = _sketch.AddDimension(
-                type,
-                label,
-                pointA: _smartDimensionPoints[0],
-                pointB: _smartDimensionPoints[1]);
-        }
-
+        var dimension = _sketch.AddInferredDimension(candidate);
         ResetSmartDimensionTargets();
-
-        if (dimension is null)
-        {
-            Status("Bu seçim için ölçü oluşturulamadı.");
-            return;
-        }
-
         RenderSketch();
-        UpdateSketchPropertyPanel();
-
-        if (!EditDimension(dimension.Id, removeOnCancel: true))
-            Status("Ölçü oluşturma iptal edildi.");
-        else
+        if (EditDimension(dimension.Id, removeOnCancel: true))
         {
             _sketchUndo.Push(before);
             _sketchRedo.Clear();
-            Status($"Ölçü{dimension.Id} oluşturuldu ve geometriye uygulandı.");
+            Status($"Ölçü{dimension.Id} geometriye uygulandı.");
         }
+        else _sketch.RestoreSnapshot(before);
+        RenderSketch();
+        UpdateSketchPropertyPanel();
     }
 
-    private void ResetSmartDimensionTargets()
-    {
-        _smartDimensionEntities.Clear();
-        _smartDimensionPoints.Clear();
-        _smartDimensionWaitingPlacement = false;
-    }
+    private void ResetSmartDimensionTargets() => _dimensionSession.Reset();
 
     private bool EditDimension(int dimensionId, bool removeOnCancel = false)
     {
@@ -1152,6 +983,25 @@ public partial class MainWindow : Window
             ? 2
             : 5;
 
+        if (dimension.ReferenceA is not null)
+        {
+            var (a,b) = _sketch.DimensionReferencePoints(dimension);
+            if (dimension.Type == SketchDimensionType.HorizontalDistance)
+            {
+                var q0 = new Point2d(a.X,dimension.LabelPosition.Y); var q1 = new Point2d(b.X,dimension.LabelPosition.Y);
+                AddDimensionLine(a,q0,state); AddDimensionLine(b,q1,state); AddDimensionLine(q0,q1,state);
+                AddDimensionText(dimension.LabelPosition,dimension,state);
+            }
+            else if (dimension.Type == SketchDimensionType.VerticalDistance)
+            {
+                var q0 = new Point2d(dimension.LabelPosition.X,a.Y); var q1 = new Point2d(dimension.LabelPosition.X,b.Y);
+                AddDimensionLine(a,q0,state); AddDimensionLine(b,q1,state); AddDimensionLine(q0,q1,state);
+                AddDimensionText(dimension.LabelPosition,dimension,state);
+            }
+            else RenderAlignedLinearDimension(a,b,dimension.LabelPosition,dimension,state);
+            return;
+        }
+
         if (dimension.Type == SketchDimensionType.LineLength &&
             _sketch.Entity(dimension.EntityA) is SketchLine line)
         {
@@ -1462,6 +1312,8 @@ public partial class MainWindow : Window
 
     private string RelationText(SketchRelation relation)
     {
+        if (relation.ReferenceA is not null)
+            return $"{relation.Type} • {relation.ReferenceA.Kind}:{relation.ReferenceA.Id} ↔ {relation.ReferenceB!.Kind}:{relation.ReferenceB.Id}";
         return relation.Type switch
         {
             SketchRelationType.Horizontal => $"Yatay • E{relation.EntityA}",
@@ -1488,22 +1340,8 @@ public partial class MainWindow : Window
         _smartDimensionMode = true;
         ResetSmartDimensionTargets();
 
-        // SOLIDWORKS benzeri selection-first davranışı:
-        // Kullanıcı geometriyi önce seçip sonra Smart Dimension'a basabilir.
-        var preselectedEntities = _selectedSketchEntities
-            .Where(id => _sketch.Entity(id) is SketchLine or SketchCircle)
-            .Take(2)
-            .ToList();
-        var preselectedPoints = _selectedSketchPoints.Take(2).ToList();
-
-        if (preselectedEntities.Count > 0)
-            _smartDimensionEntities.AddRange(preselectedEntities);
-        else if (preselectedPoints.Count > 0)
-            _smartDimensionPoints.AddRange(preselectedPoints);
-
-        _smartDimensionWaitingPlacement =
-            _smartDimensionEntities.Count >= 1 ||
-            _smartDimensionPoints.Count >= 2;
+        _dimensionSession.Preselect(_selectedSketchPoints.Select(_sketch.ReferenceForPoint)
+            .Concat(_selectedSketchEntities.Select(_sketch.ReferenceForEntity)));
 
         PropertyTitle.Text = "Akıllı Ölçülendirme";
         PropertyInfo.Text =
@@ -1515,7 +1353,7 @@ public partial class MainWindow : Window
 
         if (_smartDimensionWaitingPlacement)
             Status("Akıllı Ölçülendirme: ölçünün konumunu tıklayın.");
-        else if (_smartDimensionPoints.Count == 1)
+        else if (_dimensionSession.References.Count == 1)
             Status("Akıllı Ölçülendirme: ikinci noktayı seçin.");
         else
             Status("Akıllı Ölçülendirme: çizgi, daire veya iki nokta seçin.");
@@ -1562,17 +1400,16 @@ public partial class MainWindow : Window
         if (_sketch is null || !_inSketch) return;
 
         var before = _sketch.CaptureSnapshot();
-        var ok = _sketch.ApplyRelationToSelection(
-            type,
-            _selectedSketchEntities.OrderBy(x => x).ToList(),
-            _selectedSketchPoints.OrderBy(x => x).ToList());
+        var references = _selectedSketchPoints.OrderBy(x => x).Select(_sketch.ReferenceForPoint)
+            .Concat(_selectedSketchEntities.OrderBy(x => x).Select(_sketch.ReferenceForEntity)).ToArray();
+        var ok = _sketch.ApplyReferenceRelation(type, references);
 
         if (!ok)
         {
             Status(type switch
             {
                 SketchRelationType.Horizontal or SketchRelationType.Vertical =>
-                    "Bu ilişki için tek bir çizgi seçin.",
+                    "Tek çizgi veya iki nokta/merkez/Origin referansı seçin.",
                 SketchRelationType.Coincident =>
                     "Çakışık için iki nokta seçin (Ctrl ile çoklu seçim).",
                 SketchRelationType.Parallel or SketchRelationType.Perpendicular or SketchRelationType.Equal or SketchRelationType.Collinear =>
@@ -1724,6 +1561,11 @@ public partial class MainWindow : Window
     private void Line_Click(object sender, RoutedEventArgs e)
     {
         if (_sketch is not null) ActivateSketchCommand(new LineSketchCommand(_sketch));
+    }
+
+    private void Centerline_Click(object sender, RoutedEventArgs e)
+    {
+        if (_sketch is not null) ActivateSketchCommand(new LineSketchCommand(_sketch, construction: true));
     }
 
     private void CornerRectangle_Click(object sender, RoutedEventArgs e)

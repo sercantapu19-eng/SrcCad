@@ -65,6 +65,7 @@
                     <Button Style="{StaticResource CommandButton}" Content="Köşe Noktası&#x0a;ile Dikdörtgen" Click="CornerRectangle_Click"/>
                     <Button Style="{StaticResource CommandButton}" Content="Merkez ile&#x0a;Dikdörtgen" Click="CenterRectangle_Click"/>
                     <Button Style="{StaticResource CommandButton}" Content="Daire" Click="Circle_Click"/>
+                    <Button Style="{StaticResource CommandButton}" Content="Merkez Çizgisi" Click="Centerline_Click"/>
                     <Separator Margin="8,2"/>
                     <Button Style="{StaticResource CommandButton}" Content="Akıllı&#x0a;Ölçülendirme" Click="SmartDimension_Click" x:Name="SmartDimensionButton"/>
                     <Button Style="{StaticResource CommandButton}" Content="İlişki&#x0a;Ekle" Click="ShowSketchRelations_Click"/>

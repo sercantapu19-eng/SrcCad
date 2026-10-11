@@ -258,6 +258,7 @@ AcceptanceTests.Run();
 FeatureHistoryTests.Run();
 InteractionRegressionTests.Run();
 SourceSketchEditTests.Run();
+SketchFoundationTests.Run();
 
 #if NATIVE_ACCEPTANCE
 NativeAcceptanceBootstrap.Run();

@@ -29,7 +29,9 @@ public sealed record SketchRelation(
     int EntityA = -1,
     int EntityB = -1,
     int PointA = -1,
-    int PointB = -1);
+    int PointB = -1,
+    GeometryReference? ReferenceA = null,
+    GeometryReference? ReferenceB = null);
 
 public enum SketchDimensionType
 {
@@ -38,7 +40,8 @@ public enum SketchDimensionType
     PointDistance,
     HorizontalDistance,
     VerticalDistance,
-    Angle
+    Angle,
+    PointLineDistance
 }
 
 public sealed record SketchDimension(
@@ -50,7 +53,10 @@ public sealed record SketchDimension(
     int EntityB = -1,
     int PointA = -1,
     int PointB = -1,
-    bool Driving = true);
+    bool Driving = true,
+    GeometryReference? ReferenceA = null,
+    GeometryReference? ReferenceB = null,
+    double Sense = 1);
 
 public sealed record CenterRectangleDefinition(
     int CenterPointId,
@@ -75,7 +81,7 @@ public sealed record SketchSnapshot(
     IReadOnlyList<CenterRectangleDefinition> CenterRectangles);
 
 
-public sealed class SketchModel
+public sealed partial class SketchModel
 {
     private int _nextPointId = 1;
     private int _nextEntityId = 1;
@@ -180,7 +186,7 @@ public sealed class SketchModel
         var bestId = -1;
         var best = tolerance;
 
-        foreach (var entity in Entities.Where(x => !x.Construction))
+        foreach (var entity in Entities)
         {
             double d;
             switch (entity)
@@ -347,7 +353,7 @@ public sealed class SketchModel
         }
 
         Dimensions[index] = dim with { Value = value };
-        var ok = EnforceDimension(Dimensions[index]);
+        var ok = dim.ReferenceA is not null || EnforceDimension(Dimensions[index]);
         if (!ok)
         {
             RestoreSnapshot(before);
@@ -383,6 +389,8 @@ public sealed class SketchModel
         var entity = Entity(entityId);
         if (entity is null) return;
 
+        Relations.RemoveAll(r => ReferenceUsesEntity(r.ReferenceA,entityId) || ReferenceUsesEntity(r.ReferenceB,entityId));
+        Dimensions.RemoveAll(d => ReferenceUsesEntity(d.ReferenceA,entityId) || ReferenceUsesEntity(d.ReferenceB,entityId));
         Entities.RemoveAll(x => x.Id == entityId);
         Relations.RemoveAll(r => r.EntityA == entityId || r.EntityB == entityId);
         Dimensions.RemoveAll(d => d.EntityA == entityId || d.EntityB == entityId);
@@ -405,6 +413,8 @@ public sealed class SketchModel
         }).Select(e => e.Id).ToList();
 
         foreach (var entityId in incident) DeleteEntity(entityId);
+        Relations.RemoveAll(r => ReferenceUsesPoint(r.ReferenceA,pointId) || ReferenceUsesPoint(r.ReferenceB,pointId));
+        Dimensions.RemoveAll(d => ReferenceUsesPoint(d.ReferenceA,pointId) || ReferenceUsesPoint(d.ReferenceB,pointId));
         Points.Remove(pointId);
         Relations.RemoveAll(r => r.PointA == pointId || r.PointB == pointId);
         Dimensions.RemoveAll(d => d.PointA == pointId || d.PointB == pointId);
@@ -524,8 +534,10 @@ public sealed class SketchModel
     {
         const double eps = 1e-6;
         if (Points.Values.Any(p => !double.IsFinite(p.Position.X) || !double.IsFinite(p.Position.Y))) return false;
+        if (Circles().Any(c => !double.IsFinite(c.Radius) || c.Radius<=1e-9)) return false;
         if (Lines().Any(l => Point2d.Distance(Point(l.StartPointId).Position, Point(l.EndPointId).Position) <= 1e-9)) return false;
         if (Dimensions.Any(d => d.Driving && (!double.IsFinite(Measure(d)) || Math.Abs(Measure(d)-d.Value)>eps))) return false;
+        if (Dimensions.Any(d => d.Driving && d.ReferenceA is not null && Math.Abs(SignedReferenceMeasure(d)-d.Sense*d.Value)>eps)) return false;
         foreach (var rectangle in CenterRectangles)
         {
             var c = Point(rectangle.CenterPointId).Position;
@@ -535,6 +547,11 @@ public sealed class SketchModel
         }
         foreach (var r in Relations)
         {
+            if (r.ReferenceA is not null)
+            {
+                if (ReferenceRelationResidual(r).Any(v => !double.IsFinite(v) || Math.Abs(v)>eps)) return false;
+                continue;
+            }
             var a = Entity(r.EntityA) as SketchLine;
             var b = Entity(r.EntityB) as SketchLine;
             var ca = Entity(r.EntityA) as SketchCircle;
@@ -626,11 +643,13 @@ public sealed class SketchModel
                 EnforceCenterRectangle(rectangle);
         }
 
+        if (!ConstraintsSatisfied()) SolveNumerically();
         RefreshDimensionValues();
     }
 
     private bool EnforceDimension(SketchDimension dim)
     {
+        if (dim.ReferenceA is not null) return true;
         return dim.Type switch
         {
             SketchDimensionType.LineLength => SetLineLength(dim.EntityA, dim.Value),
@@ -645,6 +664,7 @@ public sealed class SketchModel
 
     private void ApplyRelation(SketchRelation relation)
     {
+        if (relation.ReferenceA is not null) return;
         switch (relation.Type)
         {
             case SketchRelationType.Horizontal:
@@ -1015,12 +1035,16 @@ public sealed class SketchModel
     }
 
     public double Measure(SketchDimension dimension)
-        => Measure(
-            dimension.Type,
-            dimension.EntityA,
-            dimension.EntityB,
-            dimension.PointA,
-            dimension.PointB);
+    {
+        if (dimension.ReferenceA is null) return Measure(dimension.Type,dimension.EntityA,dimension.EntityB,dimension.PointA,dimension.PointB);
+        var (a,b)=DimensionReferencePoints(dimension);
+        return dimension.Type switch
+        {
+            SketchDimensionType.HorizontalDistance => Math.Abs(b.X-a.X),
+            SketchDimensionType.VerticalDistance => Math.Abs(b.Y-a.Y),
+            _ => Point2d.Distance(a,b)
+        };
+    }
 
     public double Measure(
         SketchDimensionType type,
@@ -1077,35 +1101,7 @@ public sealed class SketchModel
                 Dimensions[i] = Dimensions[i] with { Value = Measure(Dimensions[i]) };
     }
 
-    public SketchDefinitionInfo DefinitionInfo()
-    {
-        if (!ConstraintsSatisfied()) return new SketchDefinitionInfo(0, false, true, "Çakışan ilişkiler / ölçüler");
-        // Alpha-stage DOF accounting. It is intentionally conservative:
-        // points=2 variables, circle radius=1; explicit constraints/dimensions remove DOF.
-        var dof = Points.Values.Where(p => p.Id != 0 && !p.Fixed).Count() * 2
-                  + Circles(false).Count();
-
-        foreach (var relation in Relations)
-        {
-            dof -= relation.Type switch
-            {
-                SketchRelationType.Coincident => 2,
-                SketchRelationType.Fixed => 2,
-                _ => 1
-            };
-        }
-
-        dof -= Dimensions.Count(d => d.Driving);
-
-        // Center rectangle has four independent parameters: centerX, centerY, halfW, halfH.
-        // Its construction reduces the raw four-corner DOF by four.
-        dof -= CenterRectangles.Count * 4;
-
-        dof = Math.Max(0, dof);
-        return dof == 0
-            ? new SketchDefinitionInfo(0, false, false, "Tahmini DOF: 0 • tam tanım doğrulanmadı")
-            : new SketchDefinitionInfo(dof, false, false, $"Eksik Tanımlı (tahmini {dof} DOF)");
-    }
+    public SketchDefinitionInfo DefinitionInfo() => SolverDefinition();
 
     public IEnumerable<SketchLine> Lines(bool includeConstruction = true)
         => Entities.OfType<SketchLine>().Where(x => includeConstruction || !x.Construction);
