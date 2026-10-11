@@ -191,6 +191,10 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (e.Key == Key.Space)
+        {
+            ShowViewOrientation();e.Handled=true;return;
+        }
         if (e.Key == Key.F)
         {
             _viewer.FitAll();

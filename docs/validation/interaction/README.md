@@ -18,3 +18,7 @@ Delete now routes list focus to the selected relation/dimension, and canvas focu
 ## Ctrl / Selection Context
 
 Ctrl multi-selection now offers a filtered native popup on Ctrl release. The Relations button opens the same action list; the right-click menu uses it too. Point-like pairs get H/V/Coincident; lines get Parallel/Perpendicular/H/V/Equal/Collinear; line-circle gets Tangent. Smart Dimension consumes the same selected references. H/V on two lines uses the existing solver through one atomic snapshot operation. No relation is offered solely to populate the menu. A geometrically applicable relation can still fail due to conflicting dimensions; rollback is preserved. Windows harness now includes actual Ctrl accumulation/release, popup options, center movement after selecting Horizontal, Relations button and dimension preselection (18 checks, NOT RUN here).
+
+## Space / View Orientation
+
+Space opens an owned view chooser with Front/Back/Top/Bottom/Left/Right/Isometric/Normal To. Buttons call the actual OCCT camera operations; current sketch normal and V axis determine Normal To. Value editors keep ownership of typed spaces. The Windows harness adds 4 checks, including sign change in native ScreenToPlane projection for Back and restoration by Normal To (22 total PENDING).

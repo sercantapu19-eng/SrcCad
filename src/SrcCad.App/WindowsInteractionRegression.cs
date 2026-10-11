@@ -93,6 +93,15 @@ public partial class MainWindow
             _viewportContextMenu.Items.OfType<WinForms.ToolStripMenuItem>().Single(i=>i.Text=="Akıllı Ölçü").PerformClick();
             Check(_smartDimensionMode&&_dimensionSession.References.Count==2,"context Smart Dimension preserves both references");
             Key(WinForms.Keys.Escape);
+            Key(WinForms.Keys.Space);
+            Check(_orientationWindow?.IsVisible==true,"HWND Space opens View Orientation");
+            var viewButtons=((System.Windows.Controls.WrapPanel)_orientationWindow!.Content).Children.OfType<System.Windows.Controls.Button>().ToArray();
+            Check(viewButtons.Length==8&&viewButtons.All(b=>b.IsEnabled),"all standard views and sketch Normal To available");
+            viewButtons.Single(b=>(string)b.Tag=="Back").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            Check(TryGetSketchCursor(100,100,out var backA,out _,false)&&TryGetSketchCursor(200,100,out var backB,out _,false)&&backB.X<backA.X,"Back changes native camera projection");
+            Key(WinForms.Keys.Space);
+            ((System.Windows.Controls.WrapPanel)_orientationWindow!.Content).Children.OfType<System.Windows.Controls.Button>().Single(b=>(string)b.Tag=="Normal").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            Check(TryGetSketchCursor(100,100,out var frontA,out _,false)&&TryGetSketchCursor(200,100,out var frontB,out _,false)&&frontB.X>frontA.X,"Normal To restores sketch camera projection");
 
         }
         catch(Exception ex) {failure=ex.ToString();}
