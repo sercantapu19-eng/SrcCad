@@ -57,6 +57,7 @@ public partial class MainWindow : Window
     private SketchSnapshot? _dragSketchSnapshot;
     private bool _dragSketchChanged;
 
+    private bool _selectionContextPending;
     private bool _smartDimensionMode;
     private readonly SmartDimensionSession _dimensionSession = new();
     private bool _smartDimensionWaitingPlacement => _dimensionSession.CanPlace;
@@ -102,6 +103,8 @@ public partial class MainWindow : Window
             if (routed.Handled) { e.Handled = true; e.SuppressKeyPress = true; }
         };
 
+        _viewportPanel.KeyUp += (_,e) => {if(e.KeyCode is WinForms.Keys.ControlKey or WinForms.Keys.LControlKey or WinForms.Keys.RControlKey) ShowPendingSelectionContext();};
+        PreviewKeyUp += (_,e) => {if(e.Key is Key.LeftCtrl or Key.RightCtrl) ShowPendingSelectionContext();};
         BuildViewportContextMenu();
     }
 
@@ -563,6 +566,7 @@ public partial class MainWindow : Window
 
         var toggle = (WinForms.Control.ModifierKeys & WinForms.Keys.Control) == WinForms.Keys.Control;
         SelectSketchAt(x, y, toggle);
+        _selectionContextPending = toggle && CurrentSketchReferences().Length >= 2;
 
         // Ölçü metni tek tıkla seçilip SOLIDWORKS'teki gibi sürüklenebilir.
         // Değer yalnız çift tıklamada düzenlenir; sürükleme sadece label konumunu değiştirir.
@@ -670,6 +674,8 @@ public partial class MainWindow : Window
 
     private void ClearSketchSelection(bool render = true)
     {
+        _selectionContextPending=false;
+        _viewportContextMenu.Close();
         _selectedSketchEntities.Clear();
         _selectedSketchPoints.Clear();
         _selectedSketchDimensionId = -1;
@@ -700,19 +706,7 @@ public partial class MainWindow : Window
 
             _viewportContextMenu.Items.Add(new WinForms.ToolStripSeparator());
 
-            AddContextRelationItem("Yatay", SketchRelationType.Horizontal);
-            AddContextRelationItem("Dikey", SketchRelationType.Vertical);
-            AddContextRelationItem("Çakışık", SketchRelationType.Coincident);
-            AddContextRelationItem("Paralel", SketchRelationType.Parallel);
-            AddContextRelationItem("Dik", SketchRelationType.Perpendicular);
-            AddContextRelationItem("Eşit", SketchRelationType.Equal);
-            AddContextRelationItem("Sabitle", SketchRelationType.Fixed);
-
-            _viewportContextMenu.Items.Add(new WinForms.ToolStripSeparator());
-
-            var smart = new WinForms.ToolStripMenuItem("Akıllı Ölçülendirme");
-            smart.Click += (_, _) => StartSmartDimensionMode();
-            _viewportContextMenu.Items.Add(smart);
+            PopulateSelectionActions();
 
             var clear = new WinForms.ToolStripMenuItem("Seçimi Temizle");
             clear.Click += (_, _) => ClearSketchSelection();
@@ -749,6 +743,7 @@ public partial class MainWindow : Window
     private void AddContextRelationItem(string title, SketchRelationType type)
     {
         var item = new WinForms.ToolStripMenuItem(title);
+        item.Tag=type;
         item.Click += (_, _) => ApplySketchRelation(type);
         _viewportContextMenu.Items.Add(item);
     }
@@ -1398,8 +1393,8 @@ public partial class MainWindow : Window
         _smartDimensionMode = true;
         ResetSmartDimensionTargets();
 
-        _dimensionSession.Preselect(_selectedSketchPoints.Select(_sketch.ReferenceForPoint)
-            .Concat(_selectedSketchEntities.Select(_sketch.ReferenceForEntity)));
+        _viewportContextMenu.Close();
+        _dimensionSession.Preselect(CurrentSketchReferences());
 
         PropertyTitle.Text = "Akıllı Ölçülendirme";
         PropertyInfo.Text =
@@ -1425,7 +1420,9 @@ public partial class MainWindow : Window
         ResetSmartDimensionTargets();
         ManagerTabs.SelectedItem = PropertyManagerTab;
         UpdateSketchPropertyPanel();
-        Status("Çizim ilişkileri: geometriyi seçip ilişki düğmesini kullanın.");
+        if(CurrentSketchReferences().Length==0)
+            Status("İlişki için Ctrl ile geometri seçin; Ctrl bırakıldığında seçenekler açılır.");
+        else ShowSelectionContext();
     }
 
     private void HorizontalRelation_Click(object sender, RoutedEventArgs e)
@@ -1466,8 +1463,7 @@ public partial class MainWindow : Window
         if (_sketch is null || !_inSketch) return;
 
         var before = _sketch.CaptureSnapshot();
-        var references = _selectedSketchPoints.OrderBy(x => x).Select(_sketch.ReferenceForPoint)
-            .Concat(_selectedSketchEntities.OrderBy(x => x).Select(_sketch.ReferenceForEntity)).ToArray();
+        var references = CurrentSketchReferences();
         var ok = _sketch.ApplyReferenceRelation(type, references);
 
         if (!ok)

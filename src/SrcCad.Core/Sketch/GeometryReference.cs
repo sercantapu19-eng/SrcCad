@@ -66,6 +66,14 @@ public sealed partial class SketchModel
     }
     public bool ApplyReferenceRelation(SketchRelationType type, IReadOnlyList<GeometryReference> selection)
     {
+        if(selection.Count==2 && selection.All(r=>r.IsLine) && type is SketchRelationType.Horizontal or SketchRelationType.Vertical)
+        {
+            var before=CaptureSnapshot();
+            foreach(var reference in selection)
+                if(!ApplyRelationToSelection(type,new[]{reference.Id},Array.Empty<int>()))
+                {RestoreSnapshot(before);return false;}
+            return true;
+        }
         if(selection.Count==2 && selection[0]!=selection[1])
         {
             var a=selection[0];var b=selection[1];

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
@@ -58,6 +59,7 @@ public partial class MainWindow
             StartSketch_Click(this,new RoutedEventArgs());
             var ids=_sketch!.AddCornerRectangle(new(-60,-40),new(60,40),0.001);
             var center=_sketch.CreatePointExact(new(20,10));var circle=_sketch.AddCircle(center,8);
+            var center2=_sketch.CreatePointExact(new(-25,15));_sketch.AddCircle(center2,8);
             RenderSketch();_viewer.FitAll();await Task.Delay(100);
             ActivateSketchCommand(new SrcCad.Commands.ThreePointCircleCommand(_sketch));
             Mouse(new(30,-40));Check(_hoverSketchEntityId==ids[0],"edge hover before first drawing pick");
@@ -76,6 +78,22 @@ public partial class MainWindow
             keybd_event(0x11,0,0,UIntPtr.Zero);await Task.Delay(50);Key(WinForms.Keys.Y);
             keybd_event(0x11,0,2,UIntPtr.Zero);await Task.Delay(50);
             Check(_sketch.Entity(ids[0]) is null,"HWND Ctrl Y repeats deletion");
+            Mouse(_sketch.Point(center).Position,true);
+            keybd_event(0x11,0,0,UIntPtr.Zero);await Task.Delay(50);
+            Mouse(_sketch.Point(center2).Position,true);
+            Check(_selectedSketchPoints.Count==2,"Ctrl click accumulates circle centers without drag");
+            keybd_event(0x11,0,2,UIntPtr.Zero);await Task.Delay(100);
+            Check(_viewportContextMenu.Visible,"Ctrl release opens selection context");
+            var options=_viewportContextMenu.Items.OfType<WinForms.ToolStripMenuItem>().Where(i=>i.Tag is SketchRelationType).ToArray();
+            Check(options.Length==3&&options.Any(i=>Equals(i.Tag,SketchRelationType.Horizontal))&&!options.Any(i=>Equals(i.Tag,SketchRelationType.Tangent)),"center popup contains only valid relation types");
+            options.Single(i=>Equals(i.Tag,SketchRelationType.Horizontal)).PerformClick();_viewportContextMenu.Close();
+            Check(Math.Abs(_sketch.Point(center).Position.Y-_sketch.Point(center2).Position.Y)<1e-6,"popup Horizontal moves real centers");
+            ShowSketchRelations_Click(this,new RoutedEventArgs());
+            Check(_viewportContextMenu.Visible,"Relations button opens actual selection actions");
+            _viewportContextMenu.Items.OfType<WinForms.ToolStripMenuItem>().Single(i=>i.Text=="Akıllı Ölçü").PerformClick();
+            Check(_smartDimensionMode&&_dimensionSession.References.Count==2,"context Smart Dimension preserves both references");
+            Key(WinForms.Keys.Escape);
+
         }
         catch(Exception ex) {failure=ex.ToString();}
         finally
