@@ -102,6 +102,19 @@ public partial class MainWindow
             Key(WinForms.Keys.Space);
             ((System.Windows.Controls.WrapPanel)_orientationWindow!.Content).Children.OfType<System.Windows.Controls.Button>().Single(b=>(string)b.Tag=="Normal").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
             Check(TryGetSketchCursor(100,100,out var frontA,out _,false)&&TryGetSketchCursor(200,100,out var frontB,out _,false)&&frontB.X>frontA.X,"Normal To restores sketch camera projection");
+            var trimLine=_sketch.AddLine(_sketch.CreatePointExact(new(-80,-25)),_sketch.CreatePointExact(new(80,-25)));
+            RenderSketch();_viewer.FitAll();
+            Trim_Click(this,new RoutedEventArgs());
+            Mouse(new(0,-25));
+            var span=_sketch.PreviewLineTrim(new(0,-25),_viewer.PixelToWorldLength(10));
+            Check(span is not null&&Math.Abs(span.Start.X+60)<1e-6&&Math.Abs(span.End.X-60)<1e-6&&_sketch.Entity(trimLine.Id) is not null,"trim hover targets bounded segment without mutation");
+            Mouse(new(0,-25),true);
+            Check(_sketch.Entity(trimLine.Id) is null,"trim HWND click changes actual geometry");
+            Key(WinForms.Keys.Escape);
+            keybd_event(0x11,0,0,UIntPtr.Zero);await Task.Delay(50);Key(WinForms.Keys.Z);
+            keybd_event(0x11,0,2,UIntPtr.Zero);await Task.Delay(50);
+            Check(_sketch.Entity(trimLine.Id) is not null,"trim HWND Undo restores original line");
+
 
         }
         catch(Exception ex) {failure=ex.ToString();}

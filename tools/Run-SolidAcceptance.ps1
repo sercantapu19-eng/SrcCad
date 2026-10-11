@@ -52,6 +52,7 @@ try {
         '^SOURCE SKETCH EDIT: 18 PASS ',
         '^SKETCH FOUNDATION: [1-9][0-9]* PASS ',
         '^PART ROUNDTRIP: [1-9][0-9]* PASS ',
+        '^TRIM INTERACTION: [1-9][0-9]* PASS ',
         '^PARALLEL DIMENSIONS: [1-9][0-9]* PASS ',
         '^GENERAL CONSTRAINTS: [1-9][0-9]* PASS ',
         '^THREE POINT TOOLS: [1-9][0-9]* PASS ',

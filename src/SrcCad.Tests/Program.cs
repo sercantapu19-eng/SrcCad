@@ -262,6 +262,7 @@ SketchFoundationTests.Run();
 PartFileTests.Run();
 GeneralConstraintTests.Run();
 ParallelDimensionTests.Run();
+TrimInteractionTests.Run();
 ThreePointToolTests.Run();
 PerformanceSmokeTests.Run();
 

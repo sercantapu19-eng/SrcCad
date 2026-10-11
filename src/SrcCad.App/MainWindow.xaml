@@ -84,6 +84,7 @@
                         </ContextMenu></Button.ContextMenu>
                     </Button>
                     <Separator Margin="8,2"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Çizgi Kırp" Tag="{StaticResource CadTrimIcon}" Click="Trim_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadDimensionIcon}" Content="Akıllı Ölçü" Click="SmartDimension_Click" x:Name="SmartDimensionButton"/>
                     <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadRelationIcon}" Content="İlişkiler" Click="ShowSketchRelations_Click"/>
                     <Separator Margin="8,2"/>

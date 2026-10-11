@@ -144,7 +144,7 @@ public partial class MainWindow : Window
     private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
         // A value editor owns Delete, F and text Undo/Redo while it has focus.
-        if (Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase && e.Key != Key.Escape)
+        if (!_viewportPanel.ContainsFocus && Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase && e.Key != Key.Escape)
             return;
         if (_inSketch && ControlPressed && e.Key == Key.Z)
         {
@@ -396,6 +396,7 @@ public partial class MainWindow : Window
             _sketchCommand is null &&
             TryGetSketchCursor(e.X, e.Y, out var dimensionUv, out _, snap: false))
         {
+            UpdateSketchHover(e.X,e.Y);
             RenderSketch();
             var previewDimension = BuildPendingSmartDimension(dimensionUv);
             if (previewDimension is not null)
@@ -854,7 +855,7 @@ public partial class MainWindow : Window
 
     private void HandleSketchClick(int x, int y, int clickCount)
     {
-        if (_sketch is null || !TryGetSketchCursor(x, y, out var uv, out var snapId)) return;
+        if (_sketch is null || !TryGetSketchCursor(x, y, out var uv, out var snapId, snap:_sketchCommand is not TrimSketchCommand)) return;
 
         if (_sketchCommand is null)
         {
@@ -893,9 +894,10 @@ public partial class MainWindow : Window
     private void UpdateSketchCommandPreview(int x, int y)
     {
         if (_sketch is null || _sketchCommand is null ||
-            !TryGetSketchCursor(x, y, out var current, out _))
+            !TryGetSketchCursor(x, y, out var current, out _, snap:_sketchCommand is not TrimSketchCommand))
             return;
 
+        if(_sketchCommand is TrimSketchCommand trim)trim.Tolerance=Math.Max(1e-6,_viewer.PixelToWorldLength(10));
         _viewer.ClearPreview();
         foreach (var primitive in _sketchCommand.Preview(current))
         {
@@ -961,11 +963,8 @@ public partial class MainWindow : Window
             var a = _sketch.Plane.SketchToWorld(aUv.X, aUv.Y);
             var b = _sketch.Plane.SketchToWorld(bUv.X, bUv.Y);
 
-            var state = line.Construction
-                ? 1
-                : _selectedSketchEntities.Contains(line.Id) || _hoverSketchEntityId == line.Id
-                    ? 2
-                    : baseGeometryState;
+            var state = _selectedSketchEntities.Contains(line.Id) || _hoverSketchEntityId == line.Id
+                ? 2 : line.Construction ? 1 : baseGeometryState;
 
             _viewer.AddStyledSketchLine(a.X, a.Y, a.Z, b.X, b.Y, b.Z, state);
         }
@@ -976,11 +975,8 @@ public partial class MainWindow : Window
             var center = _sketch.Plane.SketchToWorld(centerUv.X, centerUv.Y);
             var p = _sketch.Plane;
 
-            var state = circle.Construction
-                ? 1
-                : _selectedSketchEntities.Contains(circle.Id) || _hoverSketchEntityId == circle.Id
-                    ? 2
-                    : baseGeometryState;
+            var state = _selectedSketchEntities.Contains(circle.Id) || _hoverSketchEntityId == circle.Id
+                ? 2 : circle.Construction ? 1 : baseGeometryState;
 
             _viewer.AddStyledSketchCircle(
                 center.X, center.Y, center.Z,
@@ -1301,6 +1297,13 @@ public partial class MainWindow : Window
         _sketchCommand = command;
         ClearSketchSelection(false);
         RenderSketch();
+    }
+
+    private void Trim_Click(object sender,RoutedEventArgs e)
+    {
+        if(_sketch is null)return;
+        ActivateSketchCommand(new TrimSketchCommand(_sketch,Math.Max(1e-6,_viewer.PixelToWorldLength(10))));
+        Status("Çizgi Kırp • Turuncu bölüm silinecek • Çizgi/daire kesişimlerinde durur • Esc: çık");
     }
 
     private void SelectTool_Click(object sender,RoutedEventArgs e)

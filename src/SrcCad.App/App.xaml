@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
+        <DrawingImage x:Key="CadTrimIcon"><DrawingImage.Drawing><GeometryDrawing Geometry="M 2,25 L 28,3 M 3,3 L 28,26 M 14,4 L 14,28 M 22,4 L 22,28"><GeometryDrawing.Pen><Pen Brush="#C74B36" Thickness="2"/></GeometryDrawing.Pen></GeometryDrawing></DrawingImage.Drawing></DrawingImage>
         <DrawingImage x:Key="CadSelectIcon"><DrawingImage.Drawing><GeometryDrawing Brush="#1976B8" Geometry="M 3,2 L 3,24 9,18 14,28 18,26 13,16 22,16 Z"/></DrawingImage.Drawing></DrawingImage>
         <Style TargetType="Button" x:Key="CommandButton">
             <Setter Property="Margin" Value="4"/>
