@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
+        <DrawingImage x:Key="CadSelectIcon"><DrawingImage.Drawing><GeometryDrawing Brush="#1976B8" Geometry="M 3,2 L 3,24 9,18 14,28 18,26 13,16 22,16 Z"/></DrawingImage.Drawing></DrawingImage>
         <Style TargetType="Button" x:Key="CommandButton">
             <Setter Property="Margin" Value="4"/>
             <Setter Property="Padding" Value="10,7"/>

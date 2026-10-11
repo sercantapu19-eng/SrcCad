@@ -6,3 +6,7 @@ The user's manual failures supersede any previous managed PASS as evidence of UI
 2. Selection/Delete/context/orientation/tools: next steps, not yet accepted.
 
 Baseline and hover rerun: 572 managed checks PASS, 0 FAIL. This does NOT validate native rendering, mouse routing or Windows focus. Windows hover acceptance remains PENDING: start three-point circle, move over a rectangle edge, endpoint, midpoint, circle center and Origin; verify highlight before every pick and no geometry mutation on hover. Move out of viewport; hover marker must disappear.
+
+## Selection input repair
+
+A selectable WinForms viewport panel now owns focus; Delete/Esc/Space are input keys. Ctrl state is read from both WPF and WinForms. An explicit Seç (Esc) command leaves drawing mode without losing selected geometry. Ctrl selection no longer starts point dragging. Windows acceptance is PENDING: click the canvas, Esc, hover/click a line or center, Ctrl-click a second, click blank space; persistent selection and clearing must match the visible geometry.

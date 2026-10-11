@@ -63,6 +63,7 @@
             </TabItem>
             <TabItem Header="ÇİZİM" x:Name="SketchTab">
                 <WrapPanel Margin="8">
+                    <Button Style="{StaticResource CadCommandButton}" Content="Seç (Esc)" Tag="{StaticResource CadSelectIcon}" Click="SelectTool_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Çizgi ▾" Tag="{StaticResource CadLineIcon}" Click="CommandFamily_Click" x:Name="LineButton">
                         <Button.ContextMenu><ContextMenu>
                             <MenuItem Header="Çizgi" Click="Line_Click"/>

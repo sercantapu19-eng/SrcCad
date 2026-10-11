@@ -35,6 +35,8 @@ public partial class MainWindow : Window
     private readonly ExtrusionDepthWheel _depthWheel = new();
     private readonly TransactionalHistory<ExtrusionState> _featureHistory = new();
 
+    private bool ControlPressed => Keyboard.Modifiers.HasFlag(ModifierKeys.Control) ||
+        (WinForms.Control.ModifierKeys & WinForms.Keys.Control) != 0;
     private bool _middleDown;
     private bool _panMode;
     private int _lastMouseX;
@@ -68,7 +70,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
-        _viewportPanel = new WinForms.Panel
+        _viewportPanel = new CadViewportPanel
         {
             Dock = WinForms.DockStyle.Fill,
             BackColor = System.Drawing.Color.FromArgb(233, 241, 247),
@@ -139,14 +141,14 @@ public partial class MainWindow : Window
         // A value editor owns Delete, F and text Undo/Redo while it has focus.
         if (Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase && e.Key != Key.Escape)
             return;
-        if (_inSketch && Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && e.Key == Key.Z)
+        if (_inSketch && ControlPressed && e.Key == Key.Z)
         {
             UndoSketch();
             e.Handled = true;
             return;
         }
 
-        if (_inSketch && Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && e.Key == Key.Y)
+        if (_inSketch && ControlPressed && e.Key == Key.Y)
         {
             RedoSketch();
             e.Handled = true;
@@ -154,7 +156,7 @@ public partial class MainWindow : Window
         }
 
         if (!_inSketch && !_extrudeCommandActive &&
-            Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && e.Key == Key.Z)
+            ControlPressed && e.Key == Key.Z)
         {
             UndoFeature();
             e.Handled = true;
@@ -162,14 +164,14 @@ public partial class MainWindow : Window
         }
 
         if (!_inSketch && !_extrudeCommandActive &&
-            Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && e.Key == Key.Y)
+            ControlPressed && e.Key == Key.Y)
         {
             RedoFeature();
             e.Handled = true;
             return;
         }
 
-        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && e.Key is Key.S or Key.O)
+        if (ControlPressed && e.Key is Key.S or Key.O)
         {
             if (e.Key == Key.S) SavePart_Click(this,new RoutedEventArgs());
             else OpenPart_Click(this,new RoutedEventArgs());
@@ -177,7 +179,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && e.Key == Key.N)
+        if (ControlPressed && e.Key == Key.N)
         {
             NewPart_Click(this, new RoutedEventArgs());
             e.Handled = true;
@@ -563,7 +565,7 @@ public partial class MainWindow : Window
         }
 
         var pointId = _sketch.FindPointNear(uv, tolerance);
-        if (pointId > 0 && !_sketch.Point(pointId).Fixed)
+        if (!toggle && pointId > 0 && !_sketch.Point(pointId).Fixed)
         {
             _dragSketchPointId = pointId;
             _dragSketchDimensionId = -1;
@@ -1291,12 +1293,21 @@ public partial class MainWindow : Window
         RenderSketch();
     }
 
+    private void SelectTool_Click(object sender,RoutedEventArgs e)
+    {
+        LeaveSketchCommand();
+        _smartDimensionMode=false;
+        ResetSmartDimensionTargets();
+        _viewportPanel.Focus();
+        UpdateSketchPropertyPanel();
+    }
+
     private void LeaveSketchCommand()
     {
         _commandManager.Cancel();
         _sketchCommand = null;
         _viewer.ClearPreview();
-        Status("Seçim modu");
+        Status("Seçim modu • Sol tık: seç • Ctrl: seçime ekle • Delete: sil • Esc: araçtan çık");
     }
 
     private void UpdateSketchPropertyPanel()
