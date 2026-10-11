@@ -296,6 +296,13 @@ public partial class MainWindow : Window
 
         if (_inSketch)
         {
+            var dimensionHit=FindDimensionAtScreen(e.X,e.Y);
+            if(e.Clicks>=2&&dimensionHit>=0)
+            {
+                LeaveSketchCommand();_smartDimensionMode=false;ResetSmartDimensionTargets();
+                _selectedSketchDimensionId=dimensionHit;
+                EditDimension(dimensionHit);return;
+            }
             if (_sketchCommand is not null)
                 HandleSketchClick(e.X, e.Y, e.Clicks);
             else
@@ -485,7 +492,7 @@ public partial class MainWindow : Window
         if (_sketch is null || !TryGetSketchCursor(x, y, out var uv, out _, snap:false)) return;
         var tolerance = Math.Max(1e-6, _viewer.PixelToWorldLength(10));
 
-        var dimensionId = _sketchCommand is null ? _sketch.FindDimensionNear(uv,tolerance) : -1;
+        var dimensionId = _sketchCommand is null ? FindDimensionAtScreen(x,y) : -1;
         var target = dimensionId < 0 ? SketchPointerProbe.Probe(_sketch,uv,tolerance) : null;
         var reference = target?.Reference;
         var markerChanged = target != _pointerTarget;
@@ -509,7 +516,7 @@ public partial class MainWindow : Window
         if (_sketch is null || !TryGetSketchCursor(x, y, out var uv, out _)) return false;
         var tolerance = Math.Max(1e-6, _viewer.PixelToWorldLength(10));
 
-        var dimensionId = _sketch.FindDimensionNear(uv, tolerance);
+        var dimensionId = FindDimensionAtScreen(x,y);
         var reference = dimensionId < 0 ? _sketch.HitReference(uv, tolerance) : null;
         var pointId = reference is { IsPointLike: true } ? _sketch.ReferencePointId(reference) : -1;
         var entityId = reference is { IsPointLike: false } ? reference.Id : -1;
@@ -562,7 +569,7 @@ public partial class MainWindow : Window
         if (_sketch is null || !TryGetSketchCursor(x, y, out var uv, out _)) return;
         var tolerance = Math.Max(1e-6, _viewer.PixelToWorldLength(10));
 
-        var dimensionId = _sketch.FindDimensionNear(uv, tolerance);
+        var dimensionId = FindDimensionAtScreen(x,y);
         if (clickCount >= 2 && dimensionId >= 0)
         {
             EditDimension(dimensionId);
@@ -644,36 +651,17 @@ public partial class MainWindow : Window
         if (_sketch?.Dimension(dimensionId) is not SketchDimension dimension)
             return false;
 
-        var unit = dimension.Type == SketchDimensionType.Angle ? "°" : "mm";
-        var dialog = new DimensionEditDialog("Ölçüyü Değiştir", _sketch.Measure(dimension), unit,
-            dimension.Type is SketchDimensionType.HorizontalDistance or SketchDimensionType.VerticalDistance or SketchDimensionType.PointLineDistance or SketchDimensionType.ParallelLineDistance)
+        var session=new DimensionEditSession(_sketch,dimensionId);
+        var beforeEdit=session.Before;
+        var unit=dimension.Type==SketchDimensionType.Angle?"°":"mm";
+        var dialog=new DimensionEditDialog("Ölçüyü Değiştir",dimension.Value,unit,
+            text=>session.TryCommit(text,out var error,ValidateDependentDimension)?null:error){Owner=this};
+        if(dialog.ShowDialog()!=true)
         {
-            Owner = this
-        };
-
-        if (dialog.ShowDialog() != true)
-        {
-            if (removeOnCancel)
-                _sketch.DeleteDimension(dimensionId);
-            RenderSketch();
-            UpdateSketchPropertyPanel();
-            return false;
+            if(removeOnCancel)_sketch.DeleteDimension(dimensionId);
+            RenderSketch();UpdateSketchPropertyPanel();return false;
         }
-
-        var beforeEdit = _sketch.CaptureSnapshot();
-        if (!_sketch.SetDimensionValue(dimensionId, dialog.Value))
-        {
-            MessageBox.Show(
-                this,
-                "Bu ölçü mevcut sabit geometri nedeniyle sürücü olarak uygulanamadı.",
-                "SrcCad",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
-            if (removeOnCancel) _sketch.DeleteDimension(dimensionId);
-            RenderSketch();
-            UpdateSketchPropertyPanel();
-            return false;
-        }
+        MarkSourceSketchDirty();
         if (!removeOnCancel && !SameSketch(beforeEdit, _sketch.CaptureSnapshot()))
         {
             _sketchUndo.Push(beforeEdit);
@@ -776,6 +764,7 @@ public partial class MainWindow : Window
 
     private void ResetSketchInteraction()
     {
+        if(_boxStart is not null)FinishWindowSelection(0,0,true);
         _sketchCommand?.CancelStep();
         _viewer.ClearPreview();
         _dragSketchPointId = _dragSketchDimensionId = -1;
@@ -808,7 +797,8 @@ public partial class MainWindow : Window
 
         ResetSketchInteraction();
         _sketchRedo.Push(_sketch.CaptureSnapshot());
-        _sketch.RestoreSnapshot(_sketchUndo.Pop());
+        _sketch.RestoreSnapshot(_sketchUndo.Pop(),notifyChange:true);
+        MarkSourceSketchDirty();
         ClearSketchSelection(false);
         ResetSmartDimensionTargets();
         RenderSketch();
@@ -827,7 +817,8 @@ public partial class MainWindow : Window
 
         ResetSketchInteraction();
         _sketchUndo.Push(_sketch.CaptureSnapshot());
-        _sketch.RestoreSnapshot(_sketchRedo.Pop());
+        _sketch.RestoreSnapshot(_sketchRedo.Pop(),notifyChange:true);
+        MarkSourceSketchDirty();
         ClearSketchSelection(false);
         ResetSmartDimensionTargets();
         RenderSketch();
@@ -1632,7 +1623,8 @@ public partial class MainWindow : Window
     private void CancelSourceSketchEdit_Click(object sender, RoutedEventArgs e)
     {
         if (_sourceSketchEditBefore is not { } before || _sketch is null) return;
-        _sketch.RestoreSnapshot(before.Sketch);
+        _sketch.RestoreSnapshot(before.Sketch,notifyChange:true);
+        MarkSourceSketchDirty();
         // Exit sees the unchanged snapshot: no rebuild and no history entry.
         ExitSketch_Click(sender, e);
         Status("Çizim düzenlemesi iptal edildi • önceki katı ve parametreler korundu.");
@@ -1739,6 +1731,8 @@ public partial class MainWindow : Window
         if (!ok || !_viewer.CommitExtrusion()) return false;
         _extrudeDepth = depth;
         _hasSolid = true;
+        if(_extrudeNode is not null)_extrudeNode.Header="Ekstrüzyon1";
+        if(_sketchNode is not null)_sketchNode.Header="Çizim1";
         _viewer.ClearSketch();
         _viewer.ClearPreview();
         _viewer.SetSelectionMode(CadSelectionMode.Face);

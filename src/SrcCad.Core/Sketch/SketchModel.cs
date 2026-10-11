@@ -97,6 +97,7 @@ public sealed partial class SketchModel
     private int _nextRelationId = 1;
     private int _nextDimensionId = 1;
 
+    public long Revision { get; private set; }
     public PlaneFrame Plane { get; }
     public Dictionary<int, SketchPoint> Points { get; } = new();
     public List<SketchEntity> Entities { get; } = new();
@@ -126,8 +127,9 @@ public sealed partial class SketchModel
             Dimensions.ToList(),
             CenterRectangles.ToList());
 
-    public void RestoreSnapshot(SketchSnapshot snapshot)
+    public void RestoreSnapshot(SketchSnapshot snapshot, bool notifyChange = false)
     {
+        if(notifyChange)Revision++;
         _nextPointId = snapshot.NextPointId;
         _nextEntityId = snapshot.NextEntityId;
         _nextRelationId = snapshot.NextRelationId;
@@ -364,12 +366,8 @@ public sealed partial class SketchModel
 
         Dimensions[index] = dim with { Value = value };
         var ok = dim.ReferenceA is not null || EnforceDimension(Dimensions[index]);
-        if (!ok)
-        {
-            RestoreSnapshot(before);
-            return false;
-        }
-
+        // A direct geometric move can be blocked while the general solver can
+        // still satisfy the full system by moving other free parameters.
         SolveRelations();
         if (!ConstraintsSatisfied())
         {
@@ -377,6 +375,7 @@ public sealed partial class SketchModel
             return false;
         }
         RefreshDimensionValues();
+        if(value!=dim.Value)Revision++;
         return true;
     }
 

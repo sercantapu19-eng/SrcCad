@@ -64,6 +64,45 @@ public partial class MainWindow
             SendMessage(_viewportPanel.Handle,0x200,(IntPtr)1,end);
             SendMessage(_viewportPanel.Handle,0x202,IntPtr.Zero,end);
         }
+        async Task EditLabel(int id,string value,bool cancel=false,bool invalid=false)
+        {
+            bool opened=false;Exception? dialogFailure=null;
+            var timer=new System.Windows.Threading.DispatcherTimer{Interval=TimeSpan.FromMilliseconds(120)};
+            timer.Tick+=(_,_)=>
+            {
+                timer.Stop();
+                var dialog=OwnedWindows.OfType<DimensionEditDialog>().SingleOrDefault();
+                if(dialog is null)return;
+                opened=true;
+                try
+                {
+                    var editor=((System.Windows.Controls.Grid)dialog.Content).Children.OfType<System.Windows.Controls.TextBox>().Single();
+                    Check(editor.SelectionLength==editor.Text.Length,"dimension value selected on open");
+                    editor.Text=value;
+                    var source=System.Windows.PresentationSource.FromVisual(dialog)!;
+                    if(cancel)
+                        dialog.RaiseEvent(new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice,source,0,System.Windows.Input.Key.Escape){RoutedEvent=System.Windows.Input.Keyboard.PreviewKeyDownEvent});
+                    else
+                    {
+                        editor.RaiseEvent(new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice,source,0,System.Windows.Input.Key.Enter){RoutedEvent=System.Windows.Input.Keyboard.KeyDownEvent});
+                        if(invalid)
+                        {
+                            Check(dialog.IsVisible,"invalid dimension stays open for correction");
+                            dialog.RaiseEvent(new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice,source,0,System.Windows.Input.Key.Escape){RoutedEvent=System.Windows.Input.Keyboard.PreviewKeyDownEvent});
+                        }
+                    }
+                }
+                catch(Exception ex){dialogFailure=ex;if(dialog.IsVisible)dialog.Close();}
+            };
+            Step("Dimension double click: "+id);timer.Start();
+            var pixel=Pixel(_sketch!.Dimension(id)!.LabelPosition);
+            SetFocus(_viewportPanel.Handle);
+            SendMessage(_viewportPanel.Handle,0x203,(IntPtr)1,(IntPtr)((pixel.Y<<16)|(pixel.X&0xffff)));
+            SendMessage(_viewportPanel.Handle,0x202,IntPtr.Zero,(IntPtr)((pixel.Y<<16)|(pixel.X&0xffff)));
+            await Task.Delay(160);timer.Stop();
+            if(dialogFailure is not null)throw dialogFailure;
+            Check(opened,"double click opens shared dimension editor");
+        }
         try
         {
             await Task.Delay(300);
@@ -136,6 +175,57 @@ public partial class MainWindow
             keybd_event(0x11,0,0,UIntPtr.Zero);await Task.Delay(50);Key(WinForms.Keys.Z);
             keybd_event(0x11,0,2,UIntPtr.Zero);await Task.Delay(50);
             Check(_sketch.Entity(crossingLine.Id) is not null,"window selection Delete Undo restores line");
+            _sketch=new SketchModel(StandardPlanes.Front);ClearSketchSelection(false);_sketchUndo.Clear();_sketchRedo.Clear();
+            var pivot=_sketch.CreatePointExact(new(0,0));var endA=_sketch.CreatePointExact(new(100,0));var endB=_sketch.CreatePointExact(new(70.71067811865,70.71067811865));
+            _sketch.SetPointFixed(pivot,true);_sketch.SetPointFixed(endA,true);
+            var rayA=_sketch.AddLine(pivot,endA);var rayB=_sketch.AddLine(pivot,endB);
+            _sketch.AddRelation(SketchRelationType.Horizontal,rayA.Id);
+            var lineDimension=_sketch.AddDimension(SketchDimensionType.LineLength,new(20,85),entityA:rayB.Id);
+            var angle=_sketch.AddDimension(SketchDimensionType.Angle,new(60,25),entityA:rayA.Id,entityB:rayB.Id);
+            _sketch.SetDimensionValue(angle.Id,45);RenderSketch();_viewer.FitAll();
+            var oldPoint=_sketch.Point(endB).Position;var oldRevision=_sketch.Revision;
+            await EditLabel(angle.Id,"60");
+            Check(Math.Abs(_sketch.Measure(_sketch.Dimension(angle.Id)!)-60)<1e-6&&Point2d.Distance(oldPoint,_sketch.Point(endB).Position)>1,"angle Enter moves actual geometry");
+            Check(!_sketch.DefinitionInfo().IsConflicting&&_sketch.Revision>oldRevision,"angle constraints and revision update");
+            keybd_event(0x11,0,0,UIntPtr.Zero);await Task.Delay(50);Key(WinForms.Keys.Z);
+            keybd_event(0x11,0,2,UIntPtr.Zero);await Task.Delay(50);
+            Check(Math.Abs(_sketch.Dimension(angle.Id)!.Value-45)<1e-6,"angle Ctrl Z restores 45");
+            keybd_event(0x11,0,0,UIntPtr.Zero);await Task.Delay(50);Key(WinForms.Keys.Y);
+            keybd_event(0x11,0,2,UIntPtr.Zero);await Task.Delay(50);
+            Check(Math.Abs(_sketch.Dimension(angle.Id)!.Value-60)<1e-6,"angle Ctrl Y restores 60");
+            await EditLabel(angle.Id,"80",cancel:true);
+            Check(Math.Abs(_sketch.Dimension(angle.Id)!.Value-60)<1e-6,"angle Esc preserves prior value");
+            foreach(var bad in new[]{"","NaN","Infinity","180"})
+            {
+                await EditLabel(angle.Id,bad,invalid:true);
+                Check(Math.Abs(_sketch.Dimension(angle.Id)!.Value-60)<1e-6,"invalid edit preserves geometry: "+bad);
+            }
+            await EditLabel(angle.Id,"45,5");
+            Check(Math.Abs(_sketch.Dimension(angle.Id)!.Value-45.5)<1e-6,"decimal comma angle edit");
+            await EditLabel(lineDimension.Id,"120");
+            Check(Math.Abs(_sketch.Measure(_sketch.Dimension(lineDimension.Id)!)-120)<1e-6,"linear double click uses same lifecycle");
+            var disk=_sketch.AddCircle(_sketch.CreatePointExact(new(-30,-30)),8);
+            var diameter=_sketch.AddDimension(SketchDimensionType.CircleDiameter,new(-65,-60),entityA:disk.Id);RenderSketch();
+            await EditLabel(diameter.Id,"20");
+            Check(Math.Abs(((SketchCircle)_sketch.Entity(disk.Id)!).Radius-10)<1e-6,"diameter double click drives radius");
+            foreach(var type in new[]{SketchDimensionType.HorizontalDistance,SketchDimensionType.VerticalDistance,SketchDimensionType.PointDistance,SketchDimensionType.PointLineDistance,SketchDimensionType.ParallelLineDistance})
+            {
+                _sketch=new SketchModel(StandardPlanes.Front);ClearSketchSelection(false);
+                var point=_sketch.CreatePointExact(new(30,40));SketchDimension testDimension;
+                if(type is SketchDimensionType.PointLineDistance or SketchDimensionType.ParallelLineDistance)
+                {
+                    var a=_sketch.CreatePointExact(new(-100,0));var b=_sketch.CreatePointExact(new(100,0));_sketch.SetPointFixed(a,true);_sketch.SetPointFixed(b,true);
+                    var carrier=_sketch.AddLine(a,b);var target=_sketch.ReferenceForPoint(point);
+                    if(type==SketchDimensionType.ParallelLineDistance)target=_sketch.ReferenceForEntity(_sketch.AddLine(point,_sketch.CreatePointExact(new(80,40))).Id);
+                    testDimension=_sketch.AddInferredDimension(_sketch.InferDimension(new[]{target,_sketch.ReferenceForEntity(carrier.Id)},new(60,80))!);
+                }
+                else testDimension=_sketch.AddDimension(type,new(60,80),pointA:0,pointB:point);
+                RenderSketch();_viewer.FitAll();var targetValue=testDimension.Value*1.2;
+                await EditLabel(testDimension.Id,targetValue.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                Check(Math.Abs(_sketch.Measure(_sketch.Dimension(testDimension.Id)!)-targetValue)<1e-6,"double-click audit geometry: "+type);
+            }
+
+
 
 
 

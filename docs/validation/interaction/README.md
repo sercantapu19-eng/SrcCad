@@ -34,3 +34,32 @@ Follow-up interaction audit: selected/hovered construction geometry takes preced
 ## Full Windows gate
 
 Run `powershell -ExecutionPolicy Bypass -File .\tools\Run-SolidAcceptance.ps1 -RunInteraction` from the repo (add `-OcctRoot` / `-Configuration Release` as appropriate). This builds the solution, requires all managed/native summaries, deploys and validates the exact bridge/ijwhost/OCCT DLLs for the built app, then runs the isolated UI process. It writes `logs/windows-interaction.json`. An unlocked interactive desktop is required. Without `-RunInteraction`, the runner explicitly reports that UI interaction was NOT RUN. A test-run PASS still does not certify all visual/manual requirements.
+
+## Manual FAIL follow-up: Esc, harness timeout, window selection, angle editing
+
+User reported the previous Windows run FAIL: Esc RoutedEvent exception, 60-second harness timeout, missing drag selection, and angle double-click not opening the editor. These reports remain acceptance inputs; no Windows PASS is claimed by the following Linux checks.
+
+* Native key forwarding now sets `Keyboard.PreviewKeyDownEvent` before the shared handler writes Handled. The selectable panel enables standard click/double-click processing for every dimension type.
+* The opt-in Windows runner writes checkpoints from startup onward, handles WPF/WinForms exceptions without modal error boxes, and reports its last checkpoint on timeout. Missing/incomplete reports cannot pass.
+* Left-to-right window selection requires full geometry inclusion; right-to-left crossing selects intersected geometry. The rectangle is projected to sketch space, not approximated by a world-axis box. Ctrl adds to selection; Delete/Undo uses existing snapshots.
+* All eight implemented dimension types use the same screen text hit-test, double-click dispatch, DimensionEditDialog, DimensionEditSession, parser and candidate solver. The dialog selects the current value (without rounding away precision), commits on Enter/OK and cancels on Esc. Invalid input displays an inline error and keeps the dialog open.
+* Decimal comma and decimal dot are both accepted; mixed separators/thousands grouping, blank, NaN, Infinity, negatives and out-of-range angles are rejected. Angles require 0 < value < 180 degrees.
+* Candidate solve keeps rejected edits out of live geometry/history. Accepted dimension edits and sketch Undo/Redo advance the session revision. This is not a persisted, general document revision system.
+* Editing an existing extrusion source validates the candidate through the production OCCT profile builder (or circle preview), marks the source/Extrude dirty and retains the existing transactional rebuild on sketch exit. General multi-feature/Cut dirty propagation is still absent.
+
+### Dimension edit audit
+
+| Type | Shared edit path | Windows double-click regression |
+|---|---|---|
+| Line length | Implemented, managed verified | Added, PENDING |
+| Horizontal / Vertical | Implemented, managed verified | Added, PENDING |
+| Aligned point distance | Implemented, managed verified | Added, PENDING |
+| Point-line distance | Implemented, managed verified | Added, PENDING |
+| Parallel-line distance | Implemented, managed verified | Added, PENDING |
+| Angle | Implemented, managed verified; near 0/180, repeat, conflict/invalid rollback | Added, PENDING |
+| Diameter | Implemented, managed verified; actual radius changes | Added, PENDING |
+| Radius / arc radius | Not implemented | Not marked PASS |
+
+Managed baseline rerun: **706 PASS / 0 FAIL** (includes 18 window-selection and 80 dimension-edit assertions). Deployment fixtures remain separate. Windows harness: **78 planned assertions, NOT RUN here**, including 45→60 geometry, Enter/Esc, invalid inputs, Undo/Redo and all eight current dimension kinds. Native suite adds **12 angle/triangle volume tests**, bringing current source coverage to **66 native tests, NOT RUN here**. Existing historical Windows baseline is not reused as proof of these changes. Raw managed evidence: `07-dimension-edit-managed.txt`.
+
+Next Windows gate: `.\tools\Run-SolidAcceptance.ps1 -RunInteraction`. If it fails, provide `logs/windows-interaction.json` and the error; it now contains the last completed/input step rather than only a 60-second timeout. Manual angle edit and drag selection acceptance remain PENDING. No Fillet/Chamfer/Cut completion claim.

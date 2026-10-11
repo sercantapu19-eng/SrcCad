@@ -1,4 +1,6 @@
+using System;
 using System.Globalization;
+using SrcCad.Core.Sketch;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -8,21 +10,21 @@ namespace SrcCad.App;
 public sealed class DimensionEditDialog : Window
 {
     private readonly TextBox _valueBox;
-    private readonly bool _allowZero;
+    private readonly Func<string,string?> _commit;
+    private readonly TextBlock _error=new(){Foreground=System.Windows.Media.Brushes.Firebrick,TextWrapping=TextWrapping.Wrap};
 
-    public double Value { get; private set; }
-
-    public DimensionEditDialog(string title, double currentValue, string unit, bool allowZero = false)
+    public DimensionEditDialog(string title, double currentValue, string unit, Func<string,string?> commit)
     {
-        _allowZero = allowZero;
+        _commit = commit;
         Title = title;
         Width = 320;
-        Height = 165;
+        Height = 235;
         ResizeMode = ResizeMode.NoResize;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         ShowInTaskbar = false;
 
         var root = new Grid { Margin = new Thickness(16) };
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -36,7 +38,7 @@ public sealed class DimensionEditDialog : Window
 
         _valueBox = new TextBox
         {
-            Text = currentValue.ToString("0.###", CultureInfo.CurrentCulture),
+            Text = currentValue.ToString("G17", CultureInfo.CurrentCulture),
             FontSize = 18,
             MinWidth = 220
         };
@@ -55,11 +57,13 @@ public sealed class DimensionEditDialog : Window
         ok.Click += (_, _) => Accept();
         buttons.Children.Add(ok);
         buttons.Children.Add(cancel);
-        Grid.SetRow(buttons, 2);
+        Grid.SetRow(_error,2);root.Children.Add(_error);
+        Grid.SetRow(buttons, 3);
         root.Children.Add(buttons);
 
         Content = root;
-        Loaded += (_, _) => _valueBox.Focus();
+        PreviewKeyDown += (_,e)=>{if(e.Key==Key.Escape){DialogResult=false;e.Handled=true;}};
+        Loaded += (_, _) => {_valueBox.Focus();_valueBox.SelectAll();};
         _valueBox.KeyDown += (_, e) =>
         {
             if (e.Key == Key.Enter)
@@ -72,22 +76,8 @@ public sealed class DimensionEditDialog : Window
 
     private void Accept()
     {
-        var text = _valueBox.Text.Trim();
-        if (!double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out var value) &&
-            !double.TryParse(text.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out value))
-        {
-            MessageBox.Show(this, "Geçerli bir sayı girin.", "SrcCad", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        if (!double.IsFinite(value) || value < 0 || (!_allowZero && value == 0))
-        {
-            MessageBox.Show(this, _allowZero ? "Ölçü negatif olamaz." : "Ölçü sıfırdan büyük olmalıdır.", "SrcCad", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        Value = value;
-        DialogResult = true;
+        var error=_commit(_valueBox.Text);
+        if(error is not null){_error.Text=error;_valueBox.Focus();_valueBox.SelectAll();return;}
+        DialogResult=true;
     }
 }
-
