@@ -1,4 +1,4 @@
-param([string]$OcctRoot = "", [ValidateSet('Debug','Release')][string]$Configuration = "Debug")
+param([string]$OcctRoot = "", [ValidateSet('Debug','Release')][string]$Configuration = "Debug", [switch]$RunInteraction)
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path $PSScriptRoot -Parent
 . (Join-Path $PSScriptRoot 'NativeAcceptanceDeployment.ps1')
@@ -15,12 +15,13 @@ $logs = Join-Path $repoRoot 'logs'
 New-Item -ItemType Directory -Force $logs | Out-Null
 $nativeManifest = Join-Path $logs 'solid-native-paths.txt'
 $testManifest = Join-Path $logs 'solid-test-path.txt'
+$uiManifest = Join-Path $logs 'solid-ui-path.txt'
 # Old manifests cannot masquerade as a successful current build.
-Remove-Item -LiteralPath $nativeManifest, $testManifest -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $nativeManifest, $testManifest, $uiManifest -Force -ErrorAction SilentlyContinue
 $previousPath = $env:PATH
 Push-Location $repoRoot
 try {
-    & $msbuildPath SrcCad.sln /restore /m /t:Build "/p:Configuration=$Configuration" /p:Platform=x64 "/p:OcctRoot=$OcctRoot" "/p:OcctRuntimeDir=$occtBin" "/p:NativeDeploymentManifest=$nativeManifest" /v:m 2>&1 | Tee-Object "$logs\solid-build.log"
+    & $msbuildPath SrcCad.sln /restore /m /t:Build "/p:Configuration=$Configuration" /p:Platform=x64 "/p:OcctRoot=$OcctRoot" "/p:OcctRuntimeDir=$occtBin" "/p:NativeDeploymentManifest=$nativeManifest" "/p:UiAcceptanceManifest=$uiManifest" /v:m 2>&1 | Tee-Object "$logs\solid-build.log"
     if ($LASTEXITCODE -ne 0) { throw 'Windows/WPF/OCCT derlemesi basarisiz.' }
     $nativePaths = @(Get-Content -LiteralPath $nativeManifest | Where-Object { $_.Trim() })
     if ($nativePaths.Count -ne 2) { throw "Invalid native build manifest: $nativeManifest" }
@@ -65,6 +66,21 @@ try {
         if (@(Select-String -Path "$logs\solid-acceptance.log" -Pattern $summary).Count -ne 1) {
             throw "Ek regresyon paketi eksik veya tekrarlandi: $summary"
         }
+    }
+    if ($RunInteraction) {
+        $uiExe=(Get-Content -LiteralPath $uiManifest -Raw).Trim()
+        if (!(Test-Path -LiteralPath $uiExe)) { throw "Built UI executable missing: $uiExe" }
+        $uiDir=Split-Path $uiExe -Parent
+        # Deploy the exact bridge/host used by this build before testing UI events.
+        foreach ($source in @($bridge,$ijwHost)) {
+            $dest=Join-Path $uiDir (Split-Path $source -Leaf)
+            if ([IO.Path]::GetFullPath($source) -ne [IO.Path]::GetFullPath($dest)) { Copy-Item -LiteralPath $source -Destination $dest -Force }
+        }
+        Assert-NativeAcceptanceDeployment -TestDirectory $uiDir -BridgePath $bridge -IjwHostPath $ijwHost -OcctBin $occtBin -LogPath "$logs\solid-ui-deployment.log"
+        $env:PATH="$uiDir;$previousPath"
+        & (Join-Path $PSScriptRoot 'Run-WindowsInteraction.ps1') -AppPath $uiExe -ReportPath (Join-Path $logs 'windows-interaction.json')
+    } else {
+        Write-Host 'Windows UI interaction NOT RUN. Use -RunInteraction on an interactive desktop.'
     }
     Write-Host '72 kabul kontrolu ve ek regresyon paketleri gecti. SM-073..120 ve Windows manuel akisi ayrica dogrulanmalidir; Kati Model tamamlandi sayilmaz.'
 } finally {

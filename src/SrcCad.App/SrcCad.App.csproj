@@ -25,4 +25,8 @@
     </ItemGroup>
     <Copy SourceFiles="@(OcctRuntimeDll)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
   </Target>
+  <Target Name="WriteUiAcceptancePath" AfterTargets="Build" Condition="'$(UiAcceptanceManifest)' != ''">
+    <WriteLinesToFile File="$(UiAcceptanceManifest)" Lines="$(TargetDir)$(AssemblyName).exe" Overwrite="true" />
+  </Target>
 </Project>
+

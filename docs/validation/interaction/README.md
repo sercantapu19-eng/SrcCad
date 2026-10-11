@@ -30,3 +30,7 @@ Space opens an owned view chooser with Front/Back/Top/Bottom/Left/Right/Isometri
 36 command-geometry regressions PASS; total managed 608 PASS / 0 FAIL. Windows harness now includes trim hover, click and Undo: 25 checks PENDING. This is not full Trim completion: circle-to-arc trimming, persistent intersection constraints on retained endpoints and general topology naming remain open. Fillet/Chamfer/Arc/Slot/Polygon/Extruded Cut are still unimplemented, not enabled as fake commands.
 
 Follow-up interaction audit: selected/hovered construction geometry takes precedence over its gray construction color. Native viewport focus takes precedence over a stale WPF text-editor focus record, so Delete/Space are not discarded after leaving an editor. Smart Dimension placement now updates hover feedback as well.
+
+## Full Windows gate
+
+Run `powershell -ExecutionPolicy Bypass -File .\tools\Run-SolidAcceptance.ps1 -RunInteraction` from the repo (add `-OcctRoot` / `-Configuration Release` as appropriate). This builds the solution, requires all managed/native summaries, deploys and validates the exact bridge/ijwhost/OCCT DLLs for the built app, then runs the isolated UI process. It writes `logs/windows-interaction.json`. An unlocked interactive desktop is required. Without `-RunInteraction`, the runner explicitly reports that UI interaction was NOT RUN. A test-run PASS still does not certify all visual/manual requirements.
