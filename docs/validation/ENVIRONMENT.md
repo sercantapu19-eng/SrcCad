@@ -11,3 +11,17 @@
 - Twelve native tests call the same production prism builder and measure real B-Rep volume. They are prepared, not passed.
 - `Run-SolidAcceptance.ps1` builds the solution, builds tests with the real native DLL, runs 72 automated cases and records logs. Manual acceptance remains required even if those pass.
 - No claim of complete solver, full feature history, arbitrary nested contours, persistence or complete Solid Model is made. No later module has been developed or enabled.
+
+## Windows deployment follow-up
+
+User reported Windows core tests 60/60 PASS followed by FileNotFoundException for SrcCad.Kernel.Occt.dll before native acceptance could run. No native acceptance PASS has been reported.
+
+The original script copied only OCCT/bin DLLs explicitly and guessed the bridge location from the application output. The fixed build exports actual TargetPath + ijwhost.dll paths from the C++/CLI project. Native tests use a separate native output/intermediate directory so BASLAT and core-only builds cannot accidentally run an older native test executable. The test project sets Copy Local and explicitly deploys the bridge, ijwhost and all OCCT runtime DLLs to its own output. Test TargetPath is likewise read from an MSBuild manifest.
+
+Preflight checks x64 PE headers and compares source/destination SHA256 hashes for the bridge, ijwhost and linked OCCT libraries. Test execution uses its output directory and a temporary process PATH; PATH is restored afterward. stdout/stderr are captured separately so Windows PowerShell 5.1 cannot cut off the CLR exception as NativeCommandError. The script requires all SM-061..072 PASS lines before reporting native success.
+
+Validation here: 8/8 PowerShell deployment filesystem-fixture tests passed, all managed core tests still pass, C# and PowerShell syntax checks pass, project XML parses. These fixture DLLs are NEVER loaded or used as native geometry substitutes. Actual Windows C++/CLI/OCCT execution remains pending.
+
+Re-run tools/Run-SolidAcceptance.ps1 on Windows. If it fails, logs/solid-deployment.log, solid-native-paths.txt, solid-test-path.txt, solid-stdout.log and solid-stderr.log identify exactly which files and outputs were used.
+
+Microsoft reference for the ijwhost requirement: https://learn.microsoft.com/en-us/dotnet/core/porting/cpp-cli
