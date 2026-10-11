@@ -81,18 +81,18 @@ Kod: `NativeAcceptanceTests.cs`; üretimdeki aynı prism builder çağrılır. S
 
 | ID | Geometri | Beklenen | Durum |
 |---|---|---|---|
-| SM-061 | Ön: 250×200×20 plaka | 1.000.000 mm³ | BLOCKED |
-| SM-062 | Ön: 250×200×20, 3×Ø15 delik | (50.000 − 3π×7,5²) × 20 mm³ | BLOCKED |
-| SM-063 | Ön: 40×20 poligon delikli plaka | 984.000 mm³ | BLOCKED |
-| SM-064 | Ön: −20 mm ters ekstrüzyon | 1.000.000 mm³; yön ters | BLOCKED |
-| SM-065 | Üst: 250×200×20 plaka | 1.000.000 mm³ | BLOCKED |
-| SM-066 | Üst: 250×200×20, 3×Ø15 delik | (50.000 − 3π×7,5²) × 20 mm³ | BLOCKED |
-| SM-067 | Üst: 40×20 poligon delikli plaka | 984.000 mm³ | BLOCKED |
-| SM-068 | Üst: −20 mm ters ekstrüzyon | 1.000.000 mm³; yön ters | BLOCKED |
-| SM-069 | Sağ: 250×200×20 plaka | 1.000.000 mm³ | BLOCKED |
-| SM-070 | Sağ: 250×200×20, 3×Ø15 delik | (50.000 − 3π×7,5²) × 20 mm³ | BLOCKED |
-| SM-071 | Sağ: 40×20 poligon delikli plaka | 984.000 mm³ | BLOCKED |
-| SM-072 | Sağ: −20 mm ters ekstrüzyon | 1.000.000 mm³; yön ters | BLOCKED |
+| SM-061 | Ön: 250×200×20 plaka | 1.000.000 mm³ | PASS-WINDOWS-REPORTED |
+| SM-062 | Ön: 250×200×20, 3×Ø15 delik | (50.000 − 3π×7,5²) × 20 mm³ | PASS-WINDOWS-REPORTED |
+| SM-063 | Ön: 40×20 poligon delikli plaka | 984.000 mm³ | PASS-WINDOWS-REPORTED |
+| SM-064 | Ön: −20 mm ters ekstrüzyon | 1.000.000 mm³; yön ters | PASS-WINDOWS-REPORTED |
+| SM-065 | Üst: 250×200×20 plaka | 1.000.000 mm³ | PASS-WINDOWS-REPORTED |
+| SM-066 | Üst: 250×200×20, 3×Ø15 delik | (50.000 − 3π×7,5²) × 20 mm³ | PASS-WINDOWS-REPORTED |
+| SM-067 | Üst: 40×20 poligon delikli plaka | 984.000 mm³ | PASS-WINDOWS-REPORTED |
+| SM-068 | Üst: −20 mm ters ekstrüzyon | 1.000.000 mm³; yön ters | PASS-WINDOWS-REPORTED |
+| SM-069 | Sağ: 250×200×20 plaka | 1.000.000 mm³ | PASS-WINDOWS-REPORTED |
+| SM-070 | Sağ: 250×200×20, 3×Ø15 delik | (50.000 − 3π×7,5²) × 20 mm³ | PASS-WINDOWS-REPORTED |
+| SM-071 | Sağ: 40×20 poligon delikli plaka | 984.000 mm³ | PASS-WINDOWS-REPORTED |
+| SM-072 | Sağ: −20 mm ters ekstrüzyon | 1.000.000 mm³; yön ters | PASS-WINDOWS-REPORTED |
 
 ## SM-073–120: arayüz, solver ve feature kabulü
 
@@ -149,7 +149,7 @@ Kod: `NativeAcceptanceTests.cs`; üretimdeki aynı prism builder çağrılır. S
 
 ## Sonuç ve yeniden çalıştırma
 
-120 senaryonun **60 PASS, 14 FAIL-SOURCE, 46 BLOCKED** sonucu var. Modül kabul edilmedi.
+120 senaryonun **72 PASS (12 Windows kullanıcı bildirimi), 14 FAIL-SOURCE, 34 BLOCKED** sonucu var. Modül kabul edilmedi.
 
 İlk 60 senaryoda düzeltme öncesi 36 PASS / 24 FAIL; düzeltme sonrası 60 PASS. Ham çıktılar `docs/validation/core-before.log` ve `core-after.log`.
 
@@ -167,4 +167,17 @@ Windows/OCCT ortamında: `powershell -NoProfile -ExecutionPolicy Bypass -File to
 - Feature oluşturma, derinlik düzenleme ve tek ekstrüzyonun silinmesi artık sketch snapshot + feature durumu ile history kaydeder. Hatalı rebuild history yığınlarını ilerletmez.
 - 12 ek managed history kontrolü geçti; `docs/validation/feature-history-tests.log`. Bu ek kontroller 120 maddelik kabul kapsamının sayısını veya UI PASS sayısını artırmaz.
 - SM-104 artık uygulanmış fakat Windows/UI doğrulaması bekliyor. SM-107 için tek feature silme/undo geliştirildi; bağımlılık ağacı olmadığı için tam kriter hâlâ FAIL-SOURCE.
-- Genel solver, bağımlı feature rebuild ve çok seviyeli konturlar açık. Native 12 test için henüz yeni Windows PASS sonucu yok; modül tamamlanmadı.
+- Genel solver, bağımlı feature rebuild ve çok seviyeli konturlar açık. Kullanıcı güncel branch üzerinde 60/60 core, 12/12 history ve 12/12 gerçek OCCT PASS bildirdi. Modül tamamlanmadı.
+
+## Windows geri bildirimi ve etkileşim regresyonları
+
+Kullanıcı 2026-10-11 tarihinde güncel branch için native deployment sorununun çözüldüğünü ve 12 gerçek B-Rep testinin geçtiğini bildirdi. SM-061–072 bu bildirime dayanır; bu Linux oturumunda native test çalıştırılmadı. 72 kabul maddesine ek 12 history kontrolü vardır.
+
+`InteractionRegressionTests` 50 ek managed kontrol içerir: üç düzlemde her iki seçim sırasıyla iki daire merkezi ve Origin–dikdörtgen yatay/dikey sürücü ölçüleri, koordinat/radyüs/kapalı profil doğrulaması, 24 ilişkilik eksen zinciri, sabit uçta atomik ret ve wheel detent birikimi. İlk Origin–dikdörtgen testi başarısızdı; bağlı eksen yayılımı düzeltildikten sonra geçti. Bunlar tam genel solver kanıtı değildir; SM-094 karma ilişkiler için açık kalır.
+
+Windows tekrar turu (SM-084, SM-088, SM-120 alt senaryoları; henüz PASS değil):
+1. Ekstrüzyon PropertyManager üzerinde ve viewport üzerinde tekerleği çevir: her kademe ±10 mm; metin ve gerçek önizleme birlikte değişmeli. 0 mm önizlemeyi geçersiz kılmalı; negatif derinlik ters yönde oluşmalı. Onay, iptal, undo/redo dene.
+2. Çapraz yerleşmiş iki dairenin merkezlerini seç. Etiketi üst/alta taşı: yatay; sağ/sola taşı: dikey; iki noktanın sınırlayıcı kutusu içinde: hizalı mesafe. Önizleme ve oluşturulan tür aynı olmalı. 100 ve 120 mm değerleri merkezleri hareket ettirmeli, çapları korumalı.
+3. Origin ile dikdörtgen köşesini iki farklı seçim sırasıyla ölçülendir. X=40, Y=50 ver; Origin sabit, köşe (40,50), profil kapalı kalmalı. Çift tıkla düzenle, Ctrl+Z/Y ve Esc ile iptali kontrol et.
+
+Tam Windows/WPF olay yönlendirmesi doğrulanmadan bu üç kullanıcı hatası kapatılmış kabul edilmeyecek.

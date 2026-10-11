@@ -30,6 +30,7 @@ public partial class MainWindow : Window
     private bool _hasSolid;
     private double _extrudeDepth = 20.0;
     private bool _editingExtrude;
+    private readonly ExtrusionDepthWheel _depthWheel = new();
     private readonly TransactionalHistory<ExtrusionState> _featureHistory = new();
 
     private bool _middleDown;
@@ -374,19 +375,33 @@ public partial class MainWindow : Window
             _viewer.MoveTo(e.X, e.Y); // OCCT dynamic pre-highlight.
     }
 
+    private void Window_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (!_extrudeCommandActive) return;
+        AdjustExtrusionDepth(e.Delta);
+        e.Handled = true;
+    }
+
+    private void AdjustExtrusionDepth(int delta)
+    {
+        // Keep invalid/zero input visible; never silently substitute a different solid.
+        var text = ExtrudeDepthTextBox.Text.Trim().Replace(',', '.');
+        if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var depth) ||
+            !double.IsFinite(depth)) return;
+        depth = _depthWheel.Apply(depth, delta);
+        ExtrudeDepthTextBox.Text = depth.ToString("0.###", CultureInfo.CurrentCulture);
+        ExtrudeDepthTextBox.CaretIndex = ExtrudeDepthTextBox.Text.Length;
+        // TextChanged rebuilds the real OCCT candidate; zero invalidates the preview.
+        Status($"Ekstrüzyon derinliği: {depth:0.###} mm • mouse tekeri ±10 mm");
+    }
+
     private void ViewportPanel_MouseWheel(object? sender, WinForms.MouseEventArgs e)
     {
         if (_extrudeCommandActive)
         {
-            if (!TryReadDepth(out var depth)) depth = 20.0;
-            var step = e.Delta > 0 ? 10.0 : -10.0;
-            depth = Math.Max(10.0, depth + step);
-            ExtrudeDepthTextBox.Text = depth.ToString("0.###", CultureInfo.CurrentCulture);
-            ExtrudeDepthTextBox.CaretIndex = ExtrudeDepthTextBox.Text.Length;
-            Status($"Ekstrüzyon derinliği: {depth:0.###} mm • mouse tekeri ±10 mm");
+            AdjustExtrusionDepth(e.Delta);
             return;
         }
-
         _viewer.ZoomWheel(e.Delta);
     }
 
@@ -647,14 +662,7 @@ public partial class MainWindow : Window
         {
             var a = _sketch.Point(_smartDimensionPoints[0]).Position;
             var b = _sketch.Point(_smartDimensionPoints[1]).Position;
-            var dx = Math.Abs(b.X - a.X);
-            var dy = Math.Abs(b.Y - a.Y);
-
-            var type = dx > dy * 8
-                ? SketchDimensionType.HorizontalDistance
-                : dy > dx * 8
-                    ? SketchDimensionType.VerticalDistance
-                    : SketchDimensionType.PointDistance;
+            var type = SmartDimensionPlacement.BetweenPoints(a, b, label);
 
             return new SketchDimension(
                 -1, type, 0, label,
@@ -704,14 +712,7 @@ public partial class MainWindow : Window
         {
             var a = _sketch.Point(_smartDimensionPoints[0]).Position;
             var b = _sketch.Point(_smartDimensionPoints[1]).Position;
-            var dx = Math.Abs(b.X - a.X);
-            var dy = Math.Abs(b.Y - a.Y);
-
-            var type = dx > dy * 8
-                ? SketchDimensionType.HorizontalDistance
-                : dy > dx * 8
-                    ? SketchDimensionType.VerticalDistance
-                    : SketchDimensionType.PointDistance;
+            var type = SmartDimensionPlacement.BetweenPoints(a, b, label);
 
             dimension = _sketch.AddDimension(
                 type,
@@ -1839,6 +1840,7 @@ public partial class MainWindow : Window
             return;
         }
 
+        _depthWheel.Reset();
         _extrudeCommandActive = true;
         ExtrudeDepthTextBox.Text = _extrudeDepth.ToString("0.###", CultureInfo.CurrentCulture);
         ExtrudePanel.Visibility = Visibility.Visible;
@@ -1992,6 +1994,7 @@ public partial class MainWindow : Window
         // Only hide its presentation while the candidate replacement is previewed.
         _viewer.HideCommittedSolid();
         _editingExtrude = true;
+        _depthWheel.Reset();
         _extrudeCommandActive = true;
         ExtrudeDepthTextBox.Text = _extrudeDepth.ToString("0.###", CultureInfo.CurrentCulture);
         ExtrudePanel.Visibility = Visibility.Visible;

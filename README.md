@@ -1,6 +1,6 @@
 > **Geliştirme durumu (2026-10-10): Katı Model tamamlanmadı.** Güncel doğrulama kaydı:
 > [120 senaryolu kabul kapısı](docs/SOLID_ACCEPTANCE_120.md).
-> 60 managed test çalıştırıldı; Windows/WPF ve gerçek OCCT doğrulaması bekliyor.
+> 60 çekirdek + 12 history + 12 gerçek OCCT testi Windows kullanıcı bildiriminde PASS. Ek 50 etkileşim regresyonu managed ortamda PASS; Windows manuel akışı ve SM-073–120 henüz tamamlanmadı.
 > Aşağıdaki eski sürüm notları güncel kabul sonucu olarak değerlendirilmemelidir.
 
 # SrcCad V1.2 CAD Alpha

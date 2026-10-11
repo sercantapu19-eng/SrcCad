@@ -846,6 +846,40 @@ public sealed class SketchModel
         return false;
     }
 
+    private bool SetAxisConnectedPosition(int pointId, double value, bool horizontal)
+    {
+        // Axis equality is transitive. Propagate a driving coordinate through
+        // the entire connected component before the iterative relations pass,
+        // so a rectangle's last edge cannot overwrite the edited first corner.
+        var connected = new HashSet<int> { pointId };
+        var pending = new Queue<int>();
+        pending.Enqueue(pointId);
+        while (pending.Count > 0)
+        {
+            var current = pending.Dequeue();
+            foreach (var relation in Relations)
+            {
+                int a, b;
+                if (relation.Type == SketchRelationType.Coincident)
+                { a = relation.PointA; b = relation.PointB; }
+                else if (relation.Type == (horizontal ? SketchRelationType.Vertical : SketchRelationType.Horizontal)
+                         && Entity(relation.EntityA) is SketchLine line)
+                { a = line.StartPointId; b = line.EndPointId; }
+                else continue;
+                var other = a == current ? b : b == current ? a : -1;
+                if (other >= 0 && Points.ContainsKey(other) && connected.Add(other)) pending.Enqueue(other);
+            }
+        }
+        if (connected.Any(id => Point(id).Fixed && Math.Abs((horizontal ? Point(id).Position.X : Point(id).Position.Y) - value) > 1e-8))
+            return false;
+        foreach (var id in connected)
+        {
+            var p = Point(id).Position;
+            SetPointPosition(id, horizontal ? new Point2d(value, p.Y) : new Point2d(p.X, value));
+        }
+        return true;
+    }
+
     private bool SetHorizontalDistance(int pointA, int pointB, double value)
     {
         if (!Points.ContainsKey(pointA) || !Points.ContainsKey(pointB)) return false;
@@ -854,13 +888,11 @@ public sealed class SketchModel
         var sign = b.X >= a.X ? 1.0 : -1.0;
         if (!Point(pointB).Fixed)
         {
-            SetPointPosition(pointB, new Point2d(a.X + sign * value, b.Y));
-            return true;
+            return SetAxisConnectedPosition(pointB, a.X + sign * value, horizontal: true);
         }
         if (!Point(pointA).Fixed)
         {
-            SetPointPosition(pointA, new Point2d(b.X - sign * value, a.Y));
-            return true;
+            return SetAxisConnectedPosition(pointA, b.X - sign * value, horizontal: true);
         }
         return false;
     }
@@ -873,13 +905,11 @@ public sealed class SketchModel
         var sign = b.Y >= a.Y ? 1.0 : -1.0;
         if (!Point(pointB).Fixed)
         {
-            SetPointPosition(pointB, new Point2d(b.X, a.Y + sign * value));
-            return true;
+            return SetAxisConnectedPosition(pointB, a.Y + sign * value, horizontal: false);
         }
         if (!Point(pointA).Fixed)
         {
-            SetPointPosition(pointA, new Point2d(a.X, b.Y - sign * value));
-            return true;
+            return SetAxisConnectedPosition(pointA, b.Y - sign * value, horizontal: false);
         }
         return false;
     }
