@@ -25,3 +25,7 @@ Validation here: 8/8 PowerShell deployment filesystem-fixture tests passed, all 
 Re-run tools/Run-SolidAcceptance.ps1 on Windows. If it fails, logs/solid-deployment.log, solid-native-paths.txt, solid-test-path.txt, solid-stdout.log and solid-stderr.log identify exactly which files and outputs were used.
 
 Microsoft reference for the ijwhost requirement: https://learn.microsoft.com/en-us/dotnet/core/porting/cpp-cli
+
+## Feature history follow-up — 2026-10-11
+
+Added transactional managed history with before/after sketch snapshots and optional extrusion depth. WPF routes first-feature creation, depth edits and selected FeatureManager extrusion deletion through this history. Undo restores the no-solid state; redo reconstructs the stored profile and depth. Starting a new sketch trajectory/new document invalidates prior feature history. Twelve managed tests cover creation/edit/deletion undo-redo, rejected/throwing applications, failed redo, branch invalidation and snapshot isolation. All 60 baseline managed acceptance cases still pass. WPF/native integration is syntax-checked only and awaits Windows execution; dependent multi-feature history is still not implemented.

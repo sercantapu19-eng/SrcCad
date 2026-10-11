@@ -129,7 +129,7 @@ Kod: `NativeAcceptanceTests.cs`; üretimdeki aynı prism builder çağrılır. S
 | SM-101 | Geçersiz derinlik stale preview | Geçerli preview sonrası 0, NaN, Infinity ve metin gir; onay eski preview katısını kaydetmemeli. | BLOCKED |
 | SM-102 | Feature düzenleme iptali | Ekstrüzyon1 20 mm iken 30 mm preview yapıp Esc; gerçek hacim 20 mm değerine dönmeli. | BLOCKED |
 | SM-103 | Feature derinlik undo/redo | 20 → 30 → 40 mm değiştir; iki undo ve iki redo sonrası gerçek hacimler sırasıyla doğrulanmalı. | BLOCKED |
-| SM-104 | Feature oluşturma undo | İlk ekstrüzyonu oluşturup Ctrl+Z; feature ve solid kaldırılmalı, Ctrl+Y geri getirmeli. | FAIL-SOURCE |
+| SM-104 | Feature oluşturma undo | İlk ekstrüzyonu oluşturup Ctrl+Z; feature ve solid kaldırılmalı, Ctrl+Y geri getirmeli. | BLOCKED |
 | SM-105 | Sketch düzenle ve downstream rebuild | Ekstrüzyondan sonra sketch genişliğini değiştir; tüm bağımlı katılar yeniden üretilmeli. | FAIL-SOURCE |
 | SM-106 | FeatureManager bağımlılık ağacı | Birden fazla sketch ve feature ekle; düzenleme ve hata durumu doğru node ile ilişkilendirilmeli. | FAIL-SOURCE |
 | SM-107 | Feature silme ve undo | Feature silindiğinde bağımlı feature davranışı belirli olmalı; undo tüm bağımlılıkları geri getirmeli. | FAIL-SOURCE |
@@ -149,7 +149,7 @@ Kod: `NativeAcceptanceTests.cs`; üretimdeki aynı prism builder çağrılır. S
 
 ## Sonuç ve yeniden çalıştırma
 
-120 senaryonun **60 PASS, 15 FAIL-SOURCE, 45 BLOCKED** sonucu var. Modül kabul edilmedi.
+120 senaryonun **60 PASS, 14 FAIL-SOURCE, 46 BLOCKED** sonucu var. Modül kabul edilmedi.
 
 İlk 60 senaryoda düzeltme öncesi 36 PASS / 24 FAIL; düzeltme sonrası 60 PASS. Ham çıktılar `docs/validation/core-before.log` ve `core-after.log`.
 
@@ -160,3 +160,11 @@ MSBuild process introspection kullanılamayan Linux ortamında: `python tools/ru
 Windows/OCCT ortamında: `powershell -NoProfile -ExecutionPolicy Bypass -File tools/Run-SolidAcceptance.ps1`. Mevcut OCCT yolu farklıysa `-OcctRoot` verin. Çıktılar `logs/solid-*.log` altında. Bu komut dosyası burada Windows üzerinde çalıştırılmadı.
 
 72 otomatik test geçse bile SM-073–120 tamamlanmadan Katı Model tamamlandı denemez. Sac Levha, Profil, Montaj ve Teknik Resim geliştirmesine geçilmez.
+
+## 2026-10-11 ilerlemesi
+
+- Windows native deployment düzeltildi: köprü, ijwhost ve OCCT DLL’leri ayrı native test çıktısına açıkça dağıtılır. 8 dosya dağıtım kontrolü geçti. Bunlar SM-061–072 native B-Rep testleri değildir.
+- Feature oluşturma, derinlik düzenleme ve tek ekstrüzyonun silinmesi artık sketch snapshot + feature durumu ile history kaydeder. Hatalı rebuild history yığınlarını ilerletmez.
+- 12 ek managed history kontrolü geçti; `docs/validation/feature-history-tests.log`. Bu ek kontroller 120 maddelik kabul kapsamının sayısını veya UI PASS sayısını artırmaz.
+- SM-104 artık uygulanmış fakat Windows/UI doğrulaması bekliyor. SM-107 için tek feature silme/undo geliştirildi; bağımlılık ağacı olmadığı için tam kriter hâlâ FAIL-SOURCE.
+- Genel solver, bağımlı feature rebuild ve çok seviyeli konturlar açık. Native 12 test için henüz yeni Windows PASS sonucu yok; modül tamamlanmadı.

@@ -8,6 +8,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using SrcCad.Commands;
 using SrcCad.Core.Geometry;
+using SrcCad.Core.History;
 using SrcCad.Core.Sketch;
 using SrcCad.Kernel.Occt;
 using WinForms = System.Windows.Forms;
@@ -29,8 +30,7 @@ public partial class MainWindow : Window
     private bool _hasSolid;
     private double _extrudeDepth = 20.0;
     private bool _editingExtrude;
-    private readonly Stack<double> _featureUndo = new();
-    private readonly Stack<double> _featureRedo = new();
+    private readonly TransactionalHistory<ExtrusionState> _featureHistory = new();
 
     private bool _middleDown;
     private bool _panMode;
@@ -144,7 +144,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (!_inSketch && _hasSolid && !_extrudeCommandActive &&
+        if (!_inSketch && !_extrudeCommandActive &&
             Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && e.Key == Key.Z)
         {
             UndoFeature();
@@ -152,7 +152,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (!_inSketch && _hasSolid && !_extrudeCommandActive &&
+        if (!_inSketch && !_extrudeCommandActive &&
             Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && e.Key == Key.Y)
         {
             RedoFeature();
@@ -170,6 +170,14 @@ public partial class MainWindow : Window
         if (e.Key == Key.F)
         {
             _viewer.FitAll();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Delete && !_inSketch && !_extrudeCommandActive &&
+            FeatureTree.IsKeyboardFocusWithin && FeatureTree.SelectedItem == _extrudeNode && _hasSolid)
+        {
+            DeleteExtrusionFeature();
             e.Handled = true;
             return;
         }
@@ -1616,6 +1624,7 @@ public partial class MainWindow : Window
         _sketch ??= new SketchModel(_selectedPlane);
         if (!_inSketch)
         {
+            _featureHistory.Clear();
             _sketchUndo.Clear();
             _sketchRedo.Clear();
         }
@@ -1698,7 +1707,7 @@ public partial class MainWindow : Window
 
     private bool RebuildExtrusion(double depth)
     {
-        if (_sketch is null || Math.Abs(depth) < 1e-9) return false;
+        if (_sketch is null || !double.IsFinite(depth) || Math.Abs(depth) < 1e-9) return false;
 
         var p = _sketch.Plane;
         bool ok;
@@ -1760,44 +1769,65 @@ public partial class MainWindow : Window
         return true;
     }
 
-    private void UndoFeature()
-    {
-        if (_featureUndo.Count == 0)
-        {
-            Status("Geri alınacak özellik değişikliği yok.");
-            return;
-        }
+    private ExtrusionState CaptureFeatureState()
+        => new(_sketch!.Plane, _sketch.CaptureSnapshot(), _hasSolid ? _extrudeDepth : null);
 
-        var target = _featureUndo.Pop();
-        _featureRedo.Push(_extrudeDepth);
-        if (RebuildExtrusion(target))
-            Status($"Ekstrüzyon1 geri alındı • {target:0.###} mm.");
+    private bool ApplyFeatureState(ExtrusionState state)
+    {
+        var previousSketch = _sketch;
+        var candidate = new SketchModel(state.Plane);
+        candidate.RestoreSnapshot(state.Sketch);
+        _sketch = candidate;
+        if (state.Depth is double depth)
+        {
+            if (!RebuildExtrusion(depth))
+            {
+                _sketch = previousSketch;
+                _viewer.CancelExtrusionPreview();
+                _viewer.ShowCommittedSolid();
+                return false;
+            }
+            EnsureExtrudeNode();
+        }
         else
         {
-            _featureRedo.Pop();
-            _featureUndo.Push(target);
-            Status("Ekstrüzyon1 geri alınamadı.");
+            _viewer.ClearModel();
+            _hasSolid = false;
+            if (_extrudeNode is not null) PartNode.Items.Remove(_extrudeNode);
+            _extrudeNode = null;
+            RenderSketch();
         }
+        ResetSketchInteraction();
+        ClearSketchSelection(false);
+        RefreshCommandState();
+        return true;
     }
 
-    private void RedoFeature()
+    private void EnsureExtrudeNode()
     {
-        if (_featureRedo.Count == 0)
-        {
-            Status("Yinelenecek özellik değişikliği yok.");
-            return;
-        }
+        if (_extrudeNode is not null) return;
+        _extrudeNode = new TreeViewItem { Header = "Ekstrüzyon1", Tag = "feature:extrude1" };
+        PartNode.Items.Add(_extrudeNode);
+    }
 
-        var target = _featureRedo.Pop();
-        _featureUndo.Push(_extrudeDepth);
-        if (RebuildExtrusion(target))
-            Status($"Ekstrüzyon1 yinelendi • {target:0.###} mm.");
-        else
-        {
-            _featureUndo.Pop();
-            _featureRedo.Push(target);
-            Status("Ekstrüzyon1 yinelenemedi.");
-        }
+    private void UndoFeature()
+        => Status(_featureHistory.TryUndo(ApplyFeatureState)
+            ? "Özellik işlemi geri alındı • Ctrl+Y ile yineleyin."
+            : "Özellik işlemi geri alınamadı veya geçmiş boş.");
+
+    private void RedoFeature()
+        => Status(_featureHistory.TryRedo(ApplyFeatureState)
+            ? "Özellik işlemi yinelendi • Ctrl+Z ile geri alın."
+            : "Özellik işlemi yinelenemedi veya geçmiş boş.");
+
+    private void DeleteExtrusionFeature()
+    {
+        if (_sketch is null || !_hasSolid || _extrudeCommandActive) return;
+        var before = CaptureFeatureState();
+        var after = before with { Depth = null };
+        if (!ApplyFeatureState(after)) return;
+        _featureHistory.Record(before, after);
+        Status("Ekstrüzyon1 silindi; Çizim1 korundu • Ctrl+Z ile geri alın.");
     }
 
     private void Extrude_Click(object sender, RoutedEventArgs e)
@@ -1899,7 +1929,8 @@ public partial class MainWindow : Window
 
     private void ExtrudeOk_Click(object sender, RoutedEventArgs e)
     {
-        if (!_extrudeCommandActive || !TryReadDepth(out var committedDepth)) return;
+        if (!_extrudeCommandActive || _sketch is null || !TryReadDepth(out var committedDepth)) return;
+        var beforeFeature = CaptureFeatureState();
         UpdateExtrudePreview();
         if (!_viewer.CommitExtrusion())
         {
@@ -1907,16 +1938,10 @@ public partial class MainWindow : Window
             return;
         }
 
-        {
-            if (_editingExtrude && Math.Abs(committedDepth - _extrudeDepth) > 1e-9)
-            {
-                _featureUndo.Push(_extrudeDepth);
-                _featureRedo.Clear();
-            }
-            _extrudeDepth = committedDepth;
-        }
-
+        _extrudeDepth = committedDepth;
         _hasSolid = true;
+        if (beforeFeature.Depth is null || Math.Abs(beforeFeature.Depth.Value - committedDepth) > 1e-9)
+            _featureHistory.Record(beforeFeature, CaptureFeatureState());
         _editingExtrude = false;
         _extrudeCommandActive = false;
         ExtrudePanel.Visibility = Visibility.Collapsed;
@@ -1924,11 +1949,7 @@ public partial class MainWindow : Window
         _viewer.ClearPreview();
         _viewer.SetSelectionMode(CadSelectionMode.Face);
 
-        if (_extrudeNode is null)
-        {
-            _extrudeNode = new TreeViewItem { Header = "Ekstrüzyon1", Tag = "feature:extrude1" };
-            PartNode.Items.Add(_extrudeNode);
-        }
+        EnsureExtrudeNode();
 
         ManagerTabs.SelectedItem = FeatureManagerTab;
         Status("Ekstrüzyon1 oluşturuldu • gerçek OCCT B-Rep katı • yüz seçimi aktif.");
@@ -2038,8 +2059,7 @@ public partial class MainWindow : Window
         ClearSketchSelection(false);
         _hasSolid = false;
         _editingExtrude = false;
-        _featureUndo.Clear();
-        _featureRedo.Clear();
+        _featureHistory.Clear();
         _extrudeCommandActive = false;
         ExtrudePanel.Visibility = Visibility.Collapsed;
         SketchTab.IsEnabled = false;

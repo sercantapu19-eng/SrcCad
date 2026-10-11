@@ -255,6 +255,7 @@ Console.WriteLine("SrcCad CAD core smoke tests: PASS");
 
 
 AcceptanceTests.Run();
+FeatureHistoryTests.Run();
 
 #if NATIVE_ACCEPTANCE
 NativeAcceptanceBootstrap.Run();
