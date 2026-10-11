@@ -10,6 +10,7 @@ using SrcCad.Commands;
 using SrcCad.Core.Geometry;
 using SrcCad.Core.History;
 using SrcCad.Core.Sketch;
+using SrcCad.Core.Persistence;
 using SrcCad.Kernel.Occt;
 using WinForms = System.Windows.Forms;
 
@@ -157,6 +158,14 @@ public partial class MainWindow : Window
             Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && e.Key == Key.Y)
         {
             RedoFeature();
+            e.Handled = true;
+            return;
+        }
+
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && e.Key is Key.S or Key.O)
+        {
+            if (e.Key == Key.S) SavePart_Click(this,new RoutedEventArgs());
+            else OpenPart_Click(this,new RoutedEventArgs());
             e.Handled = true;
             return;
         }
@@ -1558,6 +1567,14 @@ public partial class MainWindow : Window
         Status("Çizim düzenlemesi iptal edildi • önceki katı ve parametreler korundu.");
     }
 
+    private void CommandFamily_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button || button.ContextMenu is null) return;
+        button.ContextMenu.PlacementTarget = button;
+        button.ContextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+        button.ContextMenu.IsOpen = true;
+    }
+
     private void Line_Click(object sender, RoutedEventArgs e)
     {
         if (_sketch is not null) ActivateSketchCommand(new LineSketchCommand(_sketch));
@@ -1927,6 +1944,45 @@ public partial class MainWindow : Window
     {
         _viewer.SetSelectionMode(CadSelectionMode.Vertex);
         Status("Köşe seçimi aktif • mouse üstünde OCCT pre-highlight görünür.");
+    }
+
+    private void SavePart_Click(object sender, RoutedEventArgs e)
+    {
+        if (_sketch is null || _inSketch || _extrudeCommandActive)
+        { Status("Kaydetmeden önce çizim/özellik düzenlemesini onaylayın veya iptal edin."); return; }
+        var dialog = new Microsoft.Win32.SaveFileDialog { Filter = "SrcCad Parça (*.scpart)|*.scpart", DefaultExt = ".scpart", AddExtension = true };
+        if (dialog.ShowDialog(this) != true) return;
+        try
+        {
+            PartFile.Save(dialog.FileName,CaptureFeatureState());
+            Status("Parametrik parça kaydedildi: " + dialog.FileName);
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException or System.Text.Json.JsonException or InvalidOperationException)
+        { MessageBox.Show(this,ex.Message,"Parça kaydedilemedi",MessageBoxButton.OK,MessageBoxImage.Error); }
+    }
+
+    private void OpenPart_Click(object sender, RoutedEventArgs e)
+    {
+        if (_inSketch || _extrudeCommandActive)
+        { Status("Açmadan önce mevcut komutu onaylayın veya iptal edin."); return; }
+        var dialog = new Microsoft.Win32.OpenFileDialog { Filter = "SrcCad Parça (*.scpart)|*.scpart" };
+        if (dialog.ShowDialog(this) != true) return;
+        try
+        {
+            var state = PartFile.Load(dialog.FileName);
+            if (!ApplyFeatureState(state)) { Status("Dosya okundu fakat OCCT rebuild başarısız; mevcut belge korundu."); return; }
+            if (_sketchNode is null)
+            {
+                _sketchNode = new TreeViewItem { Header="Çizim1",Tag="sketch:1" };
+                PartNode.Items.Add(_sketchNode);
+            }
+            _featureHistory.Clear(); _sketchUndo.Clear(); _sketchRedo.Clear();
+            _selectedPlane = state.Plane;
+            _viewer.FitAll();
+            Status("Parametrik parça açıldı; ölçü ve ilişkiler düzenlenebilir: " + dialog.FileName);
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException or System.Text.Json.JsonException or InvalidOperationException)
+        { MessageBox.Show(this,ex.Message,"Parça açılamadı",MessageBoxButton.OK,MessageBoxImage.Error); }
     }
 
     private void NewPart_Click(object sender, RoutedEventArgs e)

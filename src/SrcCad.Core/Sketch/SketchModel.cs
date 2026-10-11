@@ -4,6 +4,9 @@ namespace SrcCad.Core.Sketch;
 
 public sealed record SketchPoint(int Id, Point2d Position, bool Fixed = false);
 
+[System.Text.Json.Serialization.JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]
+[System.Text.Json.Serialization.JsonDerivedType(typeof(SketchLine), "line")]
+[System.Text.Json.Serialization.JsonDerivedType(typeof(SketchCircle), "circle")]
 public abstract record SketchEntity(int Id, bool Construction);
 public sealed record SketchLine(int Id, int StartPointId, int EndPointId, bool Construction = false)
     : SketchEntity(Id, Construction);

@@ -25,3 +25,14 @@ Otomatik baseline geçmesine rağmen kullanıcı şu gerçek akışları başar�
 Mevcut 140 managed kontrol korunur. Yeni Windows/native koşu PENDING. Kullanıcı raporundaki 24 native PASS bu yeni koda aktarılmaz.
 
 Bu checkpoint **Issue #3 tamamlandı değildir**. Genel referans migration devam ediyor: legacy ilişkilerde eski başlangıç çözümü korunuyor ve residual solver fallback kullanılıyor. Tangent, Symmetric, tüm point-line ilişkileri, rank redundancy/conflict provenance, sparse/component solving, kapsamlı inference/cycling, arc/curve geometrileri açık. Midpoint referansı API'de var; viewport'ta midpoint seçim/işaretleme tam değil. .scpart round-trip, revision/dirty graph, çok-feature rebuild, persistent topology ve nested regions sonraki fazlardır. UI ve native için manuel PASS iddiası yok.
+
+
+## İkinci checkpoint: parametrik dosya + CommandManager
+
+- `.scpart` schema1: düzlem, mm birimi, sketch entity/constraint/dimension/reference snapshot ve mevcut tek ekstrüzyon parametresi. Save temp+replace kullanır; Open parametreleri yeniden kurup OCCT rebuild yapar. Bu format henüz çok-feature history/graph formatı değildir.
+- 33 gerçek JSON/dosya round-trip kontrolü: referans+construction korunması, yeniden açtıktan sonra driving edit, ilişki korunması, silme/undo referans yaşamı, schema/unit/depth/ID bozuk girdi reddi.
+- Üç düzlem × önce/edit/restore/reapply için 12 yeni gerçek OCCT reference round-trip hacim testi eklendi. **PENDING WINDOWS**. Toplam native suite artık36 kontroldür; önceki24 kullanıcı PASS bu yeni branch'in doğrulanması değildir.
+- Özgün WPF vektör ikonları; Çizgi→Çizgi/Merkez Çizgisi ve Dikdörtgen→Köşe/Merkez aileleri. Çalışmayan Arc/Slot/Fillet vb. komutlar aktifmiş gibi eklenmedi. UI görünümü/menü klavye davranışı Windows'ta PENDING.
+- Mevcut140 + Foundation102 + Roundtrip33 = **275 managed PASS**, 0 FAIL.
+
+Windows tekrar: Origin→köşe X/Y, iki merkez Ctrl-seç→Yatay/Dikey, merkez→kenar iki seçim sırası, Fix olmadan Fully Defined örneği, merkez çizgisi profilden dışlanması, .scpart aç→ölçü edit→katı rebuild; ardından `Run-SolidAcceptance.ps1` Debug/Release. Yeni native round-trip12 sonucunu ayrıca kaydedin.

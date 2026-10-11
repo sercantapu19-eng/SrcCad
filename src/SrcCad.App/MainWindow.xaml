@@ -41,6 +41,8 @@
         <Menu Grid.Row="1" Background="#FBFCFD" BorderBrush="#CDD5DC" BorderThickness="0,0,0,1">
             <MenuItem Header="Dosya">
                 <MenuItem Header="Yeni Parça" InputGestureText="Ctrl+N" Click="NewPart_Click"/>
+                <MenuItem Header="Aç…" InputGestureText="Ctrl+O" Click="OpenPart_Click"/>
+                <MenuItem Header="Farklı Kaydet…" InputGestureText="Ctrl+S" Click="SavePart_Click"/>
                 <Separator/>
                 <MenuItem Header="Çıkış" Click="Exit_Click"/>
             </MenuItem>
@@ -53,24 +55,32 @@
         <TabControl Grid.Row="2" x:Name="CommandTabs" Background="#F5F7F9" BorderBrush="#C8D1D9">
             <TabItem Header="UNSURLAR" x:Name="FeaturesTab">
                 <WrapPanel Margin="8">
-                    <Button Style="{StaticResource CommandButton}" Content="Çizim" Click="StartSketch_Click" x:Name="StartSketchButton"/>
-                    <Button Style="{StaticResource CommandButton}" Content="Ekstrüzyon" Click="Extrude_Click" x:Name="ExtrudeButton" IsEnabled="False"/>
+                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadSketchIcon}" Content="Çizim" Click="StartSketch_Click" x:Name="StartSketchButton"/>
+                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadExtrudeIcon}" Content="Ekstrüzyon" Click="Extrude_Click" x:Name="ExtrudeButton" IsEnabled="False"/>
                     <Separator Margin="8,2"/>
                     <Button Style="{StaticResource CommandButton}" Content="Yeni Parça" Click="NewPart_Click"/>
                 </WrapPanel>
             </TabItem>
             <TabItem Header="ÇİZİM" x:Name="SketchTab">
                 <WrapPanel Margin="8">
-                    <Button Style="{StaticResource CommandButton}" Content="Çizgi" Click="Line_Click" x:Name="LineButton"/>
-                    <Button Style="{StaticResource CommandButton}" Content="Köşe Noktası&#x0a;ile Dikdörtgen" Click="CornerRectangle_Click"/>
-                    <Button Style="{StaticResource CommandButton}" Content="Merkez ile&#x0a;Dikdörtgen" Click="CenterRectangle_Click"/>
-                    <Button Style="{StaticResource CommandButton}" Content="Daire" Click="Circle_Click"/>
-                    <Button Style="{StaticResource CommandButton}" Content="Merkez Çizgisi" Click="Centerline_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Çizgi ▾" Tag="{StaticResource CadLineIcon}" Click="CommandFamily_Click" x:Name="LineButton">
+                        <Button.ContextMenu><ContextMenu>
+                            <MenuItem Header="Çizgi" Click="Line_Click"/>
+                            <MenuItem Header="Merkez Çizgisi" Click="Centerline_Click"/>
+                        </ContextMenu></Button.ContextMenu>
+                    </Button>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Dikdörtgen ▾" Tag="{StaticResource CadRectangleIcon}" Click="CommandFamily_Click">
+                        <Button.ContextMenu><ContextMenu>
+                            <MenuItem Header="Köşe Dikdörtgen" Click="CornerRectangle_Click"/>
+                            <MenuItem Header="Merkez Dikdörtgen" Click="CenterRectangle_Click"/>
+                        </ContextMenu></Button.ContextMenu>
+                    </Button>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Daire" Tag="{StaticResource CadCircleIcon}" Click="Circle_Click"/>
                     <Separator Margin="8,2"/>
-                    <Button Style="{StaticResource CommandButton}" Content="Akıllı&#x0a;Ölçülendirme" Click="SmartDimension_Click" x:Name="SmartDimensionButton"/>
-                    <Button Style="{StaticResource CommandButton}" Content="İlişki&#x0a;Ekle" Click="ShowSketchRelations_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadDimensionIcon}" Content="Akıllı Ölçü" Click="SmartDimension_Click" x:Name="SmartDimensionButton"/>
+                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadRelationIcon}" Content="İlişkiler" Click="ShowSketchRelations_Click"/>
                     <Separator Margin="8,2"/>
-                    <Button Style="{StaticResource CommandButton}" Content="Çizimden&#x0a;Çık" Click="ExitSketch_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadExitSketchIcon}" Content="Çizimden Çık" Click="ExitSketch_Click"/>
                     <Button x:Name="CancelSourceSketchEditButton" Style="{StaticResource CommandButton}" Content="Düzenlemeyi&#x0a;İptal Et" Click="CancelSourceSketchEdit_Click" Visibility="Collapsed"/>
                 </WrapPanel>
             </TabItem>
