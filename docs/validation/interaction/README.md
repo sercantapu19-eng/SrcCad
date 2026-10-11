@@ -78,3 +78,10 @@ User Windows validation of a3e9d146: managed 1015 PASS; native 75 PASS; UI 10 PA
 1 FAIL at foreground/focus gate before Ctrl+Z injection. [Focus correction](09-focus.md)
 adds deferred activation/focus sequencing, launcher permission, bounded retry and
 HWND/thread diagnostics. UI remains PENDING WINDOWS; all 108 checks retained.
+
+## Feature graph and OCCT backend checkpoints
+
+[Graph foundation](10-feature-graph.md): 31 added managed contract tests; full
+managed 1046 PASS / 0 FAIL. [OCCT graph/cut backend](11-occt-feature-graph.md):
+81 new native checks PENDING WINDOWS. Native total 156; user-reported baseline
+75 applies to a3e9d146. Current UI 108 PENDING WINDOWS. Cut UI is not implemented.

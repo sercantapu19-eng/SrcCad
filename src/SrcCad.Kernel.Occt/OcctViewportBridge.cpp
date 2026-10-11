@@ -49,6 +49,16 @@
 #include <vcclr.h>
 
 #include "OcctViewportBridge.h"
+#include "OcctFeatureKernel.h"
+#include <BRepAlgoAPI_Cut.hxx>
+#include <BRepTools.hxx>
+#include <BRep_Builder.hxx>
+#include <BRepBndLib.hxx>
+#include <Bnd_Box.hxx>
+#include <TopExp.hxx>
+#include <TopTools_IndexedMapOfShape.hxx>
+#include <sstream>
+#include <msclr/marshal_cppstd.h>
 
 using namespace System;
 
@@ -696,6 +706,102 @@ namespace SrcCad::Kernel::Occt
                                     vx, vy, vz,
                                     nx, ny, nz,
                                     depth);
+    }
+
+    static void validateFeatureFrame(array<double>^ frame)
+    {
+        if (frame == nullptr || frame->Length != 13) throw gcnew ArgumentException("Feature frame requires 13 values.");
+        for each(double value in frame) if (!std::isfinite(value)) throw gcnew ArgumentException("Non-finite feature parameter.");
+        if (std::abs(frame[12]) < 1e-9) throw gcnew ArgumentException("Zero extrusion depth.");
+        gp_Vec u(frame[3],frame[4],frame[5]), v(frame[6],frame[7],frame[8]), n(frame[9],frame[10],frame[11]);
+        if (std::abs(u.Magnitude()-1)>1e-9 || std::abs(v.Magnitude()-1)>1e-9 || std::abs(n.Magnitude()-1)>1e-9 ||
+            std::abs(u.Dot(v))>1e-9 || (u.Crossed(v)-n).Magnitude()>1e-9)
+            throw gcnew ArgumentException("Invalid orthonormal feature frame.");
+    }
+
+    static TopoDS_Shape featurePrism(array<double>^ outer, array<double>^ holes, array<double>^ circleHoles,
+                                    array<double>^ circle, array<double>^ f)
+    {
+        validateFeatureFrame(f);
+        if (circle != nullptr && circle->Length > 0)
+        {
+            if (circle->Length != 3 || !std::isfinite(circle[0]) || !std::isfinite(circle[1]) ||
+                !std::isfinite(circle[2]) || circle[2] <= 1e-9) throw gcnew ArgumentException("Invalid circle profile.");
+            gp_Pnt center = planePoint(circle[0],circle[1],f[0],f[1],f[2],f[3],f[4],f[5],f[6],f[7],f[8]);
+            BRepBuilderAPI_MakeEdge edge(gp_Circ(gp_Ax2(center,gp_Dir(f[9],f[10],f[11]),gp_Dir(f[3],f[4],f[5])),circle[2]));
+            BRepBuilderAPI_MakeWire wire(edge.Edge());
+            BRepBuilderAPI_MakeFace face(wire.Wire(),true);
+            BRepPrimAPI_MakePrism prism(face.Face(),gp_Vec(f[9]*f[12],f[10]*f[12],f[11]*f[12]),true,true);
+            return prism.Shape();
+        }
+        return makePrismFromProfile(outer,holes,circleHoles,f[0],f[1],f[2],f[3],f[4],f[5],f[6],f[7],f[8],f[9],f[10],f[11],f[12]);
+    }
+    static double featureVolume(const TopoDS_Shape& shape)
+    {
+        if (shape.IsNull() || !BRepCheck_Analyzer(shape).IsValid()) throw gcnew InvalidOperationException("Invalid feature B-Rep.");
+        TopTools_IndexedMapOfShape solids; TopExp::MapShapes(shape,TopAbs_SOLID,solids);
+        if (solids.Extent()==0) throw gcnew InvalidOperationException("Feature contains no solids.");
+        GProp_GProps props; BRepGProp::VolumeProperties(shape,props);
+        if (!std::isfinite(props.Mass()) || props.Mass()<=1e-9) throw gcnew InvalidOperationException("Empty feature volume.");
+        return props.Mass();
+    }
+    static String^ encodeFeature(const TopoDS_Shape& shape)
+    {
+        featureVolume(shape);
+        std::ostringstream stream; BRepTools::Write(shape,stream);
+        return gcnew String(stream.str().c_str());
+    }
+    static TopoDS_Shape decodeFeature(String^ body)
+    {
+        if (String::IsNullOrWhiteSpace(body) || body->Length>64*1024*1024) throw gcnew ArgumentException("Invalid B-Rep data.");
+        std::istringstream stream(msclr::interop::marshal_as<std::string>(body));
+        TopoDS_Shape shape; BRep_Builder builder; BRepTools::Read(shape,stream,builder);
+        featureVolume(shape); return shape;
+    }
+    String^ OcctFeatureKernel::Extrude(array<double>^ outer, array<double>^ holes, array<double>^ circleHoles,
+                                      array<double>^ circle, array<double>^ frame)
+    {
+        try { return encodeFeature(featurePrism(outer,holes,circleHoles,circle,frame)); }
+        catch (const Standard_Failure& ex) { throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString())); }
+    }
+    String^ OcctFeatureKernel::Cut(String^ baseBody, array<double>^ outer, array<double>^ holes,
+        array<double>^ circleHoles, array<double>^ circle, array<double>^ frame, bool throughAll)
+    {
+        try
+        {
+            validateFeatureFrame(frame);
+            TopoDS_Shape baseShape=decodeFeature(baseBody); const double before=featureVolume(baseShape);
+            auto f=safe_cast<array<double>^>(frame->Clone());
+            if (throughAll)
+            {
+                Bnd_Box bounds; BRepBndLib::Add(baseShape,bounds);
+                double xmin,ymin,zmin,xmax,ymax,zmax; bounds.Get(xmin,ymin,zmin,xmax,ymax,zmax);
+                const double sign=f[12]<0?-1.0:1.0;
+                double extent=0;
+                for(int x=0;x<2;x++) for(int y=0;y<2;y++) for(int z=0;z<2;z++)
+                    extent=std::max(extent,sign*(( (x?xmax:xmin)-f[0])*f[9]+((y?ymax:ymin)-f[1])*f[10]+((z?zmax:zmin)-f[2])*f[11]));
+                if (extent<=1e-9) throw gcnew InvalidOperationException("No body in cut direction.");
+                f[12]=sign*(extent+std::max(1.0,extent*1e-6));
+            }
+            TopoDS_Shape tool=featurePrism(outer,holes,circleHoles,circle,f);
+            featureVolume(tool);
+            BRepAlgoAPI_Cut cut(baseShape,tool); cut.Build();
+            if (!cut.IsDone()) throw gcnew InvalidOperationException("OCCT Boolean Cut failed.");
+            TopoDS_Shape result=cut.Shape(); const double after=featureVolume(result);
+            if (before-after<=std::max(1e-8,before*1e-10)) throw gcnew InvalidOperationException("Cut removes no material.");
+            return encodeFeature(result);
+        }
+        catch (const Standard_Failure& ex) { throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString())); }
+    }
+    array<double>^ OcctFeatureKernel::Inspect(String^ body)
+    {
+        try
+        {
+            TopoDS_Shape shape=decodeFeature(body); TopTools_IndexedMapOfShape solids,faces,edges;
+            TopExp::MapShapes(shape,TopAbs_SOLID,solids);TopExp::MapShapes(shape,TopAbs_FACE,faces);TopExp::MapShapes(shape,TopAbs_EDGE,edges);
+            return gcnew array<double>{featureVolume(shape),(double)solids.Extent(),(double)faces.Extent(),(double)edges.Extent()};
+        }
+        catch (const Standard_Failure& ex) { throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString())); }
     }
 
     double OcctViewportBridge::MeasureExtrudedProfileVolume(array<double>^ outerUvPairs,

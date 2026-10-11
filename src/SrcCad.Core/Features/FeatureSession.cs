@@ -4,6 +4,10 @@ namespace SrcCad.Core.Features;
 
 public sealed record FeatureBuildStatus(Guid Id, RebuildState State, string? Error = null);
 public sealed record FeatureBuildReport(bool Success, IReadOnlyList<FeatureBuildStatus> Nodes, string? Error = null);
+public sealed record FeaturePreview<T>(FeatureBuildReport Report, IReadOnlyDictionary<Guid,T> Outputs) where T:class
+{
+    public bool Success=>Report.Success;
+}
 // Outputs must be immutable, owned values (e.g. B-Rep bytes), not mutable viewer state.
 public interface IFeatureEvaluator<T> where T : class
 {
@@ -41,10 +45,12 @@ public sealed class FeatureSession<T> where T : class
     public bool Undo()=>history.TryUndo(Apply);
     public bool Redo()=>history.TryRedo(Apply);
     // Preview executes the identical rebuild path in an isolated session: no live mutation/history.
-    public FeatureBuildReport Preview(FeatureDocument candidate)
+    public FeaturePreview<T> Preview(FeatureDocument candidate)
     {
         var preview=new FeatureSession<T>(this);
-        preview.Apply(candidate);return preview.LastBuild;
+        preview.Apply(candidate);
+        return new(preview.LastBuild,new System.Collections.ObjectModel.ReadOnlyDictionary<Guid,T>(
+            preview.LastBuild.Success?preview.outputs:new Dictionary<Guid,T>()));
     }
     private FeatureSession(FeatureSession<T> source)
     {

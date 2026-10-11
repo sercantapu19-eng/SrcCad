@@ -11,6 +11,7 @@
     <IntermediateOutputPath>obj\$(Platform)\$(Configuration)\native\$(TargetFramework)\</IntermediateOutputPath>
   </PropertyGroup>
   <ItemGroup Condition="'$(EnableNativeAcceptance)' == 'true'">
+    <Compile Include="..\SrcCad.App\OcctPartGeometryKernel.cs" Link="OcctPartGeometryKernel.cs" />
     <Reference Include="SrcCad.Kernel.Occt">
       <HintPath>$(NativeBridgePath)</HintPath>
       <Private>true</Private>

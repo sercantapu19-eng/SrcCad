@@ -1,8 +1,10 @@
-> **Geliştirme durumu (2026-10-11): Katı Model tamamlanmadı.** Güncel doğrulama kaydı:
-> [120 senaryolu kabul kapısı](docs/SOLID_ACCEPTANCE_120.md).
-> Issue #3 geliştirmesi sürüyor: 706 managed kontrol PASS; 8 deployment kontrolü PASS. Windows kullanıcı baseline’ı 24 native PASS; genişletilen 66 native test ve yeni UI akışı bu kaynakta PENDING. Detay: docs/validation/ISSUE_3_PHASE_A.md ve docs/CAD_ACCEPTANCE_200.md.
-> Etkileşim öncelikli son faz: hover/seçim/Delete/Ctrl menüsü/Space/çizgi Trim ve 78 Windows olay kontrolü eklendi; Windows sonucu PENDING. `tools/Run-SolidAcceptance.ps1 -RunInteraction`. Ayrıntı: [etkileşim doğrulaması](docs/validation/interaction/README.md).
-> Aşağıdaki eski sürüm notları güncel kabul sonucu olarak değerlendirilmemelidir.
+> **Geliştirme durumu (2026-10-11): Katı Model tamamlanmadı.**
+> Managed: **1046 PASS / 0 FAIL**; deployment fixture: **8/8 PASS**.
+> Kullanıcının a3e9d146 Windows baseline'ı: **75 native PASS**, UI **10 PASS / 1 FAIL** (foreground/focus gate; Ctrl+Z henüz gönderilmedi).
+> Güncel kaynak: **108 UI kontrolü ve 156 native kontrol PENDING WINDOWS**; bunların 81'i yeni feature graph/OCCT Cut testidir.
+> Çoklu feature graph/transaction/persistence çekirdeği eklendi. Cut backend'i yazıldı; Windows/native derleme ve doğrulama bekliyor. Kullanıcıya açık Cut/Fillet/Chamfer/Hole komutları henüz tamamlanmadı.
+> [Workbench durumu](docs/PART_FEATURE_WORKBENCH_STATUS.md) · [Etkileşim kanıtları](docs/validation/interaction/README.md) · [120 kabul kapısı](docs/SOLID_ACCEPTANCE_120.md).
+> Test: `tools/Run-SolidAcceptance.ps1 -RunInteraction`. Aşağıdaki eski sürüm notları güncel kabul sonucu değildir.
 
 # SrcCad V1.2 CAD Alpha
 
