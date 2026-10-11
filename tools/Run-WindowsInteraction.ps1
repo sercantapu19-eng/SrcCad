@@ -16,5 +16,5 @@ try {
     if(-not(Test-Path $ReportPath)){throw 'Application produced no UI regression report'}
     $report=Get-Content -Raw $ReportPath | ConvertFrom-Json
     $report | ConvertTo-Json -Depth 5
-    if($process.ExitCode -ne 0 -or $report.Failed -ne 0 -or -not $report.Completed -or $report.Passed -lt 78){throw 'Windows interaction regression failed'}
+    if($process.ExitCode -ne 0 -or $report.Failed -ne 0 -or -not $report.Completed -or $report.Passed -lt 108){throw 'Windows interaction regression failed'}
 } finally { $env:SRCCAD_UI_REGRESSION_REPORT=$previous }

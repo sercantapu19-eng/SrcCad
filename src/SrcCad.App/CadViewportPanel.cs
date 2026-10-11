@@ -6,6 +6,13 @@ namespace SrcCad.App;
 // input for Esc/Delete/Ctrl shortcuts, independently of the WPF focus scope.
 internal sealed class CadViewportPanel : Panel
 {
+    internal System.Func<Keys, bool>? CommandKey { get; set; }
+
+    // Ctrl shortcuts are command keys and may be consumed before KeyDown.
+    // Returning true prevents a second dispatch through KeyDown or the host.
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        => CommandKey?.Invoke(keyData) == true || base.ProcessCmdKey(ref msg, keyData);
+
     public CadViewportPanel()
     {
         SetStyle(ControlStyles.Selectable | ControlStyles.StandardClick | ControlStyles.StandardDoubleClick,true);

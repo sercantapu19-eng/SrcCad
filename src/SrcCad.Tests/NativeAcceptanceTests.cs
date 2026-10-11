@@ -51,6 +51,7 @@ internal static class NativeAcceptanceTests
         NativeThreePointTests.Run();
         NativeParallelDimensionTests.Run();
         NativeAngleEditingTests.Run();
+        NativeDeletionHistoryTests.Run();
     }
 }
 #endif

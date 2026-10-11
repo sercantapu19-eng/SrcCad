@@ -17,13 +17,17 @@ public partial class MainWindow
     [DllImport("user32.dll")] private static extern IntPtr SetFocus(IntPtr hwnd);
     [DllImport("user32.dll")] private static extern void keybd_event(byte key,byte scan,uint flags,UIntPtr extra);
 
+    [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hwnd);
+    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] private static extern IntPtr GetFocus();
+
     // Opt-in separate process. Tests HWND messages, WPF/WinForms adapters, native
     // projection and live model together; it is not a substitute for manual UX QA.
     private async void RunWindowsInteractionRegression()
     {
         var report=Environment.GetEnvironmentVariable("SRCCAD_UI_REGRESSION_REPORT")!;
         var checks=new List<string>();string? failure=null;
-        void Step(string name) => WindowsRegressionJournal.Write(new {Completed=false,Passed=checks.Count,Failed=0,Step=name,Checks=checks});
+        void Step(string name) => WindowsRegressionJournal.Write(new {Completed=false,Passed=checks.Count,Failed=0,Step=name,Checks=checks,KeyRoute=_lastKeyRoute,HistoryCommand=_lastHistoryCommand,UndoDepth=_sketchUndo.Count,RedoDepth=_sketchRedo.Count});
         void Check(bool ok,string name) {if(!ok)throw new InvalidOperationException(name);checks.Add(name);Step(name);}
         void Key(WinForms.Keys key)
         {
@@ -31,6 +35,27 @@ public partial class MainWindow
             SetFocus(_viewportPanel.Handle);
             SendMessage(_viewportPanel.Handle,0x100,(IntPtr)(int)key,IntPtr.Zero);
             SendMessage(_viewportPanel.Handle,0x101,(IntPtr)(int)key,IntPtr.Zero);
+        }
+        async Task Chord(WinForms.Keys key, bool viewport = true)
+        {
+            Step("Physical Ctrl+" + key);
+            var window = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+            Activate(); SetForegroundWindow(window);
+            if (viewport) SetFocus(_viewportPanel.Handle);
+            await Task.Delay(50);
+            if (GetForegroundWindow() != window || (viewport && GetFocus() != _viewportPanel.Handle))
+                throw new InvalidOperationException("Keyboard test requires foreground SrcCad and target focus");
+            // The whole chord goes through the OS input queue. Mixing injected Ctrl
+            // with SendMessage(Z) bypasses accelerator preprocessing and key state.
+            try
+            {
+                keybd_event(0x11,0,0,UIntPtr.Zero);
+                keybd_event((byte)key,0,0,UIntPtr.Zero);
+                keybd_event((byte)key,0,2,UIntPtr.Zero);
+            }
+            finally { keybd_event(0x11,0,2,UIntPtr.Zero); }
+            await Task.Delay(150);
+            Step("Physical chord dispatched: " + key);
         }
         (int X,int Y) Pixel(Point2d p)
         {
@@ -123,11 +148,9 @@ public partial class MainWindow
             Mouse(new(85,65),true);Check(_selectedSketchPoints.Count==0&&_selectedSketchEntities.Count==0,"blank click clears selection");
             Mouse(new(30,-40),true);Key(WinForms.Keys.Delete);
             Check(_sketch.Entity(ids[0]) is null,"HWND Delete removes selected geometry");
-            keybd_event(0x11,0,0,UIntPtr.Zero);await Task.Delay(50);Key(WinForms.Keys.Z);
-            keybd_event(0x11,0,2,UIntPtr.Zero);await Task.Delay(50);
+            await Chord(WinForms.Keys.Z);
             Check(_sketch.Entity(ids[0]) is not null,"HWND Ctrl Z restores deletion");
-            keybd_event(0x11,0,0,UIntPtr.Zero);await Task.Delay(50);Key(WinForms.Keys.Y);
-            keybd_event(0x11,0,2,UIntPtr.Zero);await Task.Delay(50);
+            await Chord(WinForms.Keys.Y);
             Check(_sketch.Entity(ids[0]) is null,"HWND Ctrl Y repeats deletion");
             Mouse(_sketch.Point(center).Position,true);
             keybd_event(0x11,0,0,UIntPtr.Zero);await Task.Delay(50);
@@ -162,8 +185,7 @@ public partial class MainWindow
             Mouse(new(0,-25),true);
             Check(_sketch.Entity(trimLine.Id) is null,"trim HWND click changes actual geometry");
             Key(WinForms.Keys.Escape);
-            keybd_event(0x11,0,0,UIntPtr.Zero);await Task.Delay(50);Key(WinForms.Keys.Z);
-            keybd_event(0x11,0,2,UIntPtr.Zero);await Task.Delay(50);
+            await Chord(WinForms.Keys.Z);
             Check(_sketch.Entity(trimLine.Id) is not null,"trim HWND Undo restores original line");
             var crossingLine=_sketch.AddLine(_sketch.CreatePointExact(new(-150,70)),_sketch.CreatePointExact(new(150,70)));
             RenderSketch();_viewer.FitAll();
@@ -172,8 +194,7 @@ public partial class MainWindow
             Drag(new(30,60),new(-30,80));
             Check(_selectedSketchEntities.Contains(crossingLine.Id),"right-to-left crossing includes intersected line");
             Key(WinForms.Keys.Delete);Check(_sketch.Entity(crossingLine.Id) is null,"window selection Delete removes selected line");
-            keybd_event(0x11,0,0,UIntPtr.Zero);await Task.Delay(50);Key(WinForms.Keys.Z);
-            keybd_event(0x11,0,2,UIntPtr.Zero);await Task.Delay(50);
+            await Chord(WinForms.Keys.Z);
             Check(_sketch.Entity(crossingLine.Id) is not null,"window selection Delete Undo restores line");
             _sketch=new SketchModel(StandardPlanes.Front);ClearSketchSelection(false);_sketchUndo.Clear();_sketchRedo.Clear();
             var pivot=_sketch.CreatePointExact(new(0,0));var endA=_sketch.CreatePointExact(new(100,0));var endB=_sketch.CreatePointExact(new(70.71067811865,70.71067811865));
@@ -187,11 +208,9 @@ public partial class MainWindow
             await EditLabel(angle.Id,"60");
             Check(Math.Abs(_sketch.Measure(_sketch.Dimension(angle.Id)!)-60)<1e-6&&Point2d.Distance(oldPoint,_sketch.Point(endB).Position)>1,"angle Enter moves actual geometry");
             Check(!_sketch.DefinitionInfo().IsConflicting&&_sketch.Revision>oldRevision,"angle constraints and revision update");
-            keybd_event(0x11,0,0,UIntPtr.Zero);await Task.Delay(50);Key(WinForms.Keys.Z);
-            keybd_event(0x11,0,2,UIntPtr.Zero);await Task.Delay(50);
+            await Chord(WinForms.Keys.Z);
             Check(Math.Abs(_sketch.Dimension(angle.Id)!.Value-45)<1e-6,"angle Ctrl Z restores 45");
-            keybd_event(0x11,0,0,UIntPtr.Zero);await Task.Delay(50);Key(WinForms.Keys.Y);
-            keybd_event(0x11,0,2,UIntPtr.Zero);await Task.Delay(50);
+            await Chord(WinForms.Keys.Y);
             Check(Math.Abs(_sketch.Dimension(angle.Id)!.Value-60)<1e-6,"angle Ctrl Y restores 60");
             await EditLabel(angle.Id,"80",cancel:true);
             Check(Math.Abs(_sketch.Dimension(angle.Id)!.Value-60)<1e-6,"angle Esc preserves prior value");
@@ -225,16 +244,58 @@ public partial class MainWindow
                 Check(Math.Abs(_sketch.Measure(_sketch.Dimension(testDimension.Id)!)-targetValue)<1e-6,"double-click audit geometry: "+type);
             }
 
-
-
-
-
+            // Additional deletion coverage follows all original 78 checks.
+            foreach (var scenario in new[] { "circle", "multi", "window", "crossing", "construction", "dimension", "relation" })
+            {
+                _sketch = new SketchModel(StandardPlanes.Front);
+                ClearSketchSelection(false); _sketchUndo.Clear(); _sketchRedo.Clear();
+                _sketch.AddCornerRectangle(new(-60,-40),new(60,40),0.001);
+                var c = _sketch.AddCircle(_sketch.CreatePointExact(new(10,10)),8);
+                var line = _sketch.AddLine(_sketch.CreatePointExact(new(-30,-10)),_sketch.CreatePointExact(new(30,-10)),true);
+                var dimension = _sketch.AddDimension(SketchDimensionType.CircleDiameter,new(25,25),entityA:c.Id);
+                var relation = _sketch.AddRelation(SketchRelationType.Horizontal,line.Id);
+                _sketch.SolveRelations(); RenderSketch(); UpdateSketchPropertyPanel(); _viewer.FitAll();
+                var before = _sketch.CaptureSnapshot(); var dof = _sketch.DefinitionInfo();
+                if (scenario == "window") Drag(new(-40,-20),new(40,30));
+                else if (scenario == "multi")
+                {
+                    Mouse(new(18,10),true);
+                    keybd_event(0x11,0,0,UIntPtr.Zero); await Task.Delay(50);
+                    Mouse(new(15,-10),true);
+                    keybd_event(0x11,0,2,UIntPtr.Zero); await Task.Delay(100);
+                    _viewportContextMenu.Close();
+                    Check(_selectedSketchEntities.Count==2,"Ctrl multi Delete fixture has two entities");
+                }
+                else if (scenario == "crossing") Drag(new(5,-15),new(-5,-5));
+                else if (scenario == "construction") Mouse(new(15,-10),true);
+                else if (scenario == "dimension") Mouse(dimension.LabelPosition,true);
+                else if (scenario == "relation")
+                {
+                    SketchRelationsList.SelectedItem = SketchRelationsList.Items.OfType<System.Windows.Controls.ListBoxItem>().Single(i=>Equals(i.Tag,relation.Id));
+                    SketchRelationsList.Focus();
+                    // Keyboard routed by WPF from the actual PropertyManager focus.
+                    keybd_event((byte)WinForms.Keys.Delete,0,0,UIntPtr.Zero);
+                    keybd_event((byte)WinForms.Keys.Delete,0,2,UIntPtr.Zero);
+                    await Task.Delay(150);
+                }
+                else Mouse(new(18,10),true);
+                if (scenario != "relation") Key(WinForms.Keys.Delete);
+                var deleted = _sketch.CaptureSnapshot();
+                Check(!SameSketch(before,deleted) && _sketchUndo.Count==1,"Delete single history entry: "+scenario);
+                if (scenario == "circle") Check(_sketch.Dimension(dimension.Id) is null,"Delete dependent dimension cleanup");
+                if (scenario == "relation") SketchRelationsList.Focus();
+                await Chord(WinForms.Keys.Z,viewport:scenario != "relation");
+                Check(SameSketch(before,_sketch.CaptureSnapshot()),"Delete Undo exact semantic snapshot: "+scenario);
+                Check(_sketch.DefinitionInfo()==dof && _sketchUndo.Count==0 && _sketchRedo.Count==1,"Delete Undo DOF and one command: "+scenario);
+                await Chord(WinForms.Keys.Y,viewport:scenario != "relation");
+                Check(SameSketch(deleted,_sketch.CaptureSnapshot()),"Delete Redo exact semantic snapshot: "+scenario);
+            }
         }
         catch(Exception ex) {failure=ex.ToString();}
         finally
         {
             keybd_event(0x11,0,2,UIntPtr.Zero);
-            WindowsRegressionJournal.Write(new {Completed=true,Scope="Windows HWND interaction; manual visual acceptance separate",Passed=checks.Count,Failed=failure is null?0:1,Checks=checks,Failure=failure});
+            WindowsRegressionJournal.Write(new {Completed=true,Scope="Windows HWND interaction; manual visual acceptance separate",Passed=checks.Count,Failed=failure is null?0:1,Checks=checks,Failure=failure,KeyRoute=_lastKeyRoute,HistoryCommand=_lastHistoryCommand,UndoDepth=_sketchUndo.Count,RedoDepth=_sketchRedo.Count});
             Application.Current.Shutdown(failure is null?0:1);
         }
     }

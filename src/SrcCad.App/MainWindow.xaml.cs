@@ -19,7 +19,7 @@ namespace SrcCad.App;
 public partial class MainWindow : Window
 {
     private readonly OcctViewportBridge _viewer = new();
-    private readonly WinForms.Panel _viewportPanel;
+    private readonly CadViewportPanel _viewportPanel;
     private readonly CadCommandManager _commandManager = new();
 
     private PlaneFrame _selectedPlane = StandardPlanes.Front;
@@ -92,16 +92,15 @@ public partial class MainWindow : Window
             _hoverSketchDimensionId=_hoverSketchPointId=_hoverSketchEntityId=-1;
             if(_inSketch)RenderSketch();
         };
-        // Native HWND focus does not reliably route keys through WPF PreviewKeyDown.
+        // Preserve the native modifier snapshot. Do not manufacture WPF events or
+        // query WPF keyboard state while the WinForms HWND owns the input.
+        _viewportPanel.CommandKey = (keyData) => HandleWindowKey(
+            KeyInterop.KeyFromVirtualKey((int)(keyData & WinForms.Keys.KeyCode)),
+            (keyData & WinForms.Keys.Control) != 0, nativeViewport: true);
         _viewportPanel.KeyDown += (_, e) =>
         {
-            var source = PresentationSource.FromVisual(this);
-            if (source is null) return;
-            var key = KeyInterop.KeyFromVirtualKey((int)e.KeyCode);
-            var routed = new System.Windows.Input.KeyEventArgs(Keyboard.PrimaryDevice, source, 0, key)
-            { RoutedEvent = Keyboard.PreviewKeyDownEvent };
-            Window_PreviewKeyDown(this, routed);
-            if (routed.Handled) { e.Handled = true; e.SuppressKeyPress = true; }
+            if (HandleWindowKey(KeyInterop.KeyFromVirtualKey((int)e.KeyCode), e.Control, nativeViewport: true))
+            { e.Handled = true; e.SuppressKeyPress = true; }
         };
 
         _viewportPanel.KeyUp += (_,e) => {if(e.KeyCode is WinForms.Keys.ControlKey or WinForms.Keys.LControlKey or WinForms.Keys.RControlKey) ShowPendingSelectionContext();};
@@ -144,94 +143,88 @@ public partial class MainWindow : Window
         Status("OCCT 3B viewport hazır • Orta tuş: döndür • Ctrl+Orta: kaydır • Wheel: zoom");
     }
 
+    private string _lastKeyRoute = "No keyboard input";
+    private string _lastHistoryCommand = "None";
     private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        => e.Handled = HandleWindowKey(e.Key, Keyboard.Modifiers.HasFlag(ModifierKeys.Control), nativeViewport: false);
+
+    private bool HandleWindowKey(Key key, bool control, bool nativeViewport)
     {
+        _lastKeyRoute = $"{(nativeViewport ? "HWND" : "WPF")} {key} Ctrl={control} undo={_sketchUndo.Count} redo={_sketchRedo.Count}";
         // A value editor owns Delete, F and text Undo/Redo while it has focus.
-        if (!_viewportPanel.ContainsFocus && Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase && e.Key != Key.Escape)
-            return;
-        if (_inSketch && ControlPressed && e.Key == Key.Z)
+        if (!nativeViewport && !_viewportPanel.ContainsFocus && Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase && key != Key.Escape)
+            return false;
+        if (_inSketch && control && key == Key.Z)
         {
             UndoSketch();
-            e.Handled = true;
-            return;
+            return true;
         }
 
-        if (_inSketch && ControlPressed && e.Key == Key.Y)
+        if (_inSketch && control && key == Key.Y)
         {
             RedoSketch();
-            e.Handled = true;
-            return;
+            return true;
         }
 
         if (!_inSketch && !_extrudeCommandActive &&
-            ControlPressed && e.Key == Key.Z)
+            control && key == Key.Z)
         {
             UndoFeature();
-            e.Handled = true;
-            return;
+            return true;
         }
 
         if (!_inSketch && !_extrudeCommandActive &&
-            ControlPressed && e.Key == Key.Y)
+            control && key == Key.Y)
         {
             RedoFeature();
-            e.Handled = true;
-            return;
+            return true;
         }
 
-        if (ControlPressed && e.Key is Key.S or Key.O)
+        if (control && key is Key.S or Key.O)
         {
-            if (e.Key == Key.S) SavePart_Click(this,new RoutedEventArgs());
+            if (key == Key.S) SavePart_Click(this,new RoutedEventArgs());
             else OpenPart_Click(this,new RoutedEventArgs());
-            e.Handled = true;
-            return;
+            return true;
         }
 
-        if (ControlPressed && e.Key == Key.N)
+        if (control && key == Key.N)
         {
             NewPart_Click(this, new RoutedEventArgs());
-            e.Handled = true;
-            return;
+            return true;
         }
 
-        if (e.Key == Key.Space)
+        if (key == Key.Space)
         {
-            ShowViewOrientation();e.Handled=true;return;
+            ShowViewOrientation();return true;
         }
-        if (e.Key == Key.F)
+        if (key == Key.F)
         {
             _viewer.FitAll();
-            e.Handled = true;
-            return;
+            return true;
         }
 
-        if (e.Key == Key.Delete && !_inSketch && !_extrudeCommandActive &&
+        if (key == Key.Delete && !_inSketch && !_extrudeCommandActive &&
             FeatureTree.IsKeyboardFocusWithin && FeatureTree.SelectedItem == _extrudeNode && _hasSolid)
         {
             DeleteExtrusionFeature();
-            e.Handled = true;
-            return;
+            return true;
         }
 
-        if (e.Key == Key.Delete && _inSketch)
+        if (key == Key.Delete && _inSketch)
         {
-            if (SketchRelationsList.IsKeyboardFocusWithin)
+            if (!_viewportPanel.ContainsFocus && SketchRelationsList.IsKeyboardFocusWithin)
                 DeleteRelation_Click(this,new RoutedEventArgs());
-            else if (SketchDimensionsList.IsKeyboardFocusWithin && SketchDimensionsList.SelectedItem is ListBoxItem selected && selected.Tag is int id)
+            else if (!_viewportPanel.ContainsFocus && SketchDimensionsList.IsKeyboardFocusWithin && SketchDimensionsList.SelectedItem is ListBoxItem selected && selected.Tag is int id)
             {
-                PushSketchUndo();
-                _sketch?.DeleteDimension(id);
-                ClearSketchSelection();
-                UpdateSketchPropertyPanel();
+                CommitSketchDeletion(dimensions: new[] { id });
             }
             else DeleteSketchSelection();
-            e.Handled = true;
-            return;
+            return true;
         }
 
-        if (e.Key == Key.Escape)
+        if (key == Key.Escape)
         {
-            if(_boxStart is not null){FinishWindowSelection(0,0,true);e.Handled=true;return;}
+            if(_boxStart is not null){FinishWindowSelection(0,0,true);return true;}
             if (_extrudeCommandActive)
             {
                 CancelExtrude();
@@ -251,8 +244,9 @@ public partial class MainWindow : Window
             {
                 LeaveSketchCommand();
             }
-            e.Handled = true;
+            return true;
         }
+        return false;
     }
 
     private void ViewportPanel_MouseDown(object? sender, WinForms.MouseEventArgs e)
@@ -780,15 +774,9 @@ public partial class MainWindow : Window
            a.Entities.SequenceEqual(b.Entities) && a.Relations.SequenceEqual(b.Relations) &&
            a.Dimensions.SequenceEqual(b.Dimensions) && a.CenterRectangles.SequenceEqual(b.CenterRectangles);
 
-    private void PushSketchUndo()
-    {
-        if (_sketch is null) return;
-        _sketchUndo.Push(_sketch.CaptureSnapshot());
-        _sketchRedo.Clear();
-    }
-
     private void UndoSketch()
     {
+        _lastHistoryCommand = "UndoSketch from " + _lastKeyRoute;
         if (_sketch is null || _sketchUndo.Count == 0)
         {
             Status("Geri alınacak çizim işlemi yok.");
@@ -796,8 +784,7 @@ public partial class MainWindow : Window
         }
 
         ResetSketchInteraction();
-        _sketchRedo.Push(_sketch.CaptureSnapshot());
-        _sketch.RestoreSnapshot(_sketchUndo.Pop(),notifyChange:true);
+        SketchSnapshotHistory.Restore(_sketch, _sketchUndo, _sketchRedo);
         MarkSourceSketchDirty();
         ClearSketchSelection(false);
         ResetSmartDimensionTargets();
@@ -809,6 +796,7 @@ public partial class MainWindow : Window
 
     private void RedoSketch()
     {
+        _lastHistoryCommand = "RedoSketch from " + _lastKeyRoute;
         if (_sketch is null || _sketchRedo.Count == 0)
         {
             Status("Yinelenecek çizim işlemi yok.");
@@ -816,8 +804,7 @@ public partial class MainWindow : Window
         }
 
         ResetSketchInteraction();
-        _sketchUndo.Push(_sketch.CaptureSnapshot());
-        _sketch.RestoreSnapshot(_sketchRedo.Pop(),notifyChange:true);
+        SketchSnapshotHistory.Restore(_sketch, _sketchRedo, _sketchUndo);
         MarkSourceSketchDirty();
         ClearSketchSelection(false);
         ResetSmartDimensionTargets();
@@ -825,6 +812,22 @@ public partial class MainWindow : Window
         UpdateSketchPropertyPanel();
         RefreshCommandState();
         Status("Çizim işlemi yinelendi • Ctrl+Z ile geri alabilirsiniz.");
+    }
+
+    private void CommitSketchDeletion(int[]? dimensions = null, int[]? relations = null)
+    {
+        if (_sketch is null) return;
+        var before = SketchDeletion.Apply(_sketch, dimensions: dimensions, relations: relations);
+        if (before is null) return;
+        _sketchUndo.Push(before);
+        _sketchRedo.Clear();
+        ResetSketchInteraction();
+        ClearSketchSelection(false);
+        ResetSmartDimensionTargets();
+        MarkSourceSketchDirty();
+        RenderSketch();
+        UpdateSketchPropertyPanel();
+        RefreshCommandState();
     }
 
     private void DeleteSketchSelection()
@@ -835,20 +838,15 @@ public partial class MainWindow : Window
             !_selectedSketchPoints.Any(id => id != 0))
             return;
 
-        PushSketchUndo();
-
-        if (_selectedSketchDimensionId >= 0)
-            _sketch.DeleteDimension(_selectedSketchDimensionId);
-
-        foreach(var dimensionId in _selectedBoxDimensions)_sketch.DeleteDimension(dimensionId);
-        foreach (var entityId in _selectedSketchEntities.ToList())
-            _sketch.DeleteEntity(entityId);
-
-        foreach (var pointId in _selectedSketchPoints.Where(id => id != 0).ToList())
-            _sketch.DeletePoint(pointId);
-
+        var before = SketchDeletion.Apply(_sketch, _selectedSketchEntities, _selectedSketchPoints,
+            _selectedBoxDimensions.Append(_selectedSketchDimensionId));
+        if (before is null) return;
+        _sketchUndo.Push(before);
+        _sketchRedo.Clear();
+        ResetSketchInteraction();
         ClearSketchSelection(false);
-        _sketch.SolveRelations();
+        ResetSmartDimensionTargets();
+        MarkSourceSketchDirty();
         RenderSketch();
         UpdateSketchPropertyPanel();
         RefreshCommandState();
@@ -1508,11 +1506,7 @@ public partial class MainWindow : Window
         if (_sketch is null || SketchRelationsList.SelectedItem is not ListBoxItem item || item.Tag is not int relationId)
             return;
 
-        PushSketchUndo();
-        _sketch.RemoveRelation(relationId);
-        _sketch.SolveRelations();
-        RenderSketch();
-        UpdateSketchPropertyPanel();
+        CommitSketchDeletion(relations: new[] { relationId });
         Status($"R{relationId} ilişkisi silindi.");
     }
 

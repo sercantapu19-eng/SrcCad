@@ -63,3 +63,11 @@ User reported the previous Windows run FAIL: Esc RoutedEvent exception, 60-secon
 Managed baseline rerun: **706 PASS / 0 FAIL** (includes 18 window-selection and 80 dimension-edit assertions). Deployment fixtures remain separate. Windows harness: **78 planned assertions, NOT RUN here**, including 45→60 geometry, Enter/Esc, invalid inputs, Undo/Redo and all eight current dimension kinds. Native suite adds **12 angle/triangle volume tests**, bringing current source coverage to **66 native tests, NOT RUN here**. Existing historical Windows baseline is not reused as proof of these changes. Raw managed evidence: `07-dimension-edit-managed.txt`.
 
 Next Windows gate: `.\tools\Run-SolidAcceptance.ps1 -RunInteraction`. If it fails, provide `logs/windows-interaction.json` and the error; it now contains the last completed/input step rather than only a 60-second timeout. Manual angle edit and drag selection acceptance remain PENDING. No Fillet/Chamfer/Cut completion claim.
+
+## 2026-10-11 Delete / Ctrl+Z checkpoint
+
+User confirmed first 10 HWND checks PASS, then `HWND Ctrl Z restores deletion`
+FAIL on `be76ed4`. See [findings and coverage](08-delete-history.md).
+Managed: 1015 PASS / 0 FAIL. Windows: 108 checks PENDING (original 78 retained).
+Native: 75 checks PENDING (9 new deletion/restore volume checks).
+Do not count this correction as Windows PASS before rerunning the script.
