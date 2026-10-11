@@ -49,6 +49,7 @@ public partial class MainWindow : Window
     private int _hoverSketchEntityId = -1;
     private int _hoverSketchPointId = -1;
     private int _hoverSketchDimensionId = -1;
+    private SketchPointerTarget? _pointerTarget;
     private int _dragSketchPointId = -1;
     private int _dragSketchDimensionId = -1;
     private SketchSnapshot? _dragSketchSnapshot;
@@ -82,6 +83,12 @@ public partial class MainWindow : Window
         _viewportPanel.MouseUp += ViewportPanel_MouseUp;
         _viewportPanel.MouseMove += ViewportPanel_MouseMove;
         _viewportPanel.MouseWheel += ViewportPanel_MouseWheel;
+        _viewportPanel.MouseLeave += (_,_) =>
+        {
+            _pointerTarget=null;
+            _hoverSketchDimensionId=_hoverSketchPointId=_hoverSketchEntityId=-1;
+            if(_inSketch)RenderSketch();
+        };
         // Native HWND focus does not reliably route keys through WPF PreviewKeyDown.
         _viewportPanel.KeyDown += (_, e) =>
         {
@@ -321,9 +328,10 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (_inSketch && _sketchCommand?.HasPendingStep == true)
+        if (_inSketch && _sketchCommand is not null)
         {
-            UpdateSketchCommandPreview(e.X, e.Y);
+            UpdateSketchHover(e.X,e.Y);
+            UpdateSketchCommandPreview(e.X,e.Y);
             return;
         }
 
@@ -435,31 +443,37 @@ public partial class MainWindow : Window
         if (snap)
         {
             var tolerance = Math.Max(1e-6, _viewer.PixelToWorldLength(10));
-            snappedPointId = _sketch.FindPointNear(uv, tolerance);
-            if (snappedPointId >= 0)
-                uv = _sketch.Point(snappedPointId).Position;
+            var target = SketchPointerProbe.Probe(_sketch,uv,tolerance);
+            if (target?.Reference.IsPointLike == true)
+            {
+                snappedPointId = target.PointId;
+                uv = target.Position;
+            }
         }
         return true;
     }
 
     private void UpdateSketchHover(int x, int y)
     {
-        if (_sketch is null || !TryGetSketchCursor(x, y, out var uv, out _)) return;
+        if (_sketch is null || !TryGetSketchCursor(x, y, out var uv, out _, snap:false)) return;
         var tolerance = Math.Max(1e-6, _viewer.PixelToWorldLength(10));
 
-        var dimensionId = _sketch.FindDimensionNear(uv, tolerance);
-        var reference = dimensionId < 0 ? _sketch.HitReference(uv, tolerance) : null;
+        var dimensionId = _sketchCommand is null ? _sketch.FindDimensionNear(uv,tolerance) : -1;
+        var target = dimensionId < 0 ? SketchPointerProbe.Probe(_sketch,uv,tolerance) : null;
+        var reference = target?.Reference;
+        var markerChanged = target != _pointerTarget;
+        _pointerTarget = target;
         var pointId = reference is { IsPointLike: true } ? _sketch.ReferencePointId(reference) : -1;
         var entityId = reference is { IsPointLike: false } ? reference.Id : -1;
 
         if (dimensionId == _hoverSketchDimensionId &&
             pointId == _hoverSketchPointId &&
-            entityId == _hoverSketchEntityId)
+            entityId == _hoverSketchEntityId && !markerChanged)
             return;
 
         _hoverSketchDimensionId = dimensionId;
         _hoverSketchPointId = pointId;
-        _hoverSketchEntityId = entityId;
+        _hoverSketchEntityId = reference?.Kind == GeometryReferenceKind.Midpoint ? reference.Id : entityId;
         RenderSketch();
     }
 
@@ -977,6 +991,18 @@ public partial class MainWindow : Window
             _viewer.AddStyledSketchPoint(w.X, w.Y, w.Z, state);
         }
 
+        if (_pointerTarget is { Reference.IsPointLike: true } target)
+        {
+            var p=World(target.Position);var size=Math.Max(1e-6,_viewer.PixelToWorldLength(5));
+            foreach(var pair in new[]{(new Point2d(target.Position.X-size,target.Position.Y-size),new Point2d(target.Position.X+size,target.Position.Y+size)),
+                (new Point2d(target.Position.X-size,target.Position.Y+size),new Point2d(target.Position.X+size,target.Position.Y-size))})
+            {
+                var a=World(pair.Item1);var b=World(pair.Item2);
+                _viewer.AddStyledSketchLine(a.X,a.Y,a.Z,b.X,b.Y,b.Z,2);
+            }
+            var label=World(new Point2d(target.Position.X+size*2,target.Position.Y+size*2));
+            _viewer.AddSketchText(label.X,label.Y,label.Z,target.Label,2);
+        }
         foreach (var dimension in _sketch.Dimensions)
             RenderDimension(dimension);
 
