@@ -55,6 +55,15 @@ public partial class MainWindow
                 SendMessage(_viewportPanel.Handle,0x202,IntPtr.Zero,pos);
             }
         }
+        void Drag(Point2d a,Point2d b)
+        {
+            var p=Pixel(a);var q=Pixel(b);
+            var begin=(IntPtr)((p.Y<<16)|(p.X&0xffff));var end=(IntPtr)((q.Y<<16)|(q.X&0xffff));
+            Step("Window drag");SetFocus(_viewportPanel.Handle);
+            SendMessage(_viewportPanel.Handle,0x201,(IntPtr)1,begin);
+            SendMessage(_viewportPanel.Handle,0x200,(IntPtr)1,end);
+            SendMessage(_viewportPanel.Handle,0x202,IntPtr.Zero,end);
+        }
         try
         {
             await Task.Delay(300);
@@ -117,6 +126,17 @@ public partial class MainWindow
             keybd_event(0x11,0,0,UIntPtr.Zero);await Task.Delay(50);Key(WinForms.Keys.Z);
             keybd_event(0x11,0,2,UIntPtr.Zero);await Task.Delay(50);
             Check(_sketch.Entity(trimLine.Id) is not null,"trim HWND Undo restores original line");
+            var crossingLine=_sketch.AddLine(_sketch.CreatePointExact(new(-150,70)),_sketch.CreatePointExact(new(150,70)));
+            RenderSketch();_viewer.FitAll();
+            Drag(new(-30,60),new(30,80));
+            Check(!_selectedSketchEntities.Contains(crossingLine.Id),"left-to-right window excludes partial line");
+            Drag(new(30,60),new(-30,80));
+            Check(_selectedSketchEntities.Contains(crossingLine.Id),"right-to-left crossing includes intersected line");
+            Key(WinForms.Keys.Delete);Check(_sketch.Entity(crossingLine.Id) is null,"window selection Delete removes selected line");
+            keybd_event(0x11,0,0,UIntPtr.Zero);await Task.Delay(50);Key(WinForms.Keys.Z);
+            keybd_event(0x11,0,2,UIntPtr.Zero);await Task.Delay(50);
+            Check(_sketch.Entity(crossingLine.Id) is not null,"window selection Delete Undo restores line");
+
 
 
         }

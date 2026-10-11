@@ -231,6 +231,7 @@ public partial class MainWindow : Window
 
         if (e.Key == Key.Escape)
         {
+            if(_boxStart is not null){FinishWindowSelection(0,0,true);e.Handled=true;return;}
             if (_extrudeCommandActive)
             {
                 CancelExtrude();
@@ -319,6 +320,7 @@ public partial class MainWindow : Window
 
         if (e.Button == WinForms.MouseButtons.Left)
         {
+            if(_boxStart is not null){FinishWindowSelection(e.X,e.Y);return;}
             if (_dragSketchChanged && _dragSketchSnapshot is not null)
             {
                 _sketchUndo.Push(_dragSketchSnapshot);
@@ -334,6 +336,7 @@ public partial class MainWindow : Window
 
     private void ViewportPanel_MouseMove(object? sender, WinForms.MouseEventArgs e)
     {
+        if(_boxStart is not null){UpdateWindowSelection(e.X,e.Y);return;}
         if (_middleDown)
         {
             if (_panMode)
@@ -573,7 +576,10 @@ public partial class MainWindow : Window
         }
 
         var toggle = (WinForms.Control.ModifierKeys & WinForms.Keys.Control) == WinForms.Keys.Control;
-        SelectSketchAt(x, y, toggle);
+        if(!SelectSketchAt(x, y, toggle))
+        {
+            BeginWindowSelection(x,y,toggle);return;
+        }
         _selectionContextPending = toggle && CurrentSketchReferences().Length >= 2;
 
         // Ölçü metni tek tıkla seçilip SOLIDWORKS'teki gibi sürüklenebilir.
@@ -684,6 +690,7 @@ public partial class MainWindow : Window
     {
         _selectionContextPending=false;
         _viewportContextMenu.Close();
+        _selectedBoxDimensions.Clear();
         _selectedSketchEntities.Clear();
         _selectedSketchPoints.Clear();
         _selectedSketchDimensionId = -1;
@@ -832,7 +839,7 @@ public partial class MainWindow : Window
     private void DeleteSketchSelection()
     {
         if (_sketch is null) return;
-        if (_selectedSketchDimensionId < 0 &&
+        if (_selectedSketchDimensionId < 0 && _selectedBoxDimensions.Count == 0 &&
             _selectedSketchEntities.Count == 0 &&
             !_selectedSketchPoints.Any(id => id != 0))
             return;
@@ -842,6 +849,7 @@ public partial class MainWindow : Window
         if (_selectedSketchDimensionId >= 0)
             _sketch.DeleteDimension(_selectedSketchDimensionId);
 
+        foreach(var dimensionId in _selectedBoxDimensions)_sketch.DeleteDimension(dimensionId);
         foreach (var entityId in _selectedSketchEntities.ToList())
             _sketch.DeleteEntity(entityId);
 
@@ -1025,7 +1033,7 @@ public partial class MainWindow : Window
     {
         if (_sketch is null) return;
 
-        var state = _selectedSketchDimensionId == dimension.Id ||
+        var state = _selectedBoxDimensions.Contains(dimension.Id) || _selectedSketchDimensionId == dimension.Id ||
                     _hoverSketchDimensionId == dimension.Id
             ? 2
             : 5;

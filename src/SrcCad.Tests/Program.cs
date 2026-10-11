@@ -263,6 +263,7 @@ PartFileTests.Run();
 GeneralConstraintTests.Run();
 ParallelDimensionTests.Run();
 TrimInteractionTests.Run();
+WindowSelectionTests.Run();
 ThreePointToolTests.Run();
 PerformanceSmokeTests.Run();
 
