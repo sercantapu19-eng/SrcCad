@@ -19,6 +19,11 @@ public sealed partial class SketchModel
             return new[]{Point2d.Distance(Point(c.CenterPointId).Position,Point(circleB.CenterPointId).Position)-target};
         }
         var a=ResolvePoint(r.ReferenceA!);
+        if(r.ReferenceB!.Kind==GeometryReferenceKind.Circle)
+        {
+            var circle=(SketchCircle)Entity(r.ReferenceB.Id)!;
+            return new[]{Point2d.Distance(a,Point(circle.CenterPointId).Position)-circle.Radius};
+        }
         if(r.ReferenceB!.IsLine)
         {
             var line=(SketchLine)Entity(r.ReferenceB.Id)!;

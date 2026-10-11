@@ -1373,6 +1373,8 @@ public partial class MainWindow : Window
     {
         if (!_inSketch) return;
         LeaveSketchCommand();
+        _smartDimensionMode = false;
+        ResetSmartDimensionTargets();
         ManagerTabs.SelectedItem = PropertyManagerTab;
         UpdateSketchPropertyPanel();
         Status("Çizim ilişkileri: geometriyi seçip ilişki düğmesini kullanın.");
@@ -1585,6 +1587,16 @@ public partial class MainWindow : Window
     private void Line_Click(object sender, RoutedEventArgs e)
     {
         if (_sketch is not null) ActivateSketchCommand(new LineSketchCommand(_sketch));
+    }
+
+    private void ThreePointCircle_Click(object sender,RoutedEventArgs e)
+    {
+        if (_sketch is not null) ActivateSketchCommand(new ThreePointCircleCommand(_sketch));
+    }
+
+    private void ThreePointRectangle_Click(object sender,RoutedEventArgs e)
+    {
+        if (_sketch is not null) ActivateSketchCommand(new ThreePointRectangleCommand(_sketch));
     }
 
     private void Centerline_Click(object sender, RoutedEventArgs e)

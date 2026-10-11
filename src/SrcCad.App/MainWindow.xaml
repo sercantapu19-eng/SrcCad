@@ -73,9 +73,15 @@
                         <Button.ContextMenu><ContextMenu>
                             <MenuItem Header="Köşe Dikdörtgen" Click="CornerRectangle_Click"/>
                             <MenuItem Header="Merkez Dikdörtgen" Click="CenterRectangle_Click"/>
+                            <MenuItem Header="3 Noktalı Köşe Dikdörtgen" Click="ThreePointRectangle_Click"/>
                         </ContextMenu></Button.ContextMenu>
                     </Button>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Daire" Tag="{StaticResource CadCircleIcon}" Click="Circle_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Daire ▾" Tag="{StaticResource CadCircleIcon}" Click="CommandFamily_Click">
+                        <Button.ContextMenu><ContextMenu>
+                            <MenuItem Header="Merkez-Yarıçap Dairesi" Click="Circle_Click"/>
+                            <MenuItem Header="3 Nokta Dairesi" Click="ThreePointCircle_Click"/>
+                        </ContextMenu></Button.ContextMenu>
+                    </Button>
                     <Separator Margin="8,2"/>
                     <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadDimensionIcon}" Content="Akıllı Ölçü" Click="SmartDimension_Click" x:Name="SmartDimensionButton"/>
                     <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadRelationIcon}" Content="İlişkiler" Click="ShowSketchRelations_Click"/>

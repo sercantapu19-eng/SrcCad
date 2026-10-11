@@ -448,6 +448,12 @@ public sealed partial class SketchModel
         foreach (var center in CenterRectangles)
             used.Add(center.CenterPointId);
 
+        // Standalone point references (e.g. snapped three-point circle inputs)
+        // remain part of the sketch even when an unrelated entity is deleted.
+        foreach (var reference in Relations.SelectMany(r => new[] { r.ReferenceA,r.ReferenceB })
+                     .Concat(Dimensions.SelectMany(d => new[] { d.ReferenceA,d.ReferenceB })))
+            if (reference is { Kind: GeometryReferenceKind.Point }) used.Add(reference.Id);
+
         foreach (var pointId in Points.Keys.Where(id => !used.Contains(id)).ToList())
         {
             Points.Remove(pointId);
@@ -745,6 +751,7 @@ public sealed partial class SketchModel
         var b0 = Point(second.StartPointId).Position;
         var b1 = Point(second.EndPointId).Position;
         var angle = Math.Atan2(a1.Y - a0.Y, a1.X - a0.X) + offset;
+        if ((b1.X-b0.X)*Math.Cos(angle)+(b1.Y-b0.Y)*Math.Sin(angle)<0) angle+=Math.PI;
         var length = Point2d.Distance(b0, b1);
         if (length < 1e-9) return;
 

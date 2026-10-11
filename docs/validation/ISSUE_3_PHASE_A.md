@@ -47,3 +47,13 @@ Point-line Coincident/Midpoint; line-circle ve circle-circle Tangent ilişkileri
 `docs/CAD_ACCEPTANCE_200.md` tam200 benzersiz ID ve requirement/type/test/status/implementation/failure-notes alanlarını içerir. PARTIAL/PENDING/TODO maddeleri tamamlandı sayılmaz. Diğer modüllere geçilmedi.
 
 Sıfır eksen mesafesi de desteklendi: Origin ile aynı X/Y üzerindeki noktaya 0 ölçüsü konulup sonradan15 mm yapılabilir. Uzunluk/çap/açı için pozitif değer kuralı korunur.
+
+
+## Dördüncü checkpoint: gerçek araç genişlemesi
+
+- 3 nokta dairesi: çevrel çember geometrisi, collinear ret, yakalanan mevcut noktalar için point-circle Coincident, paylaşılan solver ve gerçek rank. Sabit üç noktayla belirlenen dairede çakışan çap değişimi reddedilir.
+- 3 noktalı köşe dikdörtgen: döndürülmüş kapalı profil, paralel/dik ilişkiler, sürücü kenar boyutları ve .scpart sonrası edit. Parallel başlangıç adımı mevcut ters yönü korur.
+- ConstructionLine yanında Line/Axis semantik referansı ortak line dimension sistemine katılır.
+- 39 yeni managed araç kontrolü;100/500 entity üzerinde200 doğru hit için2 ölçek smoke senaryosu. Host'a bağlı süreler `phase-b-tools-managed.txt`; Windows gecikme kabulü değildir.
+-9 yeni gerçek native volume kontrolü: üç düzlemde döndürülmüş rectangle önce/ölçü edit ve3point circle hole. **PENDING WINDOWS**. Native suite toplam45; bu tur native çalıştırılmadı.
+- Managed toplam **367 PASS / 0 FAIL**; ayrıca deployment8/8 PASS. Yeni managed227; önceki140 korunuyor.

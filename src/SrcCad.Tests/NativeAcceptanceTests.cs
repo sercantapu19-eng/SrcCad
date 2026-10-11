@@ -48,6 +48,7 @@ internal static class NativeAcceptanceTests
         }
         Console.WriteLine("NATIVE SOURCE SKETCH REGRESSION: 12/12 PASS (before/edit/restore/reapply geometry)");
         NativeReferenceRoundtripTests.Run();
+        NativeThreePointTests.Run();
     }
 }
 #endif

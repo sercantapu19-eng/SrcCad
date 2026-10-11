@@ -9,9 +9,9 @@ Test sınıfları `src/SrcCad.Tests/`; model dosyaları `src/SrcCad.Core/Sketch/
 | ID | Category | Requirement | Automated/manual | Test name | Current status | Implementation reference | Failure notes |
 |---|---|---|---|---|---|---|---|
 | CAD-001 | SKETCH | Line endpoints model coordinates | Automated | AcceptanceTests | PASS-MANAGED | SketchModel.cs | Managed model kanıtı; Windows UI için genellenmez. |
-| CAD-002 | SKETCH | Corner rectangle shared corners | Automated | AcceptanceTests | PASS-MANAGED | SketchModel.cs | Managed model kanıtı; Windows UI için genellenmez. |
+| CAD-002 | SKETCH | Corner and rotated three-point rectangles | Automated | AcceptanceTests / ThreePointToolTests | PASS-MANAGED | SketchModel.cs | Managed model kanıtı; Windows UI için genellenmez. |
 | CAD-003 | SKETCH | Center rectangle symmetry | Automated | AcceptanceTests | PASS-MANAGED | SketchModel.cs | Managed model kanıtı; Windows UI için genellenmez. |
-| CAD-004 | SKETCH | Circle center and radius | Automated | AcceptanceTests | PASS-MANAGED | SketchModel.cs | Managed model kanıtı; Windows UI için genellenmez. |
+| CAD-004 | SKETCH | Circle center/radius and three-point creation | Automated | AcceptanceTests / ThreePointToolTests | PASS-MANAGED | SketchModel.cs | Managed model kanıtı; Windows UI için genellenmez. |
 | CAD-005 | SKETCH | Construction line semantic flag | Automated | SketchFoundationTests | PASS-MANAGED | SketchCommands.cs | Managed model kanıtı; Windows UI için genellenmez. |
 | CAD-006 | SKETCH | Construction excluded from region | Automated | SketchFoundationTests | PASS-MANAGED | SketchModel.cs | Managed model kanıtı; Windows UI için genellenmez. |
 | CAD-007 | SKETCH | Derived midpoint reference | Automated | SketchFoundationTests | PASS-MANAGED | GeometryReference.cs | Managed model kanıtı; Windows UI için genellenmez. |
@@ -190,8 +190,8 @@ Test sınıfları `src/SrcCad.Tests/`; model dosyaları `src/SrcCad.Core/Sketch/
 | CAD-180 | ROBUSTNESS | Large-coordinate solver accuracy | Automated + manual | — | TODO | — | Kabul kanıtı yok; PASS sayılmaz. |
 | CAD-181 | ROBUSTNESS | Repeated rebuild determinism | Automated + manual | — | TODO | — | Kabul kanıtı yok; PASS sayılmaz. |
 | CAD-182 | ROBUSTNESS | Negative solution branch preservation | Automated + manual | — | TODO | — | Kabul kanıtı yok; PASS sayılmaz. |
-| CAD-183 | PERFORMANCE | 100-entity hit-test profile | Automated + manual | — | TODO | — | Kabul kanıtı yok; PASS sayılmaz. |
-| CAD-184 | PERFORMANCE | 500-entity hit-test profile | Automated + manual | — | TODO | — | Kabul kanıtı yok; PASS sayılmaz. |
+| CAD-183 | PERFORMANCE | 100-entity hit-test profile | Automated | PerformanceSmokeTests | PASS-MANAGED | GeometryReference.cs | Host ölçümü; Windows UI latency veya solver scaling kabulü değildir. |
+| CAD-184 | PERFORMANCE | 500-entity hit-test profile | Automated | PerformanceSmokeTests | PASS-MANAGED | GeometryReference.cs | Host ölçümü; Windows UI latency veya solver scaling kabulü değildir. |
 | CAD-185 | PERFORMANCE | 100-entity solver profile | Automated + manual | — | TODO | — | Kabul kanıtı yok; PASS sayılmaz. |
 | CAD-186 | PERFORMANCE | 500-entity solver profile | Automated + manual | — | TODO | — | Kabul kanıtı yok; PASS sayılmaz. |
 | CAD-187 | PERFORMANCE | Constraint-heavy rank profile | Automated + manual | — | TODO | — | Kabul kanıtı yok; PASS sayılmaz. |
@@ -211,6 +211,6 @@ Test sınıfları `src/SrcCad.Tests/`; model dosyaları `src/SrcCad.Core/Sketch/
 
 ## Durum sayımı
 
-34 PASS-MANAGED, 101 TODO, 56 PARTIAL, 9 PENDING-WINDOWS. Toplam200. Bu sayılar test/assertion toplamı değildir.
+36 PASS-MANAGED, 99 TODO, 56 PARTIAL, 9 PENDING-WINDOWS. Toplam200. Bu sayılar test/assertion toplamı değildir.
 
-Mevcut managed test toplamı326 PASS / 0 FAIL. Native suite36 kontrol: mevcut24 baseline kullanıcı Windows PASS bildirimli; yeni12 ve değişen kaynağın tamamı bu tur PENDING. Windows manuel sorunları kullanıcı yeniden doğrulamadan kapatılmaz.
+Mevcut managed test toplamı367 PASS / 0 FAIL. Native suite45 kontrol: mevcut24 baseline kullanıcı Windows PASS bildirimli; yeni21 ve değişen kaynağın tamamı bu tur PENDING. Windows manuel sorunları kullanıcı yeniden doğrulamadan kapatılmaz.

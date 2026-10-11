@@ -3,11 +3,11 @@ using SrcCad.Core.Geometry;
 namespace SrcCad.Core.Sketch;
 
 // Identity is model-space and semantic; no pixel coordinates are persisted.
-public enum GeometryReferenceKind { Point, Origin, Endpoint, CenterPoint, Midpoint, Line, ConstructionLine, Circle }
+public enum GeometryReferenceKind { Point, Origin, Endpoint, CenterPoint, Midpoint, Line, ConstructionLine, Circle, Axis }
 public sealed record GeometryReference(GeometryReferenceKind Kind, int Id, int Slot = 0)
 {
     public bool IsPointLike => Kind is GeometryReferenceKind.Point or GeometryReferenceKind.Origin or GeometryReferenceKind.Endpoint or GeometryReferenceKind.CenterPoint or GeometryReferenceKind.Midpoint;
-    public bool IsLine => Kind is GeometryReferenceKind.Line or GeometryReferenceKind.ConstructionLine;
+    public bool IsLine => Kind is GeometryReferenceKind.Line or GeometryReferenceKind.ConstructionLine or GeometryReferenceKind.Axis;
 }
 
 public sealed partial class SketchModel
@@ -24,6 +24,8 @@ public sealed partial class SketchModel
         var line = Lines().FirstOrDefault(l => l.StartPointId == id || l.EndPointId == id);
         return line is null ? new(GeometryReferenceKind.Point, id) : new(GeometryReferenceKind.Endpoint, line.Id, line.StartPointId == id ? 0 : 1);
     }
+    public GeometryReference AxisReference(int lineId)
+        => Entity(lineId) is SketchLine ? new(GeometryReferenceKind.Axis,lineId) : throw new ArgumentException("Eksen için çizgi referansı gerekli.");
     public GeometryReference ReferenceForEntity(int id) => Entity(id) switch
     {
         SketchLine l => new(l.Construction ? GeometryReferenceKind.ConstructionLine : GeometryReferenceKind.Line, id),
@@ -70,8 +72,10 @@ public sealed partial class SketchModel
             if(a.IsLine && b.IsPointLike || a.Kind==GeometryReferenceKind.Circle && b.IsLine) (a,b)=(b,a);
             bool pair=a.IsPointLike&&b.IsPointLike && type is SketchRelationType.Horizontal or SketchRelationType.Vertical or SketchRelationType.Coincident;
             bool pointLine=a.IsPointLike&&b.IsLine && type is SketchRelationType.Coincident or SketchRelationType.Midpoint;
+            if(a.Kind==GeometryReferenceKind.Circle && b.IsPointLike)(a,b)=(b,a);
+            bool pointCircle=a.IsPointLike&&b.Kind==GeometryReferenceKind.Circle&&type==SketchRelationType.Coincident;
             bool tangent=type==SketchRelationType.Tangent && (a.IsLine&&b.Kind==GeometryReferenceKind.Circle || a.Kind==GeometryReferenceKind.Circle&&b.Kind==GeometryReferenceKind.Circle);
-            if(pair||pointLine||tangent)
+            if(pair||pointLine||pointCircle||tangent)
             {
                 var before=CaptureSnapshot();
                 try

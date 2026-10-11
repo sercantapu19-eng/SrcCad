@@ -261,6 +261,8 @@ SourceSketchEditTests.Run();
 SketchFoundationTests.Run();
 PartFileTests.Run();
 GeneralConstraintTests.Run();
+ThreePointToolTests.Run();
+PerformanceSmokeTests.Run();
 
 #if NATIVE_ACCEPTANCE
 NativeAcceptanceBootstrap.Run();
