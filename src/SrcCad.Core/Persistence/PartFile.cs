@@ -78,6 +78,8 @@ public sealed record PartFile(int SchemaVersion, string Units, ExtrusionState Mo
                 if(!Enum.IsDefined(d.Type)||!double.IsFinite(d.Value)||d.Value<0||!double.IsFinite(d.LabelPosition.X)||!double.IsFinite(d.LabelPosition.Y)||d.Sense is not 1 and not -1)
                     throw new InvalidDataException("Geçersiz ölçü.");
                 Ref(d.ReferenceA);Ref(d.ReferenceB);
+                if(d.Type==SketchDimensionType.ParallelLineDistance && (d.ReferenceA?.IsLine!=true || d.ReferenceB?.IsLine!=true))
+                    throw new InvalidDataException("Paralel mesafe iki çizgi referansı gerektirir.");
             }
             if(model.DefinitionInfo().IsConflicting)throw new InvalidDataException("Sketch kısıtları tutarsız.");
             if(state.Depth is not null&&!model.TryGetExtrusionProfile(out _,out _,out _)&&!model.TryGetSingleCircle(out _))

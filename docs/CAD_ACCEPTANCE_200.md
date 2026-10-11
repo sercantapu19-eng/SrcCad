@@ -55,7 +55,7 @@ Test sınıfları `src/SrcCad.Tests/`; model dosyaları `src/SrcCad.Core/Sketch/
 | CAD-045 | DIMENSION | Center-vertical edge distance | Automated + manual | SketchFoundationTests / AcceptanceTests | PARTIAL | GeometryReference.cs; SmartDimensionSession.cs | Managed alt kapsam mevcut; Windows kullanıcı akışı tekrar gerekli. |
 | CAD-046 | DIMENSION | Center-horizontal edge distance | Automated + manual | SketchFoundationTests / AcceptanceTests | PARTIAL | GeometryReference.cs; SmartDimensionSession.cs | Managed alt kapsam mevcut; Windows kullanıcı akışı tekrar gerekli. |
 | CAD-047 | DIMENSION | Point-oblique line distance | Automated | GeneralConstraintTests | PASS-MANAGED | GeometryReference.cs | GeneralConstraintTests: üç düzlemde gerçek dik mesafe doğrulandı; Windows UI PENDING. |
-| CAD-048 | DIMENSION | Parallel line distance | Automated + manual | — | TODO | — | Kabul kanıtı yok; PASS sayılmaz. |
+| CAD-048 | DIMENSION | Parallel line distance | Automated + manual | ParallelDimensionTests; NativeParallelDimensionTests (PENDING) | PARTIAL | GeometryReference.cs; SketchConstraintSystem.cs | 205 managed assertions; yatay/dikey/eğik, ters sıra, construction, zero, save/open, rollback ve alan. Windows UI/native bekliyor. |
 | CAD-049 | DIMENSION | Two-line angle | Automated + manual | SketchFoundationTests / AcceptanceTests | PARTIAL | GeometryReference.cs; SmartDimensionSession.cs | Managed alt kapsam mevcut; Windows kullanıcı akışı tekrar gerekli. |
 | CAD-050 | DIMENSION | Reference dimension remains read-only | Automated + manual | SketchFoundationTests / AcceptanceTests | PARTIAL | GeometryReference.cs; SmartDimensionSession.cs | Managed alt kapsam mevcut; Windows kullanıcı akışı tekrar gerekli. |
 | CAD-051 | SOLVER | Rectangle and two circles zero DOF without Fix | Automated | SketchFoundationTests | PASS-MANAGED | SketchConstraintSystem.cs | Managed model kanıtı; Windows UI için genellenmez. |
@@ -211,6 +211,6 @@ Test sınıfları `src/SrcCad.Tests/`; model dosyaları `src/SrcCad.Core/Sketch/
 
 ## Durum sayımı
 
-36 PASS-MANAGED, 99 TODO, 56 PARTIAL, 9 PENDING-WINDOWS. Toplam200. Bu sayılar test/assertion toplamı değildir.
+36 PASS-MANAGED, 98 TODO, 57 PARTIAL, 9 PENDING-WINDOWS. Toplam200. Bu sayılar test/assertion toplamı değildir.
 
-Mevcut managed test toplamı367 PASS / 0 FAIL. Native suite45 kontrol: mevcut24 baseline kullanıcı Windows PASS bildirimli; yeni21 ve değişen kaynağın tamamı bu tur PENDING. Windows manuel sorunları kullanıcı yeniden doğrulamadan kapatılmaz.
+Mevcut managed test toplamı572 PASS / 0 FAIL. Native suite54 kontrol: mevcut24 baseline kullanıcı Windows PASS bildirimli; yeni30 ve değişen kaynağın tamamı bu tur PENDING. Windows manuel sorunları kullanıcı yeniden doğrulamadan kapatılmaz.

@@ -48,7 +48,8 @@ public enum SketchDimensionType
     HorizontalDistance,
     VerticalDistance,
     Angle,
-    PointLineDistance
+    PointLineDistance,
+    ParallelLineDistance
 }
 
 public sealed record SketchDimension(
@@ -352,7 +353,7 @@ public sealed partial class SketchModel
         if (index < 0) return false;
 
         var dim = Dimensions[index];
-        if (value <= 1e-9 && dim.Type is not SketchDimensionType.HorizontalDistance and not SketchDimensionType.VerticalDistance and not SketchDimensionType.PointLineDistance) return false;
+        if (value <= 1e-9 && dim.Type is not SketchDimensionType.HorizontalDistance and not SketchDimensionType.VerticalDistance and not SketchDimensionType.PointLineDistance and not SketchDimensionType.ParallelLineDistance) return false;
         if (dim.Type == SketchDimensionType.Angle && value >= 180) return false;
         var before = CaptureSnapshot();
         if (!dim.Driving)
@@ -552,7 +553,7 @@ public sealed partial class SketchModel
         if (Circles().Any(c => !double.IsFinite(c.Radius) || c.Radius<=1e-9)) return false;
         if (Lines().Any(l => Point2d.Distance(Point(l.StartPointId).Position, Point(l.EndPointId).Position) <= 1e-9)) return false;
         if (Dimensions.Any(d => d.Driving && (!double.IsFinite(Measure(d)) || Math.Abs(Measure(d)-d.Value)>eps))) return false;
-        if (Dimensions.Any(d => d.Driving && d.ReferenceA is not null && Math.Abs(SignedReferenceMeasure(d)-d.Sense*d.Value)>eps)) return false;
+        if (Dimensions.Any(d => d.Driving && d.ReferenceA is not null && ReferenceDimensionResiduals(d).Any(v => !double.IsFinite(v) || Math.Abs(v)>eps))) return false;
         foreach (var rectangle in CenterRectangles)
         {
             var c = Point(rectangle.CenterPointId).Position;

@@ -39,6 +39,17 @@ public sealed partial class SketchModel
             _ => new[]{double.NaN}
         };
     }
+    private IEnumerable<double> ReferenceDimensionResiduals(SketchDimension d)
+    {
+        yield return SignedReferenceMeasure(d)-d.Sense*d.Value;
+        if(d.Type==SketchDimensionType.ParallelLineDistance)
+        {
+            var a=(SketchLine)Entity(d.ReferenceA!.Id)!;
+            var b=(SketchLine)Entity(d.ReferenceB!.Id)!;
+            yield return SignedLineDistance(Point(a.EndPointId).Position,
+                Point(b.StartPointId).Position,Point(b.EndPointId).Position)-d.Sense*d.Value;
+        }
+    }
     private double[] ConstraintResiduals()
     {
         var values=new List<double>();
@@ -73,7 +84,9 @@ public sealed partial class SketchModel
                     values.Add((r.Type==SketchRelationType.Parallel?ax*by-ay*bx:ax*bx+ay*by)/Math.Max(1e-12,Len(a!)*Len(b!)));break;
             }
         }
-        foreach(var d in Dimensions.Where(d=>d.Driving)) values.Add(d.ReferenceA is null ? Measure(d)-d.Value : SignedReferenceMeasure(d)-d.Sense*d.Value);
+        foreach(var d in Dimensions.Where(d=>d.Driving))
+            if(d.ReferenceA is null) values.Add(Measure(d)-d.Value);
+            else values.AddRange(ReferenceDimensionResiduals(d));
         foreach(var r in CenterRectangles)
         {
             var c=Point(r.CenterPointId).Position;

@@ -57,3 +57,11 @@ Sıfır eksen mesafesi de desteklendi: Origin ile aynı X/Y üzerindeki noktaya 
 - 39 yeni managed araç kontrolü;100/500 entity üzerinde200 doğru hit için2 ölçek smoke senaryosu. Host'a bağlı süreler `phase-b-tools-managed.txt`; Windows gecikme kabulü değildir.
 -9 yeni gerçek native volume kontrolü: üç düzlemde döndürülmüş rectangle önce/ölçü edit ve3point circle hole. **PENDING WINDOWS**. Native suite toplam45; bu tur native çalıştırılmadı.
 - Managed toplam **367 PASS / 0 FAIL**; ayrıca deployment8/8 PASS. Yeni managed227; önceki140 korunuyor.
+
+## Checkpoint 5 — parallel carrier driving dimensions
+
+SmartDimensionSession body selection routes line/construction/axis pairs through common inference. Parallel/antiparallel carriers produce a perpendicular distance instead of a 0/180-degree angle. Two signed endpoint equations enforce both separation and parallelism; rank counts both independent constraints. Zero distance, side preservation, edits, snapshots, deletion and JSON round-trip use the same model contract. Nonparallel pairs retain angle inference.
+
+Managed baseline rerun: 572 PASS / 0 FAIL. ParallelDimensionTests adds 205 assertions across 3 planes, 3 orientations and both selection orders, plus rotated closed-profile area verification. This is parameterized regression coverage, not 205 distinct acceptance items. Raw output: `phase-b-parallel-managed.txt`.
+
+NativeParallelDimensionTests adds 9 production OCCT volume checks: rotated profile before/after distance edit and after save/open/edit on each plane. Current native suite: 54 tests, 30 newly added beyond the user's historical 24. All 54 remain PENDING on the current source; no native execution on Linux. CAD-048 is PARTIAL, not closed before Windows input and B-Rep validation.

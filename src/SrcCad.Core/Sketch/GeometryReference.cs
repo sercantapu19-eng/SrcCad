@@ -130,7 +130,18 @@ public sealed partial class SketchModel
             return d with {Value=Measure(d),Sense=ReferenceDimensionSense(d)};
         }
         if(a.IsLine && b.IsLine)
+        {
+            var first=(SketchLine)Entity(a.Id)!;var second=(SketchLine)Entity(b.Id)!;
+            var p=Point(first.StartPointId).Position;var q=Point(first.EndPointId).Position;
+            var u=Point(second.StartPointId).Position;var v=Point(second.EndPointId).Position;
+            var length=Point2d.Distance(u,v);
+            if(length>1e-9 && Math.Abs(SignedLineDistance(v,p,q)-SignedLineDistance(u,p,q))/length<1e-8)
+            {
+                var d=new SketchDimension(-1,SketchDimensionType.ParallelLineDistance,0,label,EntityA:a.Id,EntityB:b.Id,ReferenceA:a,ReferenceB:b);
+                return d with {Value=Measure(d),Sense=ReferenceDimensionSense(d)};
+            }
             return new(-1,SketchDimensionType.Angle,Measure(SketchDimensionType.Angle,a.Id,b.Id,-1,-1),label,EntityA:a.Id,EntityB:b.Id);
+        }
         return null;
     }
     private double SignedReferenceMeasure(SketchDimension d)
@@ -138,7 +149,7 @@ public sealed partial class SketchModel
         var (a,b)=DimensionReferencePoints(d);
         if(d.Type==SketchDimensionType.HorizontalDistance)return b.X-a.X;
         if(d.Type==SketchDimensionType.VerticalDistance)return b.Y-a.Y;
-        if(d.Type==SketchDimensionType.PointLineDistance)
+        if(d.Type is SketchDimensionType.PointLineDistance or SketchDimensionType.ParallelLineDistance)
         {
             var l=(SketchLine)Entity(d.ReferenceB!.Id)!;
             return SignedLineDistance(a,Point(l.StartPointId).Position,Point(l.EndPointId).Position);
@@ -153,7 +164,11 @@ public sealed partial class SketchModel
     }
     public (Point2d A,Point2d B) DimensionReferencePoints(SketchDimension d)
     {
-        var a=ResolvePoint(d.ReferenceA!);
+        // A line distance uses a live endpoint on the first carrier and its
+        // projection onto the second. Both carrier endpoints enter the solver.
+        var a=d.Type==SketchDimensionType.ParallelLineDistance
+            ? Point(((SketchLine)Entity(d.ReferenceA!.Id)!).StartPointId).Position
+            : ResolvePoint(d.ReferenceA!);
         if(d.ReferenceB!.IsPointLike) return (a,ResolvePoint(d.ReferenceB));
         var l=(SketchLine)Entity(d.ReferenceB.Id)!;
         var p=Point(l.StartPointId).Position;var q=Point(l.EndPointId).Position;

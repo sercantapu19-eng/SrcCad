@@ -601,7 +601,7 @@ public partial class MainWindow : Window
 
         var unit = dimension.Type == SketchDimensionType.Angle ? "°" : "mm";
         var dialog = new DimensionEditDialog("Ölçüyü Değiştir", _sketch.Measure(dimension), unit,
-            dimension.Type is SketchDimensionType.HorizontalDistance or SketchDimensionType.VerticalDistance or SketchDimensionType.PointLineDistance)
+            dimension.Type is SketchDimensionType.HorizontalDistance or SketchDimensionType.VerticalDistance or SketchDimensionType.PointLineDistance or SketchDimensionType.ParallelLineDistance)
         {
             Owner = this
         };

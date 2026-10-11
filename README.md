@@ -1,6 +1,6 @@
 > **Geliştirme durumu (2026-10-11): Katı Model tamamlanmadı.** Güncel doğrulama kaydı:
 > [120 senaryolu kabul kapısı](docs/SOLID_ACCEPTANCE_120.md).
-> Issue #3 geliştirmesi sürüyor: 367 managed kontrol PASS; 8 deployment kontrolü PASS. Windows kullanıcı baseline’ı 24 native PASS; genişletilen 45 native test ve yeni UI akışı bu kaynakta PENDING. Detay: docs/validation/ISSUE_3_PHASE_A.md ve docs/CAD_ACCEPTANCE_200.md.
+> Issue #3 geliştirmesi sürüyor: 572 managed kontrol PASS; 8 deployment kontrolü PASS. Windows kullanıcı baseline’ı 24 native PASS; genişletilen 54 native test ve yeni UI akışı bu kaynakta PENDING. Detay: docs/validation/ISSUE_3_PHASE_A.md ve docs/CAD_ACCEPTANCE_200.md.
 > Aşağıdaki eski sürüm notları güncel kabul sonucu olarak değerlendirilmemelidir.
 
 # SrcCad V1.2 CAD Alpha
