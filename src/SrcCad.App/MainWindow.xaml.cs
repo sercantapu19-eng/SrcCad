@@ -128,10 +128,12 @@ public partial class MainWindow : Window
     private void ViewportPanel_HandleCreated(object? sender, EventArgs e)
     {
         if (_viewer.IsInitialized()) return;
+        WindowsRegressionJournal.Write(new {Completed=false,Passed=0,Failed=0,Step="OCCT viewport initialization"});
         var ok = _viewer.Init(_viewportPanel.Handle);
         if (!ok)
         {
             Status("OCCT viewport başlatılamadı. COLLECT_DIAGNOSTICS.bat çalıştırın.");
+            if(WindowsRegressionJournal.Active)throw new InvalidOperationException("OCCT viewport initialization failed");
             MessageBox.Show("OCCT 3B görüntüleyici başlatılamadı.", "SrcCad", MessageBoxButton.OK, MessageBoxImage.Error);
             return;
         }

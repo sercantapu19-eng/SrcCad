@@ -8,9 +8,13 @@ $previous=$env:SRCCAD_UI_REGRESSION_REPORT
 try {
     $env:SRCCAD_UI_REGRESSION_REPORT=$ReportPath
     $process=Start-Process -FilePath $AppPath -WorkingDirectory (Split-Path $AppPath) -PassThru
-    if(-not $process.WaitForExit(60000)){ $process.Kill(); throw 'UI regression timed out (60s)' }
+    if(-not $process.WaitForExit(60000)){
+        $process.Kill()
+        $last=if(Test-Path $ReportPath){Get-Content -Raw $ReportPath}else{'No startup checkpoint written'}
+        throw "UI regression timed out (60s). Last checkpoint: $last"
+    }
     if(-not(Test-Path $ReportPath)){throw 'Application produced no UI regression report'}
     $report=Get-Content -Raw $ReportPath | ConvertFrom-Json
     $report | ConvertTo-Json -Depth 5
-    if($process.ExitCode -ne 0 -or $report.Failed -ne 0 -or $report.Passed -lt 25){throw 'Windows interaction regression failed'}
+    if($process.ExitCode -ne 0 -or $report.Failed -ne 0 -or -not $report.Completed -or $report.Passed -lt 25){throw 'Windows interaction regression failed'}
 } finally { $env:SRCCAD_UI_REGRESSION_REPORT=$previous }

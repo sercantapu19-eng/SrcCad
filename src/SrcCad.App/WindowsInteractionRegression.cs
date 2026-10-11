@@ -23,9 +23,11 @@ public partial class MainWindow
     {
         var report=Environment.GetEnvironmentVariable("SRCCAD_UI_REGRESSION_REPORT")!;
         var checks=new List<string>();string? failure=null;
-        void Check(bool ok,string name) {if(!ok)throw new InvalidOperationException(name);checks.Add(name);}
+        void Step(string name) => WindowsRegressionJournal.Write(new {Completed=false,Passed=checks.Count,Failed=0,Step=name,Checks=checks});
+        void Check(bool ok,string name) {if(!ok)throw new InvalidOperationException(name);checks.Add(name);Step(name);}
         void Key(WinForms.Keys key)
         {
+            Step("Key: "+key);
             SetFocus(_viewportPanel.Handle);
             SendMessage(_viewportPanel.Handle,0x100,(IntPtr)(int)key,IntPtr.Zero);
             SendMessage(_viewportPanel.Handle,0x101,(IntPtr)(int)key,IntPtr.Zero);
@@ -41,6 +43,7 @@ public partial class MainWindow
         }
         void Mouse(Point2d p,bool click=false)
         {
+            Step($"Mouse: {p} click={click}");
             var q=Pixel(p);
             if(q.X<0||q.Y<0||q.X>=_viewportPanel.Width||q.Y>=_viewportPanel.Height)throw new Exception("Test pick outside viewport");
             var pos=(IntPtr)((q.Y<<16)|(q.X&0xffff));
@@ -121,7 +124,7 @@ public partial class MainWindow
         finally
         {
             keybd_event(0x11,0,2,UIntPtr.Zero);
-            File.WriteAllText(report,System.Text.Json.JsonSerializer.Serialize(new {Scope="Windows HWND interaction; manual visual acceptance separate",Passed=checks.Count,Failed=failure is null?0:1,Checks=checks,Failure=failure},new System.Text.Json.JsonSerializerOptions{WriteIndented=true}));
+            WindowsRegressionJournal.Write(new {Completed=true,Scope="Windows HWND interaction; manual visual acceptance separate",Passed=checks.Count,Failed=failure is null?0:1,Checks=checks,Failure=failure});
             Application.Current.Shutdown(failure is null?0:1);
         }
     }
