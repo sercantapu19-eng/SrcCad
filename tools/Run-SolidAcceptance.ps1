@@ -45,7 +45,18 @@ try {
     if ($process.ExitCode -ne 0) { throw 'Kabul testleri basarisiz; solid-acceptance.log ve solid-deployment.log dosyalarina bakin.' }
     $nativePasses = @(Select-String -Path "$logs\solid-acceptance.log" -Pattern '^SM-0(6[1-9]|7[0-2]) PASS ')
     if ($nativePasses.Count -ne 12) { throw '12 native testin tamami calismadi; sonuc kabul edilmiyor.' }
-    Write-Host '72 otomatik kontrol gecti. SM-073..120 ayrica uygulanmalidir; Kati Model tamamlandi sayilmaz.'
+    # Extra regressions are not new SM acceptance IDs, but must not be silently skipped.
+    foreach ($summary in @(
+        '^FEATURE HISTORY: 12/12 PASS ',
+        '^INTERACTION REGRESSION: 50 PASS ',
+        '^SOURCE SKETCH EDIT: 18 PASS ',
+        '^NATIVE SOURCE SKETCH REGRESSION: 12/12 PASS '
+    )) {
+        if (@(Select-String -Path "$logs\solid-acceptance.log" -Pattern $summary).Count -ne 1) {
+            throw "Ek regresyon paketi eksik veya tekrarlandi: $summary"
+        }
+    }
+    Write-Host '72 kabul kontrolu ve ek regresyon paketleri gecti. SM-073..120 ve Windows manuel akisi ayrica dogrulanmalidir; Kati Model tamamlandi sayilmaz.'
 } finally {
     $env:PATH = $previousPath
     Pop-Location
