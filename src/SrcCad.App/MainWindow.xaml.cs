@@ -29,6 +29,7 @@ public partial class MainWindow : Window
     private bool _extrudeCommandActive;
     private bool _hasSolid;
     private double _extrudeDepth = 20.0;
+    private ExtrusionState? _sourceSketchEditBefore;
     private bool _editingExtrude;
     private readonly ExtrusionDepthWheel _depthWheel = new();
     private readonly TransactionalHistory<ExtrusionState> _featureHistory = new();
@@ -202,6 +203,10 @@ public partial class MainWindow : Window
                 ResetSmartDimensionTargets();
                 ClearSketchSelection();
                 Status("Akıllı Ölçülendirme kapatıldı • seçim modu.");
+            }
+            else if (_inSketch && _sketchCommand is null && _sourceSketchEditBefore is not null)
+            {
+                CancelSourceSketchEdit_Click(this, new RoutedEventArgs());
             }
             else if (_inSketch)
             {
@@ -1616,16 +1621,17 @@ public partial class MainWindow : Window
 
     private void StartSketch_Click(object sender, RoutedEventArgs e)
     {
+        if (_inSketch || _extrudeCommandActive) return;
         if (_hasSolid)
         {
-            Status("V1.2 Alpha taban katı oluştuktan sonra yeni yüz sketch'i henüz desteklemiyor. Yeni Parça ile başlayın.");
-            return;
+            _sourceSketchEditBefore = CaptureFeatureState();
+            _viewer.HideCommittedSolid();
         }
 
         _sketch ??= new SketchModel(_selectedPlane);
         if (!_inSketch)
         {
-            _featureHistory.Clear();
+            if (!_hasSolid) _featureHistory.Clear();
             _sketchUndo.Clear();
             _sketchRedo.Clear();
         }
@@ -1667,6 +1673,24 @@ public partial class MainWindow : Window
     private void ExitSketch_Click(object sender, RoutedEventArgs e)
     {
         if (!_inSketch) return;
+        if (_sourceSketchEditBefore is { } before)
+        {
+            var after = CaptureFeatureState();
+            if (!SameSketch(before.Sketch, after.Sketch))
+            {
+                if (!_featureHistory.TryCommit(before, after, ApplyFeatureState))
+                {
+                    _viewer.HideCommittedSolid();
+                    RenderSketch();
+                    Status("Kaynak çizimden katı oluşturulamadı. Çizimi düzeltin veya Düzenlemeyi İptal Et ile eski katıya dönün.");
+                    return;
+                }
+            }
+            _viewer.ShowCommittedSolid();
+            _viewer.ClearSketch();
+            _viewer.ClearPreview();
+            _sourceSketchEditBefore = null;
+        }
         LeaveSketchCommand();
         _inSketch = false;
         _smartDimensionMode = false;
@@ -1678,12 +1702,23 @@ public partial class MainWindow : Window
         CommandTabs.SelectedItem = FeaturesTab;
         ManagerTabs.SelectedItem = FeatureManagerTab;
 
-        if (_sketch is not null && (_sketch.TryGetClosedPolyline(out _) || _sketch.TryGetSingleCircle(out _)))
+        if (_hasSolid)
+            Status("Çizim düzenlemesi uygulandı • bağımlı Ekstrüzyon1 yeniden oluşturuldu • Ctrl+Z ile geri alın.");
+        else if (_sketch is not null && (_sketch.TryGetClosedPolyline(out _) || _sketch.TryGetSingleCircle(out _)))
             Status("Çizimden çıkıldı • kapalı profil hazır • Ekstrüzyon kullanılabilir.");
         else
             Status("Çizimden çıkıldı • ekstrüzyon için tek kapalı profil gerekiyor.");
 
         RefreshCommandState();
+    }
+
+    private void CancelSourceSketchEdit_Click(object sender, RoutedEventArgs e)
+    {
+        if (_sourceSketchEditBefore is not { } before || _sketch is null) return;
+        _sketch.RestoreSnapshot(before.Sketch);
+        // Exit sees the unchanged snapshot: no rebuild and no history entry.
+        ExitSketch_Click(sender, e);
+        Status("Çizim düzenlemesi iptal edildi • önceki katı ve parametreler korundu.");
     }
 
     private void Line_Click(object sender, RoutedEventArgs e)
@@ -1983,6 +2018,13 @@ public partial class MainWindow : Window
 
     private void FeatureTree_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
+        if (_inSketch || _extrudeCommandActive) return;
+        if (FeatureTree.SelectedItem is TreeViewItem sketchItem && sketchItem.Tag as string == "sketch:1")
+        {
+            StartSketch_Click(sender, e);
+            e.Handled = true;
+            return;
+        }
         if (FeatureTree.SelectedItem is not TreeViewItem item ||
             item.Tag is not string tag ||
             tag != "feature:extrude1" ||
@@ -2052,6 +2094,7 @@ public partial class MainWindow : Window
         _commandContext = null;
         _viewer.ClearModel();
         _sketch = null;
+        _sourceSketchEditBefore = null;
         ResetSketchInteraction();
         _sketchUndo.Clear();
         _sketchRedo.Clear();
@@ -2082,7 +2125,9 @@ public partial class MainWindow : Window
 
     private void RefreshCommandState()
     {
-        StartSketchButton.IsEnabled = !_inSketch && !_hasSolid;
+        StartSketchButton.IsEnabled = !_inSketch && !_extrudeCommandActive;
+        StartSketchButton.Content = _hasSolid ? "Çizimi Düzenle" : "Çizim";
+        CancelSourceSketchEditButton.Visibility = _sourceSketchEditBefore is null ? Visibility.Collapsed : Visibility.Visible;
         ExtrudeButton.IsEnabled = !_inSketch && !_hasSolid && _sketch is not null &&
                                   (_sketch.TryGetExtrusionProfile(out _, out _) || _sketch.TryGetSingleCircle(out _));
     }

@@ -181,3 +181,11 @@ Windows tekrar turu (SM-084, SM-088, SM-120 alt senaryoları; henüz PASS değil
 3. Origin ile dikdörtgen köşesini iki farklı seçim sırasıyla ölçülendir. X=40, Y=50 ver; Origin sabit, köşe (40,50), profil kapalı kalmalı. Çift tıkla düzenle, Ctrl+Z/Y ve Esc ile iptali kontrol et.
 
 Tam Windows/WPF olay yönlendirmesi doğrulanmadan bu üç kullanıcı hatası kapatılmış kabul edilmeyecek.
+
+## Kaynak çizim düzenleme ilerlemesi
+
+SM-105 için tek mevcut Ekstrüzyon1'in kaynak çizimi artık Çizimi Düzenle düğmesi veya FeatureManager Çizim1 çift tıklamasıyla açılır. Çizimden çıkmak OCCT rebuild yapar; onay tek feature history adımıdır. Geçersiz profil düzenleme oturumunda kalır, history ilerlemez. Düzenlemeyi İptal Et veya seçim modunda Esc eski çizimi ve katıyı geri getirir. Yeni yüz sketch'i veya genel çok-feature bağımlılık grafiği henüz uygulanmadı.
+
+18 managed işlem kontrolü geçti (`docs/validation/source-sketch-tests.log`). Native suite'e üç düzlemde önce/düzenle/geri yükle/yeniden uygula için 12 gerçek hacim kontrolü eklendi; **bu yeni native kontroller henüz Windows'ta çalıştırılmadı**. Önceki 12 PASS bildirimi yeni testlere aktarılmaz.
+
+Windows'ta: 100×60×20 katı oluştur; Çizim1'i düzenleyip genişliği150 yap, çıkışta katı150×60×20 olmalı; Ctrl+Z/Y ile iki geometriye dön. Tek kenarı silip çıkmayı dene: başarısız rebuild sonrası düzeltme veya iptal mümkün olmalı. İptal eski100/150 genişliği korumalı ve redo geçmişini silmemeli. SM-105 ve tam SM-073–120 kabulü bu akış doğrulanana kadar açık.

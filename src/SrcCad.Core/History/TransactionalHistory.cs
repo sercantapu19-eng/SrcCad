@@ -15,6 +15,14 @@ public sealed class TransactionalHistory<T>
         redo.Clear();
     }
 
+    public bool TryCommit(T before, T after, Func<T, bool> apply)
+    {
+        ArgumentNullException.ThrowIfNull(apply);
+        if (!apply(after)) return false;
+        Record(before, after);
+        return true;
+    }
+
     public bool TryUndo(Func<T, bool> apply)
     {
         ArgumentNullException.ThrowIfNull(apply);

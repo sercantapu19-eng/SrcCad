@@ -70,6 +70,7 @@
                     <Button Style="{StaticResource CommandButton}" Content="İlişki&#x0a;Ekle" Click="ShowSketchRelations_Click"/>
                     <Separator Margin="8,2"/>
                     <Button Style="{StaticResource CommandButton}" Content="Çizimden&#x0a;Çık" Click="ExitSketch_Click"/>
+                    <Button x:Name="CancelSourceSketchEditButton" Style="{StaticResource CommandButton}" Content="Düzenlemeyi&#x0a;İptal Et" Click="CancelSourceSketchEdit_Click" Visibility="Collapsed"/>
                 </WrapPanel>
             </TabItem>
             <TabItem Header="SAC LEVHA" IsEnabled="False"/>
