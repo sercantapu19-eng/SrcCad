@@ -8,7 +8,7 @@ internal sealed class CadViewportPanel : Panel
 {
     public CadViewportPanel()
     {
-        SetStyle(ControlStyles.Selectable,true);
+        SetStyle(ControlStyles.Selectable | ControlStyles.StandardClick | ControlStyles.StandardDoubleClick,true);
         TabStop=true;
     }
     protected override void OnMouseDown(MouseEventArgs e)

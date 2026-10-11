@@ -98,7 +98,8 @@ public partial class MainWindow : Window
             var source = PresentationSource.FromVisual(this);
             if (source is null) return;
             var key = KeyInterop.KeyFromVirtualKey((int)e.KeyCode);
-            var routed = new System.Windows.Input.KeyEventArgs(Keyboard.PrimaryDevice, source, 0, key);
+            var routed = new System.Windows.Input.KeyEventArgs(Keyboard.PrimaryDevice, source, 0, key)
+            { RoutedEvent = Keyboard.PreviewKeyDownEvent };
             Window_PreviewKeyDown(this, routed);
             if (routed.Handled) { e.Handled = true; e.SuppressKeyPress = true; }
         };
