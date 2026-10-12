@@ -43,4 +43,22 @@ internal sealed class OcctPartGeometryKernel : IPartGeometryKernel
         ExtrusionTermination termination,bool reverse)
         => OcctFeatureKernel.Hole(baseBody,faceReference,center.X,center.Y,center.Z,diameter,depth,
             termination==ExtrusionTermination.ThroughAll,reverse);
+
+    private static double[] Axis(SketchModel source,int axisEntityId)
+    {
+        var line=source.Entity(axisEntityId) as SketchLine;
+        if(line is null||!line.Construction)throw new InvalidOperationException("Revolve requires a construction centerline axis.");
+        var a=source.Plane.SketchToWorld(source.Point(line.StartPointId).Position.X,source.Point(line.StartPointId).Position.Y);
+        var b=source.Plane.SketchToWorld(source.Point(line.EndPointId).Position.X,source.Point(line.EndPointId).Position.Y);
+        if((b-a).Length<1e-9)throw new InvalidOperationException("Revolve axis has zero length.");
+        return new[]{a.X,a.Y,a.Z,b.X,b.Y,b.Z};
+    }
+    public string Revolve(SketchModel source,int axisEntityId,double angleDegrees,bool reverse)
+    {
+        var p=Pack(source,1);return OcctFeatureKernel.Revolve(p.Outer,p.Holes,p.CircleHoles,p.Circle,p.Frame,Axis(source,axisEntityId),angleDegrees,reverse);
+    }
+    public string RevolveCut(string baseBody,SketchModel source,int axisEntityId,double angleDegrees,bool reverse)
+    {
+        var p=Pack(source,1);return OcctFeatureKernel.RevolveCut(baseBody,p.Outer,p.Holes,p.CircleHoles,p.Circle,p.Frame,Axis(source,axisEntityId),angleDegrees,reverse);
+    }
 }

@@ -7,7 +7,7 @@ using SrcCad.Core.Persistence;
 
 namespace SrcCad.Core.Features;
 
-public enum FeatureKind { Sketch, Extrude, ExtrudedCut, Fillet, Chamfer, Hole }
+public enum FeatureKind { Sketch, Extrude, ExtrudedCut, Fillet, Chamfer, Hole, Revolve, RevolvedCut }
 public enum RebuildState { Clean, Dirty, Suppressed, Blocked, Failed }
 public enum ExtrusionTermination { Blind, ThroughAll }
 public enum TopologyKind { Body, Face, Edge, Vertex }
@@ -21,6 +21,8 @@ public sealed record FeatureReference(Guid ProducerId, TopologyKind Kind, string
 [JsonDerivedType(typeof(FilletFeatureParameters), "fillet")]
 [JsonDerivedType(typeof(ChamferFeatureParameters), "chamfer")]
 [JsonDerivedType(typeof(HoleFeatureParameters), "hole")]
+[JsonDerivedType(typeof(RevolveFeatureParameters), "revolve")]
+[JsonDerivedType(typeof(RevolveCutFeatureParameters), "revolved-cut")]
 public abstract record FeatureParameters;
 public sealed record SketchFeatureParameters(PlaneFrame Plane, SketchSnapshot Sketch) : FeatureParameters;
 public sealed record ExtrudeFeatureParameters(Guid SketchId, double Depth) : FeatureParameters;
@@ -30,6 +32,8 @@ public sealed record FilletFeatureParameters(Guid BaseFeatureId, double Radius) 
 public sealed record ChamferFeatureParameters(Guid BaseFeatureId, double Distance) : FeatureParameters;
 public sealed record HoleFeatureParameters(Guid BaseFeatureId, Vector3d Center, double Diameter, double Depth,
     ExtrusionTermination Termination = ExtrusionTermination.Blind, bool Reverse = true) : FeatureParameters;
+public sealed record RevolveFeatureParameters(Guid SketchId, int AxisEntityId, double AngleDegrees = 360, bool Reverse = false) : FeatureParameters;
+public sealed record RevolveCutFeatureParameters(Guid BaseFeatureId, Guid SketchId, int AxisEntityId, double AngleDegrees = 360, bool Reverse = false) : FeatureParameters;
 public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Parameters,
     bool Suppressed = false, FeatureReference[]? References = null)
 {
@@ -37,6 +41,7 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
     { SketchFeatureParameters => FeatureKind.Sketch, ExtrudeFeatureParameters => FeatureKind.Extrude,
       CutFeatureParameters => FeatureKind.ExtrudedCut, FilletFeatureParameters => FeatureKind.Fillet,
       ChamferFeatureParameters => FeatureKind.Chamfer, HoleFeatureParameters => FeatureKind.Hole,
+      RevolveFeatureParameters => FeatureKind.Revolve, RevolveCutFeatureParameters => FeatureKind.RevolvedCut,
       _ => throw new InvalidDataException("Unsupported feature") };
     [JsonIgnore] public Guid[] Dependencies => (Parameters switch
     {
@@ -45,6 +50,8 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
         FilletFeatureParameters f => new[] { f.BaseFeatureId },
         ChamferFeatureParameters c => new[] { c.BaseFeatureId },
         HoleFeatureParameters h => new[] { h.BaseFeatureId },
+        RevolveFeatureParameters r => new[] { r.SketchId },
+        RevolveCutFeatureParameters r => new[] { r.BaseFeatureId,r.SketchId },
         _ => Array.Empty<Guid>()
     }).Concat((References ?? Array.Empty<FeatureReference>()).Select(r=>r.ProducerId)).Distinct().ToArray();
 }
@@ -155,6 +162,19 @@ public static class FeatureDocumentFile
                        node.References is null||node.References.Length!=1||node.References[0].Kind!=TopologyKind.Face||
                        node.References[0].ProducerId!=h.BaseFeatureId)
                         throw new InvalidDataException("Invalid hole.");
+                    break;
+                case RevolveFeatureParameters r:
+                    if(!double.IsFinite(r.AngleDegrees)||r.AngleDegrees<=1e-9||r.AngleDegrees>360.0||
+                       document.Node(r.SketchId).Parameters is not SketchFeatureParameters rs||
+                       !rs.Sketch.Entities.OfType<SketchLine>().Any(l=>l.Id==r.AxisEntityId&&l.Construction))
+                        throw new InvalidDataException("Invalid revolve.");
+                    break;
+                case RevolveCutFeatureParameters r:
+                    if(!double.IsFinite(r.AngleDegrees)||r.AngleDegrees<=1e-9||r.AngleDegrees>360.0||
+                       document.Node(r.BaseFeatureId).Kind==FeatureKind.Sketch||
+                       document.Node(r.SketchId).Parameters is not SketchFeatureParameters rcs||
+                       !rcs.Sketch.Entities.OfType<SketchLine>().Any(l=>l.Id==r.AxisEntityId&&l.Construction))
+                        throw new InvalidDataException("Invalid revolved cut.");
                     break;
                 default:throw new InvalidDataException("Unsupported feature parameters.");
             }

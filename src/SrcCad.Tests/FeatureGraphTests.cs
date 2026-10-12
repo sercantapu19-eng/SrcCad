@@ -21,6 +21,8 @@ internal static class FeatureGraphTests
                 FilletFeatureParameters p=>p.Radius,
                 ChamferFeatureParameters p=>p.Distance,
                 HoleFeatureParameters p=>p.Depth,
+                RevolveFeatureParameters p=>p.AngleDegrees,
+                RevolveCutFeatureParameters p=>p.AngleDegrees,
                 _=>1
             };
             return new(own+dependencies.Values.Sum(x=>x.Value));
@@ -96,6 +98,22 @@ internal static class FeatureGraphTests
         Check(holeClone.Node(holeNode.Id).Kind==FeatureKind.Hole&&
               ((HoleFeatureParameters)holeClone.Node(holeNode.Id).Parameters).Diameter==8,
             "hole parameters and persistent face reference roundtrip");
+
+        var revolveSketch=new SketchModel(StandardPlanes.Front);
+        var axisA=revolveSketch.CreatePointExact(new(0,-10));
+        var axisB=revolveSketch.CreatePointExact(new(0,50));
+        var axis=revolveSketch.AddLine(axisA,axisB,true);
+        revolveSketch.AddCornerRectangle(new(5,0),new(15,20),.001);
+        var revolveSketchNode=new FeatureNode(Guid.NewGuid(),"ÇizimR",new SketchFeatureParameters(StandardPlanes.Front,revolveSketch.CaptureSnapshot()));
+        var revolveNode=new FeatureNode(Guid.NewGuid(),"Döndürme1",new RevolveFeatureParameters(revolveSketchNode.Id,axis.Id,360));
+        var revolveDoc=new FeatureDocument(Guid.NewGuid(),new[]{revolveSketchNode,revolveNode});
+        Check(FeatureDocumentFile.Clone(revolveDoc).Node(revolveNode.Id).Kind==FeatureKind.Revolve,
+            "revolve axis and angle roundtrip");
+        var revolvedCutNode=new FeatureNode(Guid.NewGuid(),"Döndürerek Kes1",
+            new RevolveCutFeatureParameters(boss.Id,revolveSketchNode.Id,axis.Id,180));
+        var revolveCutDoc=initial with{Features=initial.Features.Concat(new[]{revolveSketchNode,revolvedCutNode}).ToArray()};
+        Check(FeatureDocumentFile.Clone(revolveCutDoc).Node(revolvedCutNode.Id).Kind==FeatureKind.RevolvedCut,
+            "revolved cut dependencies and axis roundtrip");
 
         var external=session.Document;((IDictionary<int,SketchPoint>)((SketchFeatureParameters)external.Node(source.Id).Parameters).Sketch.Points).Clear();
         Check(((SketchFeatureParameters)session.Document.Node(source.Id).Parameters).Sketch.Points.Count>0,"external snapshot cannot mutate committed document");
