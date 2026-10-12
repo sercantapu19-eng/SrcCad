@@ -71,7 +71,7 @@
                     <Button Style="{StaticResource CadCommandButton}" Content="Nervür" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Doğrusal Dizilim" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Dairesel Dizilim" Click="CadCommandPlaceholder_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Aynala" Click="CadCommandPlaceholder_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Aynala" Click="Mirror_Click" x:Name="MirrorButton" ToolTip="Düzlemsel yüz veya Ön/Üst/Sağ Düzlem seçin; katıyı gerçek 3B ayna dönüşümüyle çoğaltır."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Referans Geometri" Click="CadCommandPlaceholder_Click"/>
                     <Separator Margin="8,2"/>
                     <Button Style="{StaticResource CommandButton}" Content="Yeni Parça" Click="NewPart_Click"/>
@@ -311,6 +311,17 @@
                                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                     <Button Content="✓" Width="52" Height="34" Click="ShellFeatureOk_Click"/>
                                     <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="ShellFeatureCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="MirrorFeaturePanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Ayna Düzlemi" FontWeight="Bold"/>
+                                <TextBlock x:Name="MirrorPlaneText" Text="Düzlem seçilmedi" TextWrapping="Wrap" Margin="0,4,0,8"/>
+                                <CheckBox x:Name="MirrorKeepOriginal" Content="Orijinal Gövdeyi Koru" Checked="MirrorFeatureParameterChanged" Unchecked="MirrorFeatureParameterChanged" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="MirrorFeatureError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="MirrorFeatureOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="MirrorFeatureCancel_Click"/>
                                 </StackPanel>
                             </StackPanel>
 

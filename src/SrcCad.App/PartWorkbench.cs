@@ -726,6 +726,86 @@ public partial class MainWindow
         }
     }
 
+    private bool TryResolveMirrorPlane(out PlaneFrame plane)
+    {
+        plane=_selectedPlane;
+        if(_viewer.TryGetSelectedPlanarFace(out var face))
+        {
+            try
+            {
+                plane=new PlaneFrame("Seçili Yüz",
+                    new Vector3d(face.Origin.X,face.Origin.Y,face.Origin.Z),
+                    new Vector3d(face.U.X,face.U.Y,face.U.Z),
+                    new Vector3d(face.V.X,face.V.Y,face.V.Z),
+                    new Vector3d(face.Normal.X,face.Normal.Y,face.Normal.Z)).Validate();
+                return true;
+            }
+            catch(InvalidOperationException){return false;}
+        }
+        if(FeatureTree.SelectedItem is TreeViewItem item&&item.Tag is string tag&&tag.StartsWith("plane:",StringComparison.Ordinal))
+            return true;
+        return false;
+    }
+
+    private void Mirror_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession())return;
+        var baseNode=CurrentSolidFeature();
+        if(baseNode is null){Status("Aynala için mevcut katı gerekiyor.");return;}
+        if(!TryResolveMirrorPlane(out var plane))
+        {Status("Aynala için düzlemsel bir yüz veya Ön/Üst/Sağ Düzlem seçin.");return;}
+        BeginMirrorFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Aynala"),new MirrorFeatureParameters(baseNode.Id,plane,true)));
+    }
+
+    private void BeginMirrorFeature(FeatureNode node)
+    {
+        if(node.Parameters is not MirrorFeatureParameters mirror)throw new InvalidOperationException("Unsupported mirror feature.");
+        _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;
+        MirrorPlaneText.Text=mirror.Plane.Name;
+        MirrorKeepOriginal.IsChecked=mirror.KeepOriginal;
+        MirrorFeatureError.Text="";
+        MirrorFeaturePanel.Visibility=Visibility.Visible;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;
+        HoleFeaturePanel.Visibility=Visibility.Collapsed;RevolveFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;
+        PropertyTitle.Text=node.Name;
+        PropertyInfo.Text="Gerçek 3B ayna dönüşümü • parametrik düzlem • canlı B-Rep önizleme";
+        ManagerTabs.SelectedItem=PropertyManagerTab;
+        _loadingGraphParameters=false;
+        UpdateMirrorFeaturePreview();RefreshCommandState();
+    }
+
+    private FeatureDocument? MirrorFeatureCandidate()
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not MirrorFeatureParameters mirror)return null;
+        return ReplaceGraphNode(_graphFeatureEdit with{Parameters=mirror with{KeepOriginal=MirrorKeepOriginal.IsChecked==true}});
+    }
+
+    private void MirrorFeatureParameterChanged(object sender,RoutedEventArgs e)
+    {
+        if(!_loadingGraphParameters)UpdateMirrorFeaturePreview();
+    }
+
+    private void UpdateMirrorFeaturePreview()
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not MirrorFeatureParameters)return;
+        var candidate=MirrorFeatureCandidate();if(candidate is null)return;
+        var preview=_partSession.Preview(candidate);
+        var body=preview.Success?LastBody(candidate,id=>preview.Outputs.GetValueOrDefault(id)):null;
+        if(body is not null&&_viewer.PreviewFeatureBody(body)){MirrorFeatureError.Text="";return;}
+        _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();
+        MirrorFeatureError.Text=preview.Report.Nodes.LastOrDefault(n=>n.State==RebuildState.Failed)?.Error??preview.Report.Error??"Ayna önizlemesi oluşturulamadı.";
+    }
+
+    private void MirrorFeatureOk_Click(object sender,RoutedEventArgs e)
+    {
+        var candidate=MirrorFeatureCandidate();
+        if(candidate is null||_partSession is null)return;
+        if(!_partSession.TryCommit(candidate)){MirrorFeatureError.Text=GraphError();return;}
+        var id=_graphFeatureEdit!.Id;EndGraphFeature();RefreshPartTree(id);Status("Parametrik ayna özelliği onaylandı.");
+    }
+
+    private void MirrorFeatureCancel_Click(object sender,RoutedEventArgs e)=>EndGraphFeature();
+
     private void BeginGraphExtrude()
     {
         if(_inSketch||_extrudeCommandActive||_partSession is null||SelectedGraphId is not Guid id||_partSession.Document.Node(id).Kind!=FeatureKind.Sketch)return;
@@ -744,6 +824,7 @@ public partial class MainWindow
         if(node.Parameters is HoleFeatureParameters){BeginHoleFeature(node);return;}
         if(node.Parameters is RevolveFeatureParameters or RevolveCutFeatureParameters){BeginRevolveFeature(node);return;}
         if(node.Parameters is ShellFeatureParameters){BeginShellFeature(node);return;}
+        if(node.Parameters is MirrorFeatureParameters){BeginMirrorFeature(node);return;}
         _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;_depthWheel.Reset();
         var cut=node.Parameters as CutFeatureParameters;
         var depth=cut?.Depth??Math.Abs(((ExtrudeFeatureParameters)node.Parameters).Depth);
@@ -788,7 +869,7 @@ public partial class MainWindow
     {
         _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.0);
         _graphFeatureEdit=null;_extrudeCommandActive=false;
-        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;RevolveFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;RevolveFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;MirrorFeaturePanel.Visibility=Visibility.Collapsed;
         _viewer.ClearSelection();_viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Face);
         ManagerTabs.SelectedItem=FeatureManagerTab;RefreshCommandState();
     }
@@ -811,5 +892,6 @@ public partial class MainWindow
         HoleFeaturePanel.Visibility=Visibility.Collapsed;
         RevolveFeaturePanel.Visibility=Visibility.Collapsed;
         ShellFeaturePanel.Visibility=Visibility.Collapsed;
+        MirrorFeaturePanel.Visibility=Visibility.Collapsed;
     }
 }
