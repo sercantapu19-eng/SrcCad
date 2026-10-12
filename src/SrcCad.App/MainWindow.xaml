@@ -59,8 +59,8 @@
                     <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadExtrudeIcon}" Content="Ekstrüzyon" Click="Extrude_Click" x:Name="ExtrudeButton" IsEnabled="False"/>
                     <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadSketchIcon}" Content="Yeni Çizim" Click="NewProfileSketch_Click" x:Name="NewProfileSketchButton" IsEnabled="False" Visibility="Collapsed"/>
                     <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadCutIcon}" Content="Ekstrüzyon Kes" Click="Cut_Click" x:Name="CutButton" IsEnabled="False" ToolTip="Bir yüz/düzlemde Çizim oluşturun; çizimden çıkınca bu komut seçili profili katıdan keser."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Döndürme" Click="CadCommandPlaceholder_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadCutIcon}" Content="Döndürerek Kes" Click="CadCommandPlaceholder_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Döndürme" Click="Revolve_Click" x:Name="RevolveButton" ToolTip="Kapalı profil + tek merkez çizgisi ekseni ile gerçek OCCT döndürme oluşturur."/>
+                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadCutIcon}" Content="Döndürerek Kes" Click="RevolveCut_Click" x:Name="RevolveCutButton" ToolTip="Kapalı profil + tek merkez çizgisi ekseni ile mevcut katıdan döndürerek keser."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Süpürme" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Loft" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Radyus" Click="Fillet_Click" x:Name="FilletButton" ToolTip="Kenarları seçin; gerçek OCCT 3B radyus oluşturur."/>
@@ -284,6 +284,19 @@
                                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                     <Button Content="✓" Width="52" Height="34" Click="HoleFeatureOk_Click"/>
                                     <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="HoleFeatureCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="RevolveFeaturePanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Döndürme Açısı (°)" FontWeight="Bold"/>
+                                <TextBox x:Name="RevolveAngle" TextChanged="RevolveFeatureParameterChanged" Margin="0,4,0,8"/>
+                                <CheckBox x:Name="RevolveReverse" Content="Yönü Ters Çevir" Checked="RevolveFeatureParameterChanged" Unchecked="RevolveFeatureParameterChanged" Margin="0,0,0,8"/>
+                                <TextBlock Text="Eksen" FontWeight="Bold"/>
+                                <TextBlock x:Name="RevolveAxisText" Text="Çizimde tek bir Merkez Çizgisi gerekir." TextWrapping="Wrap" Margin="0,4,0,8"/>
+                                <TextBlock x:Name="RevolveFeatureError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="RevolveFeatureOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="RevolveFeatureCancel_Click"/>
                                 </StackPanel>
                             </StackPanel>
 

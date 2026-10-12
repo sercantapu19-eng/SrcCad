@@ -31,11 +31,12 @@ public partial class MainWindow
     private bool EnsurePartSession()
     {
         if(_partSession is not null)return true;
-        if(_sketch is null||!_hasSolid)return false;
+        if(_sketch is null)return false;
         try
         {
             var document=FeatureDocumentFile.FromLegacy(CaptureFeatureState());
-            var sketchId=document.Features[0].Id;var bossId=document.Features[1].Id;
+            var sketchId=document.Features[0].Id;
+            Guid? bossId=document.Features.Length>1?document.Features[1].Id:null;
             var history=_featureHistory.MapTo(s=>FeatureDocumentFile.FromLegacy(s,document.Id,sketchId,bossId));
             var session=new FeatureSession<PartFeatureOutput>(document,new PartFeatureEvaluator(new OcctPartGeometryKernel()),PublishGraph,history);
             _partSession=session;RefreshPartTree();return true;
@@ -445,6 +446,133 @@ public partial class MainWindow
 
     private void HoleFeatureCancel_Click(object sender,RoutedEventArgs e)=>EndGraphFeature();
 
+    private static int? RevolveAxisId(FeatureNode sketchNode)
+    {
+        if(sketchNode.Parameters is not SketchFeatureParameters source)return null;
+        var axes=source.Sketch.Entities.OfType<SketchLine>().Where(line=>line.Construction).ToArray();
+        return axes.Length==1?axes[0].Id:null;
+    }
+
+    private FeatureNode? RevolveSketchCandidate(bool cut)
+    {
+        if(_partSession is null)return null;
+        if(SelectedGraphNode is {Kind:FeatureKind.Sketch} selected&&RevolveAxisId(selected) is not null)return selected;
+        var ordered=_partSession.Document.Ordered();
+        if(cut)
+        {
+            var lastBody=-1;
+            for(var i=0;i<ordered.Length;i++)if(_partSession.Output(ordered[i].Id)?.BRep is not null)lastBody=i;
+            if(lastBody<0)return null;
+            return ordered.Skip(lastBody+1).LastOrDefault(node=>node.Kind==FeatureKind.Sketch&&RevolveAxisId(node) is not null);
+        }
+        return ordered.LastOrDefault(node=>node.Kind==FeatureKind.Sketch&&RevolveAxisId(node) is not null);
+    }
+
+    private void Revolve_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession())return;
+        var sketch=RevolveSketchCandidate(false);
+        if(sketch is null||RevolveAxisId(sketch) is not int axis)
+        {Status("Döndürme için kapalı profil çiziminde tam bir Merkez Çizgisi ekseni oluşturun.");return;}
+        var baseNode=CurrentSolidFeature();
+        BeginRevolveFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Döndürme"),
+            new RevolveFeatureParameters(sketch.Id,axis,360,false,baseNode?.Id)));
+    }
+
+    private void RevolveCut_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession())return;
+        var baseNode=CurrentSolidFeature();
+        if(baseNode is null){Status("Döndürerek Kes için mevcut katı gerekiyor.");return;}
+        var sketch=RevolveSketchCandidate(true);
+        if(sketch is null||RevolveAxisId(sketch) is not int axis)
+        {Status("Döndürerek Kes için katıdan sonra oluşturulmuş kapalı profil + tek Merkez Çizgisi gerekir.");return;}
+        BeginRevolveFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Döndürerek Kes"),
+            new RevolveCutFeatureParameters(baseNode.Id,sketch.Id,axis,360,false)));
+    }
+
+    private void BeginRevolveFeature(FeatureNode node)
+    {
+        _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;
+        var angle=node.Parameters switch
+        {
+            RevolveFeatureParameters r=>r.AngleDegrees,
+            RevolveCutFeatureParameters r=>r.AngleDegrees,
+            _=>throw new InvalidOperationException("Unsupported revolve feature.")
+        };
+        var reverse=node.Parameters switch
+        {
+            RevolveFeatureParameters r=>r.Reverse,
+            RevolveCutFeatureParameters r=>r.Reverse,
+            _=>false
+        };
+        var axis=node.Parameters switch
+        {
+            RevolveFeatureParameters r=>r.AxisEntityId,
+            RevolveCutFeatureParameters r=>r.AxisEntityId,
+            _=>-1
+        };
+        RevolveAngle.Text=angle.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        RevolveReverse.IsChecked=reverse;
+        RevolveAxisText.Text=$"Merkez Çizgisi / Eksen: entity {axis}";
+        RevolveFeatureError.Text="";
+        RevolveFeaturePanel.Visibility=Visibility.Visible;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;
+        EdgeFeaturePanel.Visibility=Visibility.Collapsed;
+        HoleFeaturePanel.Visibility=Visibility.Collapsed;
+        PropertyTitle.Text=node.Name;
+        PropertyInfo.Text="Gerçek OCCT döndürme • 0–360° • parametrik eksen • canlı B-Rep önizleme";
+        ManagerTabs.SelectedItem=PropertyManagerTab;
+        _loadingGraphParameters=false;
+        UpdateRevolveFeaturePreview();RefreshCommandState();
+    }
+
+    private FeatureDocument? RevolveFeatureCandidate()
+    {
+        if(_partSession is null||_graphFeatureEdit is null||
+           !DimensionNumbers.TryParseScalar(RevolveAngle.Text,out var angle)||
+           !double.IsFinite(angle)||angle<=1e-9||angle>360.0)return null;
+        var parameters=_graphFeatureEdit.Parameters switch
+        {
+            RevolveFeatureParameters r=>(FeatureParameters)(r with{AngleDegrees=angle,Reverse=RevolveReverse.IsChecked==true}),
+            RevolveCutFeatureParameters r=>r with{AngleDegrees=angle,Reverse=RevolveReverse.IsChecked==true},
+            _=>throw new InvalidOperationException("Unsupported revolve feature.")
+        };
+        return ReplaceGraphNode(_graphFeatureEdit with{Parameters=parameters});
+    }
+
+    private void RevolveFeatureParameterChanged(object sender,RoutedEventArgs e)
+    {
+        if(!_loadingGraphParameters)UpdateRevolveFeaturePreview();
+    }
+
+    private void UpdateRevolveFeaturePreview()
+    {
+        if(_partSession is null||_graphFeatureEdit is null)return;
+        var candidate=RevolveFeatureCandidate();
+        if(candidate is null)
+        {
+            _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();
+            RevolveFeatureError.Text="Açı 0 ile 360 derece arasında olmalı.";return;
+        }
+        var preview=_partSession.Preview(candidate);
+        var body=preview.Success?LastBody(candidate,id=>preview.Outputs.GetValueOrDefault(id)):null;
+        if(body is not null&&_viewer.PreviewFeatureBody(body)){RevolveFeatureError.Text="";return;}
+        _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();
+        RevolveFeatureError.Text=preview.Report.Nodes.LastOrDefault(n=>n.State==RebuildState.Failed)?.Error??preview.Report.Error??"Döndürme önizlemesi oluşturulamadı.";
+    }
+
+    private void RevolveFeatureOk_Click(object sender,RoutedEventArgs e)
+    {
+        var candidate=RevolveFeatureCandidate();
+        if(candidate is null||_partSession is null){RevolveFeatureError.Text="Geçerli açı ve eksen gerekiyor.";return;}
+        if(!_partSession.TryCommit(candidate)){RevolveFeatureError.Text=GraphError();return;}
+        var id=_graphFeatureEdit!.Id;EndGraphFeature();RefreshPartTree(id);
+        Status("Parametrik döndürme özelliği onaylandı; model yeniden oluşturuldu.");
+    }
+
+    private void RevolveFeatureCancel_Click(object sender,RoutedEventArgs e)=>EndGraphFeature();
+
     private void BeginGraphExtrude()
     {
         if(_inSketch||_extrudeCommandActive||_partSession is null||SelectedGraphId is not Guid id||_partSession.Document.Node(id).Kind!=FeatureKind.Sketch)return;
@@ -461,6 +589,7 @@ public partial class MainWindow
     {
         if(node.Parameters is FilletFeatureParameters or ChamferFeatureParameters){BeginEdgeFeature(node);return;}
         if(node.Parameters is HoleFeatureParameters){BeginHoleFeature(node);return;}
+        if(node.Parameters is RevolveFeatureParameters or RevolveCutFeatureParameters){BeginRevolveFeature(node);return;}
         _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;_depthWheel.Reset();
         var cut=node.Parameters as CutFeatureParameters;
         var depth=cut?.Depth??Math.Abs(((ExtrudeFeatureParameters)node.Parameters).Depth);
