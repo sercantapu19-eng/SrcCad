@@ -5,6 +5,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using SrcCad.Core.Features;
+using SrcCad.Core.Geometry;
 using SrcCad.Core.Sketch;
 
 namespace SrcCad.App;
@@ -18,7 +19,7 @@ public partial class MainWindow
     private bool _loadingGraphParameters;
 
     private static string? LastBody(FeatureDocument document,Func<Guid,PartFeatureOutput?> output)
-        => document.Ordered().Reverse().Select(n=>output(n.Id)?.BRep).FirstOrDefault(s=>s is not null);
+        => System.Linq.Enumerable.Reverse(document.Ordered()).Select(n=>output(n.Id)?.BRep).FirstOrDefault(s=>s is not null);
     private bool PublishGraph(FeatureDocument document,IReadOnlyDictionary<Guid,PartFeatureOutput> outputs)
         => _viewer.PublishFeatureBody(LastBody(document,id=>outputs.GetValueOrDefault(id)));
     private string NextGraphName(string prefix)
@@ -93,10 +94,39 @@ public partial class MainWindow
         if(dependents.Count>0&&MessageBox.Show(this,$"Bu feature ve {dependents.Count} bağımlı öğe silinecek. Devam edilsin mi?","Bağımlı feature silme",MessageBoxButton.YesNo,MessageBoxImage.Question)!=MessageBoxResult.Yes)return;
         if(CommitGraphDocument(document.Delete(id,true)))Status("Feature ve bağımlıları tek işlemde silindi • Ctrl+Z: geri al.");
     }
+    private bool TryResolveNewSketchPlane(out PlaneFrame plane)
+    {
+        plane=_selectedPlane;
+        if(_viewer.TryGetSelectedPlanarFace(out var face))
+        {
+            try
+            {
+                plane=new PlaneFrame(
+                    "Seçili Yüz",
+                    new Vector3d(face.Origin.X,face.Origin.Y,face.Origin.Z),
+                    new Vector3d(face.U.X,face.U.Y,face.U.Z),
+                    new Vector3d(face.V.X,face.V.Y,face.V.Z),
+                    new Vector3d(face.Normal.X,face.Normal.Y,face.Normal.Z)).Validate();
+                return true;
+            }
+            catch(InvalidOperationException ex)
+            {
+                Status("Seçili yüz çizim düzlemine dönüştürülemedi: "+ex.Message);
+                return false;
+            }
+        }
+        if(_viewer.SelectionSummary()!="Seçim yok")
+        {
+            Status("Çizim için düzlemsel bir yüz seçin veya FeatureManager'dan Ön/Üst/Sağ Düzlem'i seçin.");
+            return false;
+        }
+        return true;
+    }
     private void NewProfileSketch_Click(object sender,RoutedEventArgs e)
     {
-        if(_inSketch||_extrudeCommandActive||!EnsurePartSession())return;
-        var sketch=new SketchModel(_selectedPlane);
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession()||!TryResolveNewSketchPlane(out var plane))return;
+        _viewer.ClearSelection();
+        var sketch=new SketchModel(plane);
         var node=new FeatureNode(Guid.NewGuid(),NextGraphName("Çizim"),new SketchFeatureParameters(sketch.Plane,sketch.CaptureSnapshot()));
         BeginGraphSketch(node);
     }
@@ -108,7 +138,9 @@ public partial class MainWindow
         _sketchUndo.Clear();_sketchRedo.Clear();
         var plane=source.Plane;
         _viewer.SetNormalView(plane.Normal.X,plane.Normal.Y,plane.Normal.Z,plane.V.X,plane.V.Y,plane.V.Z);
-        _viewer.ShowCommittedSolid();_viewer.FitAll();_viewer.HideCommittedSolid();
+        _viewer.ShowCommittedSolid();
+        _viewer.SetCommittedSolidTransparency(0.38);
+        _viewer.FitAll();
         BeginSketchInteraction();
         PropertyTitle.Text=node.Name;
         Status(node.Name+" • "+source.Plane.Name+" • çizimden çıkış tüm bağımlı feature'ları yeniden oluşturur.");
@@ -117,14 +149,14 @@ public partial class MainWindow
     {
         if(_graphSketchEdit is null||_sketch is null)return true;
         var node=_graphSketchEdit with{Parameters=new SketchFeatureParameters(_sketch.Plane,_sketch.CaptureSnapshot())};
-        if(!_partSession!.TryCommit(ReplaceGraphNode(node))){_viewer.HideCommittedSolid();RenderSketch();Status(GraphError()+" Çizimi düzeltin veya iptal edin.");return false;}
-        _graphSketchEdit=null;_viewer.ClearSketch();RefreshPartTree(node.Id);return true;
+        if(!_partSession!.TryCommit(ReplaceGraphNode(node))){_viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.38);RenderSketch();Status(GraphError()+" Çizimi düzeltin veya iptal edin.");return false;}
+        _graphSketchEdit=null;_viewer.SetCommittedSolidTransparency(0.0);_viewer.ClearSketch();RefreshPartTree(node.Id);return true;
     }
     private void CancelGraphSketch()
     {
         _graphSketchEdit=null;
         _sketch=null;
-        FinishSketchInteraction();_viewer.ClearSketch();_viewer.ShowCommittedSolid();
+        FinishSketchInteraction();_viewer.ClearSketch();_viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.0);
         RefreshPartTree();Status("Çizim düzenlemesi iptal edildi; feature geçmişi değişmedi.");
     }
     private void Cut_Click(object sender,RoutedEventArgs e)

@@ -36,6 +36,9 @@
 #include <BRepGProp.hxx>
 #include <GProp_GProps.hxx>
 #include <Geom_Circle.hxx>
+#include <Geom_Plane.hxx>
+#include <Geom_RectangularTrimmedSurface.hxx>
+#include <BRep_Tool.hxx>
 #include <gp_Ax2.hxx>
 #include <gp_Circ.hxx>
 #include <gp_Dir.hxx>
@@ -44,6 +47,7 @@
 #include <Standard_Failure.hxx>
 #include <StdSelect_BRepOwner.hxx>
 #include <Prs3d_Drawer.hxx>
+#include <Prs3d_LineAspect.hxx>
 #include <Prs3d_TypeOfHighlight.hxx>
 #include <TCollection_ExtendedString.hxx>
 #include <vcclr.h>
@@ -177,7 +181,8 @@ namespace SrcCad::Kernel::Occt
             myState->Viewer = new V3d_Viewer(myState->Driver);
             myState->Viewer->SetDefaultLights();
             myState->Viewer->SetLightOn();
-            myState->Viewer->SetDefaultBackgroundColor(rgb(0.91, 0.95, 0.98));
+            // Neutral CAD background with enough contrast for light-gray parts.
+            myState->Viewer->SetDefaultBackgroundColor(rgb(0.82, 0.87, 0.91));
 
             myState->View = myState->Viewer->CreateView();
             myState->Window = new WNT_Window(reinterpret_cast<HWND>(windowHandle.ToPointer()));
@@ -377,6 +382,51 @@ namespace SrcCad::Kernel::Occt
         return String::Format("{0}: {1} seçili", mode, count);
     }
 
+    bool OcctViewportBridge::TryGetSelectedPlanarFace(CadPlane3D% plane)
+    {
+        if (!IsInitialized() || myState->Context->NbSelected() != 1) return false;
+        try
+        {
+            myState->Context->InitSelected();
+            if (!myState->Context->MoreSelected() || !myState->Context->HasSelectedShape()) return false;
+            TopoDS_Shape selected = myState->Context->SelectedShape();
+            if (selected.IsNull() || selected.ShapeType() != TopAbs_FACE) return false;
+
+            TopoDS_Face face = TopoDS::Face(selected);
+            Handle(Geom_Surface) surface = BRep_Tool::Surface(face);
+            Handle(Geom_RectangularTrimmedSurface) trimmed = Handle(Geom_RectangularTrimmedSurface)::DownCast(surface);
+            if (!trimmed.IsNull()) surface = trimmed->BasisSurface();
+            Handle(Geom_Plane) geometry = Handle(Geom_Plane)::DownCast(surface);
+            if (geometry.IsNull()) return false;
+
+            gp_Ax3 axes = geometry->Pln().Position();
+            gp_Pnt origin = axes.Location();
+            gp_Dir u = axes.XDirection();
+            gp_Dir v = axes.YDirection();
+            gp_Dir normal = axes.Direction();
+            if (face.Orientation() == TopAbs_REVERSED)
+            {
+                normal.Reverse();
+                v.Reverse(); // Keep U x V = Normal for PlaneFrame.Validate().
+            }
+
+            plane.Origin.X=origin.X(); plane.Origin.Y=origin.Y(); plane.Origin.Z=origin.Z();
+            plane.U.X=u.X(); plane.U.Y=u.Y(); plane.U.Z=u.Z();
+            plane.V.X=v.X(); plane.V.Y=v.Y(); plane.V.Z=v.Z();
+            plane.Normal.X=normal.X(); plane.Normal.Y=normal.Y(); plane.Normal.Z=normal.Z();
+            return true;
+        }
+        catch (const Standard_Failure&) { return false; }
+    }
+
+    void OcctViewportBridge::SetCommittedSolidTransparency(double transparency)
+    {
+        if (!IsInitialized() || myState->SolidPresentation.IsNull()) return;
+        transparency=std::clamp(transparency,0.0,0.80);
+        myState->Context->SetTransparency(myState->SolidPresentation,transparency,false);
+        myState->Context->UpdateCurrentViewer();
+    }
+
     bool OcctViewportBridge::ScreenToPlane(int x, int y,
                                            double ox, double oy, double oz,
                                            double nx, double ny, double nz,
@@ -423,6 +473,18 @@ namespace SrcCad::Kernel::Occt
                                           double transparency = 0.0)
     {
         Handle(AIS_Shape) ais = new AIS_Shape(shape);
+        if (displayMode == AIS_Shaded)
+        {
+            // CAD-style "shaded with edges": readable faces and dark boundaries.
+            Handle(Prs3d_Drawer) drawer=ais->Attributes();
+            drawer->SetFaceBoundaryDraw(true);
+            drawer->SetupOwnFaceBoundaryAspect();
+            if (!drawer->FaceBoundaryAspect().IsNull())
+            {
+                drawer->FaceBoundaryAspect()->SetColor(rgb(0.16,0.19,0.22));
+                drawer->FaceBoundaryAspect()->SetWidth(1.15);
+            }
+        }
         state->Context->Display(ais, displayMode, selectable ? 0 : -1, false);
         state->Context->SetColor(ais, color, false);
         if (transparency > 0.0) state->Context->SetTransparency(ais, transparency, false);
@@ -847,7 +909,7 @@ namespace SrcCad::Kernel::Occt
                                                        depth);
             if (shape.IsNull() || shape.ShapeType() != TopAbs_SOLID || !BRepCheck_Analyzer(shape).IsValid()) return false;
             myState->PreviewSolidShape = shape;
-            myState->PreviewSolid = displayShape(myState, shape, rgb(0.20, 0.75, 0.35), AIS_Shaded, false, 0.55);
+            myState->PreviewSolid = displayShape(myState, shape, rgb(0.30, 0.66, 0.38), AIS_Shaded, false, 0.22);
             myState->Context->UpdateCurrentViewer();
             return true;
         }
@@ -872,7 +934,7 @@ namespace SrcCad::Kernel::Occt
                                                         vx, vy, vz, nx, ny, nz, depth);
             if (shape.IsNull() || shape.ShapeType() != TopAbs_SOLID || !BRepCheck_Analyzer(shape).IsValid()) return false;
             myState->PreviewSolidShape = shape;
-            myState->PreviewSolid = displayShape(myState, shape, rgb(0.20, 0.75, 0.35), AIS_Shaded, false, 0.55);
+            myState->PreviewSolid = displayShape(myState, shape, rgb(0.30, 0.66, 0.38), AIS_Shaded, false, 0.22);
             myState->Context->UpdateCurrentViewer();
             return true;
         }
@@ -909,7 +971,7 @@ namespace SrcCad::Kernel::Occt
             TopoDS_Shape shape = prism.Shape();
             if (shape.IsNull() || shape.ShapeType() != TopAbs_SOLID || !BRepCheck_Analyzer(shape).IsValid()) return false;
             myState->PreviewSolidShape = shape;
-            myState->PreviewSolid = displayShape(myState, shape, rgb(0.20, 0.75, 0.35), AIS_Shaded, false, 0.55);
+            myState->PreviewSolid = displayShape(myState, shape, rgb(0.30, 0.66, 0.38), AIS_Shaded, false, 0.22);
             myState->Context->UpdateCurrentViewer();
             return true;
         }
@@ -926,7 +988,7 @@ namespace SrcCad::Kernel::Occt
         {
             TopoDS_Shape shape=decodeFeature(body);
             CancelExtrusionPreview();
-            myState->PreviewSolid=displayShape(myState,shape,rgb(0.20,0.75,0.35),AIS_Shaded,false,0.55);
+            myState->PreviewSolid=displayShape(myState,shape,rgb(0.30,0.66,0.38),AIS_Shaded,false,0.22);
             myState->PreviewSolidShape=shape;
             HideCommittedSolid();myState->Context->UpdateCurrentViewer();return true;
         }
@@ -945,7 +1007,7 @@ namespace SrcCad::Kernel::Occt
             TopoDS_Shape shape=decodeFeature(body);
             // Create the replacement presentation first; retain the previous body
             // until OCCT accepts the new presentation.
-            candidate=displayShape(myState,shape,rgb(0.72,0.77,0.82),AIS_Shaded,true);
+            candidate=displayShape(myState,shape,rgb(0.60,0.66,0.72),AIS_Shaded,true);
             if (!myState->SolidPresentation.IsNull())myState->Context->Remove(myState->SolidPresentation,false);
             myState->SolidPresentation=candidate;myState->SolidShape=shape;
             CancelExtrusionPreview();SetSelectionMode(myState->SelectionMode);
@@ -986,7 +1048,7 @@ namespace SrcCad::Kernel::Occt
             myState->SolidShape = myState->PreviewSolidShape;
             myState->PreviewSolidShape.Nullify();
             myState->SolidPresentation = displayShape(myState, myState->SolidShape,
-                                                       rgb(0.72, 0.77, 0.82), AIS_Shaded, true);
+                                                       rgb(0.60, 0.66, 0.72), AIS_Shaded, true);
             myState->Context->Deactivate();
             SetSelectionMode(myState->SelectionMode);
             myState->Context->UpdateCurrentViewer();

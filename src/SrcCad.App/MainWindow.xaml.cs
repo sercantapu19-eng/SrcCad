@@ -1532,18 +1532,14 @@ public partial class MainWindow : Window
     private void StartSketch_Click(object sender, RoutedEventArgs e)
     {
         if (_inSketch || _extrudeCommandActive) return;
-        if (_partSession is not null)
+
+        // SolidWorks-like workflow: once a body exists, "Çizim" means create a
+        // new sketch on the selected planar face or standard plane. Existing
+        // sketches are edited from FeatureManager (double-click / context edit).
+        if (_hasSolid || _partSession is not null)
         {
-            var document=_partSession.Document;
-            var node=SelectedGraphId is Guid id ? document.Node(id) : document.Features.FirstOrDefault(f=>f.Kind==SrcCad.Core.Features.FeatureKind.Sketch);
-            if(node is not null&&node.Kind==SrcCad.Core.Features.FeatureKind.Sketch)BeginGraphSketch(node);
-            else Status("Düzenlemek için FeatureManager'dan bir çizim seçin.");
+            NewProfileSketch_Click(sender,e);
             return;
-        }
-        if (_hasSolid)
-        {
-            _sourceSketchEditBefore = CaptureFeatureState();
-            _viewer.HideCommittedSolid();
         }
 
         _sketch ??= new SketchModel(_selectedPlane);
@@ -2021,9 +2017,10 @@ public partial class MainWindow : Window
             case "plane:right": _selectedPlane = StandardPlanes.Right; break;
             default: return;
         }
+        _viewer.ClearSelection();
         PropertyTitle.Text = item.Header?.ToString() ?? "Düzlem";
         PropertyInfo.Text = "Çizim komutu başladığında sketch bu düzlemin gerçek 3B frame'i üzerinde oluşturulur.";
-        Status($"{_selectedPlane.Name} seçildi.");
+        Status($"{_selectedPlane.Name} seçildi • Çizim komutuna basın.");
     }
 
     private void Fit_Click(object sender, RoutedEventArgs e) => _viewer.FitAll();
@@ -2132,7 +2129,7 @@ public partial class MainWindow : Window
     private void RefreshCommandState()
     {
         StartSketchButton.IsEnabled = !_inSketch && !_extrudeCommandActive;
-        StartSketchButton.Content = _hasSolid ? "Çizimi Düzenle" : "Çizim";
+        StartSketchButton.Content = "Çizim";
         CancelSourceSketchEditButton.Visibility = _sourceSketchEditBefore is null && _graphSketchEdit is null ? Visibility.Collapsed : Visibility.Visible;
         NewProfileSketchButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&(_hasSolid||_partSession is not null);
         CutButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid&&_partSession is not null&&SelectedGraphId is Guid selected&&SelectedGraphNode?.Kind==SrcCad.Core.Features.FeatureKind.Sketch;

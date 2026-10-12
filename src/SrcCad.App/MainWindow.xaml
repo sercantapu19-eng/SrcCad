@@ -55,10 +55,10 @@
         <TabControl Grid.Row="2" x:Name="CommandTabs" Background="#F5F7F9" BorderBrush="#C8D1D9">
             <TabItem Header="UNSURLAR" x:Name="FeaturesTab">
                 <WrapPanel Margin="8">
-                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadSketchIcon}" Content="Çizim" Click="StartSketch_Click" x:Name="StartSketchButton"/>
+                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadSketchIcon}" Content="Çizim" Click="StartSketch_Click" x:Name="StartSketchButton" ToolTip="Düzlem veya düzlemsel yüz seçin; Çizim yeni sketch'i doğrudan o destek üzerinde açar."/>
                     <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadExtrudeIcon}" Content="Ekstrüzyon" Click="Extrude_Click" x:Name="ExtrudeButton" IsEnabled="False"/>
-                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadSketchIcon}" Content="Yeni Çizim" Click="NewProfileSketch_Click" x:Name="NewProfileSketchButton" IsEnabled="False" ToolTip="Seçili Ön/Üst/Sağ düzlemde yeni profil oluştur"/>
-                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadCutIcon}" Content="Ekstrüzyon Kes" Click="Cut_Click" x:Name="CutButton" IsEnabled="False"/>
+                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadSketchIcon}" Content="Yeni Çizim" Click="NewProfileSketch_Click" x:Name="NewProfileSketchButton" IsEnabled="False" Visibility="Collapsed"/>
+                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadCutIcon}" Content="Ekstrüzyon Kes" Click="Cut_Click" x:Name="CutButton" IsEnabled="False" ToolTip="Bir yüz/düzlemde Çizim oluşturun; çizimden çıkınca bu komut seçili profili katıdan keser."/>
                     <Separator Margin="8,2"/>
                     <Button Style="{StaticResource CommandButton}" Content="Yeni Parça" Click="NewPart_Click"/>
                 </WrapPanel>

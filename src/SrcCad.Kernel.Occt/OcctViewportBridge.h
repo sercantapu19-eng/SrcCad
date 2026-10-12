@@ -17,6 +17,14 @@ namespace SrcCad::Kernel::Occt
         double Z;
     };
 
+    public value struct CadPlane3D
+    {
+        CadPoint3D Origin;
+        CadPoint3D U;
+        CadPoint3D V;
+        CadPoint3D Normal;
+    };
+
     class OcctViewportState;
 
     public ref class OcctViewportBridge sealed
@@ -49,6 +57,8 @@ namespace SrcCad::Kernel::Occt
         void ClearSelection();
         void SetSelectionMode(CadSelectionMode mode);
         System::String^ SelectionSummary();
+        bool TryGetSelectedPlanarFace([System::Runtime::InteropServices::Out] CadPlane3D% plane);
+        void SetCommittedSolidTransparency(double transparency);
 
         bool ScreenToPlane(int x, int y,
                            double ox, double oy, double oz,
