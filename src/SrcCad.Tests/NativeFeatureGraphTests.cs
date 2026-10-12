@@ -86,6 +86,20 @@ internal static class NativeFeatureGraphTests
             var shellInspect=OcctFeatureKernel.Inspect(shellPreview.Outputs[shellNode.Id].BRep!);
             Check(shellInspect[0]>0&&shellInspect[0]<24000&&shellInspect[1]==1,"shell feature produces valid hollow solid");
 
+            var mirrorPlane=new PlaneFrame("Ayna",plane.Origin,plane.U,plane.V,plane.Normal).Validate();
+            var mirrorBody=OcctFeatureKernel.Mirror(bossBody,
+                new[]{mirrorPlane.Origin.X,mirrorPlane.Origin.Y,mirrorPlane.Origin.Z,
+                      mirrorPlane.U.X,mirrorPlane.U.Y,mirrorPlane.U.Z,
+                      mirrorPlane.Normal.X,mirrorPlane.Normal.Y,mirrorPlane.Normal.Z},true);
+            var mirrorInspect=OcctFeatureKernel.Inspect(mirrorBody);
+            Check(Math.Abs(mirrorInspect[0]-48000)<1e-4&&mirrorInspect[1]==2,
+                "native mirror keep-original creates two valid solids");
+            var mirrorNode=new FeatureNode(Guid.NewGuid(),"Aynala1",new MirrorFeatureParameters(boss.Id,mirrorPlane,true));
+            var mirrorDoc=doc with{Features=doc.Features.Append(mirrorNode).ToArray()};
+            var mirrorPreview=session.Preview(mirrorDoc);
+            Check(mirrorPreview.Success&&OcctFeatureKernel.Inspect(mirrorPreview.Outputs[mirrorNode.Id].BRep!)[1]==2,
+                "mirror feature graph preview rebuilds multi-solid B-Rep");
+
             var revolveSketch=new SketchModel(plane);
             var ra=revolveSketch.CreatePointExact(new(0,-10));
             var rb=revolveSketch.CreatePointExact(new(0,30));

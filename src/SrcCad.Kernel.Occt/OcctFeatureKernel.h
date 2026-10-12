@@ -22,6 +22,7 @@ namespace SrcCad::Kernel::Occt
             array<double>^ axis, double angleDegrees, bool reverse);
         static System::String^ Shell(System::String^ baseBody, array<System::String^>^ faceReferences,
             double thickness, bool outward);
+        static System::String^ Mirror(System::String^ baseBody, array<double>^ planeFrame, bool keepOriginal);
         static array<System::String^>^ EdgeReferences(System::String^ body);
         static array<System::String^>^ FaceReferences(System::String^ body);
         // volume, solid count, face count, edge count

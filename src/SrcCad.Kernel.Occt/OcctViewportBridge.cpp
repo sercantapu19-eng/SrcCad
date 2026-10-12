@@ -32,6 +32,7 @@
 #include <BRepBuilderAPI_MakeWire.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
 #include <BRepBuilderAPI_MakeVertex.hxx>
+#include <BRepBuilderAPI_Transform.hxx>
 #include <BRepPrimAPI_MakePrism.hxx>
 #include <BRepPrimAPI_MakeCylinder.hxx>
 #include <BRepPrimAPI_MakeRevol.hxx>
@@ -50,6 +51,7 @@
 #include <gp_Dir.hxx>
 #include <gp_Pnt.hxx>
 #include <gp_Vec.hxx>
+#include <gp_Trsf.hxx>
 #include <Standard_Failure.hxx>
 #include <StdSelect_BRepOwner.hxx>
 #include <Prs3d_Drawer.hxx>
@@ -1266,6 +1268,30 @@ namespace SrcCad::Kernel::Occt
             if(!shell.IsDone())throw gcnew InvalidOperationException("OCCT shell operation failed.");
             TopoDS_Shape result=shell.Shape();
             return encodeFeature(result);
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
+    String^ OcctFeatureKernel::Mirror(String^ baseBody,array<double>^ planeFrame,bool keepOriginal)
+    {
+        if(planeFrame==nullptr||planeFrame->Length!=9)throw gcnew ArgumentException("Mirror plane requires origin, U and normal.");
+        for each(double value in planeFrame)if(!std::isfinite(value))throw gcnew ArgumentException("Invalid mirror plane.");
+        try
+        {
+            TopoDS_Shape baseShape=decodeFeature(baseBody);
+            gp_Pnt origin(planeFrame[0],planeFrame[1],planeFrame[2]);
+            gp_Dir normal(planeFrame[6],planeFrame[7],planeFrame[8]);
+            gp_Dir u(planeFrame[3],planeFrame[4],planeFrame[5]);
+            gp_Trsf transform;transform.SetMirror(gp_Ax2(origin,normal,u));
+            BRepBuilderAPI_Transform mirrorMaker(baseShape,transform,true);
+            TopoDS_Shape mirrored=mirrorMaker.Shape();
+            featureVolume(mirrored);
+            if(!keepOriginal)return encodeFeature(mirrored);
+
+            TopoDS_Compound compound;
+            BRep_Builder builder;builder.MakeCompound(compound);
+            builder.Add(compound,baseShape);builder.Add(compound,mirrored);
+            return encodeFeature(compound);
         }
         catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
     }
