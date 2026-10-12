@@ -66,7 +66,7 @@
                     <Button Style="{StaticResource CadCommandButton}" Content="Radyus" Click="Fillet_Click" x:Name="FilletButton" ToolTip="Kenarları seçin; gerçek OCCT 3B radyus oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Pah" Click="Chamfer_Click" x:Name="ChamferButton" ToolTip="Kenarları seçin; gerçek OCCT 3B pah oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Delik" Click="Hole_Click" x:Name="HoleButton" ToolTip="Düzlemsel yüz seçin; tıklanan konumda gerçek parametrik delik oluşturur."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Kabuk" Click="CadCommandPlaceholder_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Kabuk" Click="Shell_Click" x:Name="ShellButton" ToolTip="Açılacak yüzleri seçin; kalınlıkla gerçek içi boş katı oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Draft" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Nervür" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Doğrusal Dizilim" Click="CadCommandPlaceholder_Click"/>
@@ -297,6 +297,20 @@
                                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                     <Button Content="✓" Width="52" Height="34" Click="RevolveFeatureOk_Click"/>
                                     <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="RevolveFeatureCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="ShellFeaturePanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Kabuk Kalınlığı (mm)" FontWeight="Bold"/>
+                                <TextBox x:Name="ShellThickness" TextChanged="ShellFeatureParameterChanged" Margin="0,4,0,8"/>
+                                <CheckBox x:Name="ShellOutward" Content="Dışa Doğru Kalınlaştır" Checked="ShellFeatureParameterChanged" Unchecked="ShellFeatureParameterChanged" Margin="0,0,0,8"/>
+                                <TextBlock Text="Açılacak Yüzler" FontWeight="Bold"/>
+                                <TextBlock x:Name="ShellSelectionText" Text="En az bir yüz seçin." TextWrapping="Wrap" Margin="0,4,0,8"/>
+                                <TextBlock Text="Ctrl ile birden fazla yüz seçebilirsiniz." Foreground="#5F6B76" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="ShellFeatureError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="ShellFeatureOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="ShellFeatureCancel_Click"/>
                                 </StackPanel>
                             </StackPanel>
 

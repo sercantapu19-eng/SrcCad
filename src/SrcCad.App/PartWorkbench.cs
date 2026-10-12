@@ -573,6 +573,101 @@ public partial class MainWindow
 
     private void RevolveFeatureCancel_Click(object sender,RoutedEventArgs e)=>EndGraphFeature();
 
+    private FeatureReference[] SelectedFaceReferences(Guid producerId)
+        => _viewer.SelectedFaceReferences()
+            .Where(value=>!string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.Ordinal)
+            .Select(value=>new FeatureReference(producerId,TopologyKind.Face,value))
+            .ToArray();
+
+    private void Shell_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession())return;
+        var baseNode=CurrentSolidFeature();
+        if(baseNode is null){Status("Kabuk için mevcut katı gerekiyor.");return;}
+        _viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Face);
+        BeginShellFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Kabuk"),new ShellFeatureParameters(baseNode.Id,2),
+            References:SelectedFaceReferences(baseNode.Id)));
+    }
+
+    private void BeginShellFeature(FeatureNode node)
+    {
+        if(node.Parameters is not ShellFeatureParameters shell)throw new InvalidOperationException("Unsupported shell feature.");
+        _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;
+        ShellThickness.Text=shell.Thickness.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        ShellOutward.IsChecked=shell.Outward;
+        ShellSelectionText.Text=(node.References?.Length??0)==0?"Yüz seçilmedi":$"{node.References!.Length} yüz açılacak";
+        ShellFeatureError.Text=(node.References?.Length??0)==0?"En az bir yüz seçin.":"";
+        ShellFeaturePanel.Visibility=Visibility.Visible;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;
+        EdgeFeaturePanel.Visibility=Visibility.Collapsed;
+        HoleFeaturePanel.Visibility=Visibility.Collapsed;
+        RevolveFeaturePanel.Visibility=Visibility.Collapsed;
+        PropertyTitle.Text=node.Name;
+        PropertyInfo.Text="Gerçek OCCT kalın cidarlı kabuk • Ctrl ile çoklu açılacak yüz • canlı önizleme";
+        ManagerTabs.SelectedItem=PropertyManagerTab;
+        _viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Face);
+        _loadingGraphParameters=false;
+        if((node.References?.Length??0)>0)UpdateShellFeaturePreview();
+        else{_viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();}
+        RefreshCommandState();
+    }
+
+    internal void UpdateActiveShellSelection()
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not ShellFeatureParameters shell)return;
+        var references=SelectedFaceReferences(shell.BaseFeatureId);
+        _graphFeatureEdit=_graphFeatureEdit with{References=references};
+        ShellSelectionText.Text=references.Length==0?"Yüz seçilmedi":$"{references.Length} yüz açılacak";
+        UpdateShellFeaturePreview();
+    }
+
+    private FeatureDocument? ShellFeatureCandidate()
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not ShellFeatureParameters shell||
+           (_graphFeatureEdit.References?.Length??0)==0||
+           !DimensionNumbers.TryParse(ShellThickness.Text,SketchDimensionType.LineLength,out var thickness,out _)||
+           thickness<=1e-9)return null;
+        return ReplaceGraphNode(_graphFeatureEdit with{Parameters=shell with{Thickness=thickness,Outward=ShellOutward.IsChecked==true}});
+    }
+
+    private void ShellFeatureParameterChanged(object sender,RoutedEventArgs e)
+    {
+        if(!_loadingGraphParameters)UpdateShellFeaturePreview();
+    }
+
+    private void UpdateShellFeaturePreview()
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not ShellFeatureParameters)return;
+        var candidate=ShellFeatureCandidate();
+        if(candidate is null)
+        {
+            _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.0);
+            ShellFeatureError.Text=(_graphFeatureEdit.References?.Length??0)==0?"En az bir açılacak yüz seçin.":"Pozitif kabuk kalınlığı girin.";
+            return;
+        }
+        var preview=_partSession.Preview(candidate);
+        var body=preview.Success?LastBody(candidate,id=>preview.Outputs.GetValueOrDefault(id)):null;
+        if(body is not null&&_viewer.PreviewFeatureBody(body))
+        {
+            _viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.72);
+            ShellFeatureError.Text="";return;
+        }
+        _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.0);
+        ShellFeatureError.Text=preview.Report.Nodes.LastOrDefault(n=>n.State==RebuildState.Failed)?.Error??preview.Report.Error??"Kabuk önizlemesi oluşturulamadı.";
+    }
+
+    private void ShellFeatureOk_Click(object sender,RoutedEventArgs e)
+    {
+        var candidate=ShellFeatureCandidate();
+        if(candidate is null||_partSession is null){ShellFeatureError.Text="Yüz ve geçerli kalınlık gerekiyor.";return;}
+        if(!_partSession.TryCommit(candidate)){ShellFeatureError.Text=GraphError();return;}
+        var id=_graphFeatureEdit!.Id;EndGraphFeature();RefreshPartTree(id);
+        Status("Parametrik kabuk onaylandı; model yeniden oluşturuldu.");
+    }
+
+    private void ShellFeatureCancel_Click(object sender,RoutedEventArgs e)=>EndGraphFeature();
+
     private void BeginGraphExtrude()
     {
         if(_inSketch||_extrudeCommandActive||_partSession is null||SelectedGraphId is not Guid id||_partSession.Document.Node(id).Kind!=FeatureKind.Sketch)return;
@@ -590,6 +685,7 @@ public partial class MainWindow
         if(node.Parameters is FilletFeatureParameters or ChamferFeatureParameters){BeginEdgeFeature(node);return;}
         if(node.Parameters is HoleFeatureParameters){BeginHoleFeature(node);return;}
         if(node.Parameters is RevolveFeatureParameters or RevolveCutFeatureParameters){BeginRevolveFeature(node);return;}
+        if(node.Parameters is ShellFeatureParameters){BeginShellFeature(node);return;}
         _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;_depthWheel.Reset();
         var cut=node.Parameters as CutFeatureParameters;
         var depth=cut?.Depth??Math.Abs(((ExtrudeFeatureParameters)node.Parameters).Depth);
@@ -634,7 +730,7 @@ public partial class MainWindow
     {
         _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.0);
         _graphFeatureEdit=null;_extrudeCommandActive=false;
-        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;RevolveFeaturePanel.Visibility=Visibility.Collapsed;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;RevolveFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;
         _viewer.ClearSelection();_viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Face);
         ManagerTabs.SelectedItem=FeatureManagerTab;RefreshCommandState();
     }
@@ -656,5 +752,6 @@ public partial class MainWindow
         EdgeFeaturePanel.Visibility=Visibility.Collapsed;
         HoleFeaturePanel.Visibility=Visibility.Collapsed;
         RevolveFeaturePanel.Visibility=Visibility.Collapsed;
+        ShellFeaturePanel.Visibility=Visibility.Collapsed;
     }
 }
