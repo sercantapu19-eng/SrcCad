@@ -23,6 +23,7 @@ internal static class FeatureGraphTests
                 HoleFeatureParameters p=>p.Depth,
                 RevolveFeatureParameters p=>p.AngleDegrees,
                 RevolveCutFeatureParameters p=>p.AngleDegrees,
+                ShellFeatureParameters p=>p.Thickness,
                 _=>1
             };
             return new(own+dependencies.Values.Sum(x=>x.Value));
@@ -114,6 +115,14 @@ internal static class FeatureGraphTests
         var revolveCutDoc=initial with{Features=initial.Features.Concat(new[]{revolveSketchNode,revolvedCutNode}).ToArray()};
         Check(FeatureDocumentFile.Clone(revolveCutDoc).Node(revolvedCutNode.Id).Kind==FeatureKind.RevolvedCut,
             "revolved cut dependencies and axis roundtrip");
+
+        var shellNode=new FeatureNode(Guid.NewGuid(),"Kabuk1",new ShellFeatureParameters(boss.Id,2),
+            References:new[]{new FeatureReference(boss.Id,TopologyKind.Face,"F;1200;20;15;20;0;0;1")});
+        var shellDoc=initial with{Features=initial.Features.Append(shellNode).ToArray()};
+        var shellClone=FeatureDocumentFile.Clone(shellDoc);
+        Check(shellClone.Node(shellNode.Id).Kind==FeatureKind.Shell&&
+              ((ShellFeatureParameters)shellClone.Node(shellNode.Id).Parameters).Thickness==2,
+            "shell thickness and persistent opening-face references roundtrip");
 
         var external=session.Document;((IDictionary<int,SketchPoint>)((SketchFeatureParameters)external.Node(source.Id).Parameters).Sketch.Points).Clear();
         Check(((SketchFeatureParameters)session.Document.Node(source.Id).Parameters).Sketch.Points.Count>0,"external snapshot cannot mutate committed document");

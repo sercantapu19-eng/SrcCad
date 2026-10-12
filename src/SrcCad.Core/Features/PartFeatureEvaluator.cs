@@ -12,6 +12,7 @@ public interface IPartGeometryKernel
     string Hole(string baseBody,string faceReference,Vector3d center,double diameter,double depth,ExtrusionTermination termination,bool reverse);
     string Revolve(string? baseBody,SketchModel source,int axisEntityId,double angleDegrees,bool reverse);
     string RevolveCut(string baseBody,SketchModel source,int axisEntityId,double angleDegrees,bool reverse);
+    string Shell(string baseBody,IReadOnlyList<string> faceReferences,double thickness,bool outward);
 }
 // Strings are immutable; native cache is detached from the document/viewport.
 public sealed record PartFeatureOutput(string? SketchData, string? BRep);
@@ -45,6 +46,9 @@ public sealed class PartFeatureEvaluator(IPartGeometryKernel kernel) : IFeatureE
                 h.Center,h.Diameter,h.Depth,h.Termination,h.Reverse)),
             RevolveFeatureParameters r => new(null,kernel.Revolve(r.BaseFeatureId is Guid rb?Base(rb):null,Sketch(r.SketchId),r.AxisEntityId,r.AngleDegrees,r.Reverse)),
             RevolveCutFeatureParameters r => new(null,kernel.RevolveCut(Base(r.BaseFeatureId),Sketch(r.SketchId),r.AxisEntityId,r.AngleDegrees,r.Reverse)),
+            ShellFeatureParameters s => new(null,kernel.Shell(Base(s.BaseFeatureId),
+                (node.References??Array.Empty<FeatureReference>()).Where(r=>r.Kind==TopologyKind.Face&&r.ProducerId==s.BaseFeatureId).Select(r=>r.SemanticName).ToArray(),
+                s.Thickness,s.Outward)),
             _=>throw new NotSupportedException("Feature evaluator unavailable.")
         };
     }

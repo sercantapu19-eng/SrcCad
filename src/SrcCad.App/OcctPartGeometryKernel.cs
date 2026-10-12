@@ -61,4 +61,6 @@ internal sealed class OcctPartGeometryKernel : IPartGeometryKernel
     {
         var p=Pack(source,1);return OcctFeatureKernel.RevolveCut(baseBody,p.Outer,p.Holes,p.CircleHoles,p.Circle,p.Frame,Axis(source,axisEntityId),angleDegrees,reverse);
     }
+    public string Shell(string baseBody,IReadOnlyList<string> faceReferences,double thickness,bool outward)
+        => OcctFeatureKernel.Shell(baseBody,faceReferences.ToArray(),thickness,outward);
 }
