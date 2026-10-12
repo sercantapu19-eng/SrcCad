@@ -58,6 +58,8 @@
 #include "OcctViewportBridge.h"
 #include "OcctFeatureKernel.h"
 #include <BRepAlgoAPI_Cut.hxx>
+#include <BRepFilletAPI_MakeFillet.hxx>
+#include <BRepFilletAPI_MakeChamfer.hxx>
 #include <BRepTools.hxx>
 #include <BRep_Builder.hxx>
 #include <BRepBndLib.hxx>
@@ -65,6 +67,9 @@
 #include <TopExp.hxx>
 #include <TopTools_IndexedMapOfShape.hxx>
 #include <sstream>
+#include <iomanip>
+#include <limits>
+#include <set>
 #include <msclr/marshal_cppstd.h>
 
 using namespace System;
@@ -104,6 +109,79 @@ namespace SrcCad::Kernel::Occt
         return gp_Pnt(ox + ux * u + vx * v,
                       oy + uy * u + vy * v,
                       oz + uz * u + vz * v);
+    }
+
+    struct EdgeSemanticSignature
+    {
+        double Length=0.0;
+        double X=0.0;
+        double Y=0.0;
+        double Z=0.0;
+    };
+
+    static EdgeSemanticSignature edgeSemanticSignature(const TopoDS_Edge& edge)
+    {
+        GProp_GProps props;
+        BRepGProp::LinearProperties(edge,props);
+        gp_Pnt center=props.CentreOfMass();
+        return {props.Mass(),center.X(),center.Y(),center.Z()};
+    }
+
+    static std::string encodeEdgeReference(const TopoDS_Edge& edge)
+    {
+        auto signature=edgeSemanticSignature(edge);
+        std::ostringstream stream;
+        stream<<std::setprecision(17)<<"E;"<<signature.Length<<";"<<signature.X<<";"<<signature.Y<<";"<<signature.Z;
+        return stream.str();
+    }
+
+    static bool decodeEdgeReference(const std::string& text,EdgeSemanticSignature& signature)
+    {
+        if(text.rfind("E;",0)!=0)return false;
+        std::string payload=text.substr(2);
+        std::replace(payload.begin(),payload.end(),';',' ');
+        std::istringstream stream(payload);
+        return (stream>>signature.Length>>signature.X>>signature.Y>>signature.Z) &&
+               std::isfinite(signature.Length)&&signature.Length>1e-12&&
+               std::isfinite(signature.X)&&std::isfinite(signature.Y)&&std::isfinite(signature.Z);
+    }
+
+    static std::vector<TopoDS_Edge> resolveEdgeReferences(const TopoDS_Shape& shape,array<String^>^ references)
+    {
+        if(references==nullptr||references->Length==0)throw gcnew ArgumentException("At least one edge reference is required.");
+        TopTools_IndexedMapOfShape edgeMap;
+        TopExp::MapShapes(shape,TopAbs_EDGE,edgeMap);
+        if(edgeMap.Extent()==0)throw gcnew InvalidOperationException("Base body has no edges.");
+
+        std::set<int> used;
+        std::vector<TopoDS_Edge> resolved;
+        for each(String^ managed in references)
+        {
+            EdgeSemanticSignature wanted;
+            if(String::IsNullOrWhiteSpace(managed)||
+               !decodeEdgeReference(msclr::interop::marshal_as<std::string>(managed),wanted))
+                throw gcnew ArgumentException("Invalid persistent edge reference.");
+
+            int bestIndex=0;
+            double bestScore=std::numeric_limits<double>::infinity();
+            for(int i=1;i<=edgeMap.Extent();++i)
+            {
+                if(used.contains(i))continue;
+                TopoDS_Edge edge=TopoDS::Edge(edgeMap(i));
+                auto current=edgeSemanticSignature(edge);
+                if(current.Length<=1e-12)continue;
+                const double lengthScore=std::abs(std::log(current.Length/wanted.Length));
+                gp_Pnt currentCenter(current.X,current.Y,current.Z);
+                gp_Pnt wantedCenter(wanted.X,wanted.Y,wanted.Z);
+                const double centerScore=currentCenter.Distance(wantedCenter)/std::max(1.0,wanted.Length);
+                const double score=lengthScore+centerScore;
+                if(score<bestScore){bestScore=score;bestIndex=i;}
+            }
+            if(bestIndex==0)throw gcnew InvalidOperationException("Referenced edge can no longer be resolved.");
+            used.insert(bestIndex);
+            resolved.push_back(TopoDS::Edge(edgeMap(bestIndex)));
+        }
+        return resolved;
     }
 
     static void eraseList(OcctViewportState* state, std::vector<Handle(AIS_Shape)>& list)
@@ -384,6 +462,21 @@ namespace SrcCad::Kernel::Occt
             default: break;
         }
         return String::Format("{0}: {1} seçili", mode, count);
+    }
+
+    array<String^>^ OcctViewportBridge::SelectedEdgeReferences()
+    {
+        if(!IsInitialized())return gcnew array<String^>(0);
+        auto values=gcnew System::Collections::Generic::List<String^>();
+        for(myState->Context->InitSelected();myState->Context->MoreSelected();myState->Context->NextSelected())
+        {
+            if(!myState->Context->HasSelectedShape())continue;
+            TopoDS_Shape selected=myState->Context->SelectedShape();
+            if(selected.IsNull()||selected.ShapeType()!=TopAbs_EDGE)continue;
+            auto value=encodeEdgeReference(TopoDS::Edge(selected));
+            values->Add(gcnew String(value.c_str()));
+        }
+        return values->ToArray();
     }
 
     bool OcctViewportBridge::TryGetSelectedPlanarFace(CadPlane3D% plane)
@@ -913,6 +1006,56 @@ namespace SrcCad::Kernel::Occt
         }
         catch (const Standard_Failure& ex) { throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString())); }
     }
+    array<String^>^ OcctFeatureKernel::EdgeReferences(String^ body)
+    {
+        try
+        {
+            TopoDS_Shape shape=decodeFeature(body);
+            TopTools_IndexedMapOfShape edges;
+            TopExp::MapShapes(shape,TopAbs_EDGE,edges);
+            auto values=gcnew array<String^>(edges.Extent());
+            for(int i=1;i<=edges.Extent();++i)
+            {
+                auto value=encodeEdgeReference(TopoDS::Edge(edges(i)));
+                values[i-1]=gcnew String(value.c_str());
+            }
+            return values;
+        }
+        catch (const Standard_Failure& ex) { throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString())); }
+    }
+
+    String^ OcctFeatureKernel::Fillet(String^ baseBody,array<String^>^ edgeReferences,double radius)
+    {
+        if(!std::isfinite(radius)||radius<=1e-9)throw gcnew ArgumentException("Fillet radius must be positive.");
+        try
+        {
+            TopoDS_Shape baseShape=decodeFeature(baseBody);
+            auto edges=resolveEdgeReferences(baseShape,edgeReferences);
+            BRepFilletAPI_MakeFillet fillet(baseShape);
+            for(const auto& edge:edges)fillet.Add(radius,edge);
+            fillet.Build();
+            if(!fillet.IsDone())throw gcnew InvalidOperationException("OCCT fillet failed.");
+            return encodeFeature(fillet.Shape());
+        }
+        catch (const Standard_Failure& ex) { throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString())); }
+    }
+
+    String^ OcctFeatureKernel::Chamfer(String^ baseBody,array<String^>^ edgeReferences,double distance)
+    {
+        if(!std::isfinite(distance)||distance<=1e-9)throw gcnew ArgumentException("Chamfer distance must be positive.");
+        try
+        {
+            TopoDS_Shape baseShape=decodeFeature(baseBody);
+            auto edges=resolveEdgeReferences(baseShape,edgeReferences);
+            BRepFilletAPI_MakeChamfer chamfer(baseShape);
+            for(const auto& edge:edges)chamfer.Add(distance,edge);
+            chamfer.Build();
+            if(!chamfer.IsDone())throw gcnew InvalidOperationException("OCCT chamfer failed.");
+            return encodeFeature(chamfer.Shape());
+        }
+        catch (const Standard_Failure& ex) { throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString())); }
+    }
+
     array<double>^ OcctFeatureKernel::Inspect(String^ body)
     {
         try

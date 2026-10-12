@@ -64,6 +64,7 @@ namespace SrcCad::Kernel::Occt
         void ClearSelection();
         void SetSelectionMode(CadSelectionMode mode);
         System::String^ SelectionSummary();
+        cli::array<System::String^>^ SelectedEdgeReferences();
         bool TryGetSelectedPlanarFace([System::Runtime::InteropServices::Out] CadPlane3D% plane);
         void SetCommittedSolidTransparency(double transparency);
         void SetDisplayStyle(CadDisplayStyle style);

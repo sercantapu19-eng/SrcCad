@@ -10,6 +10,9 @@ namespace SrcCad::Kernel::Occt
         static System::String^ Cut(System::String^ baseBody, array<double>^ outer,
             array<double>^ holes, array<double>^ circleHoles, array<double>^ circle,
             array<double>^ frame, bool throughAll);
+        static System::String^ Fillet(System::String^ baseBody, array<System::String^>^ edgeReferences, double radius);
+        static System::String^ Chamfer(System::String^ baseBody, array<System::String^>^ edgeReferences, double distance);
+        static array<System::String^>^ EdgeReferences(System::String^ body);
         // volume, solid count, face count, edge count
         static array<double>^ Inspect(System::String^ body);
     };

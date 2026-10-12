@@ -21,6 +21,27 @@ internal static class NativeFeatureGraphTests
             doc=doc with{Features=doc.Features.Concat(new[]{toolNode,cut}).ToArray()};
             var evaluator=new PartFeatureEvaluator(new OcctPartGeometryKernel());
             var session=new FeatureSession<PartFeatureOutput>(doc,evaluator);
+
+            var bossBody=session.Output(boss.Id)!.BRep!;
+            var bossEdges=OcctFeatureKernel.EdgeReferences(bossBody);
+            Check(bossEdges.Length>=4,"extruded body exposes semantic edge references");
+            var filletNode=new FeatureNode(Guid.NewGuid(),"Radyus1",new FilletFeatureParameters(boss.Id,2),
+                References:new[]{new FeatureReference(boss.Id,TopologyKind.Edge,bossEdges[0])});
+            var filletDoc=doc with{Features=doc.Features.Append(filletNode).ToArray()};
+            var filletPreview=session.Preview(filletDoc);
+            Check(filletPreview.Success,"native OCCT fillet preview succeeds");
+            var filletInspect=OcctFeatureKernel.Inspect(filletPreview.Outputs[filletNode.Id].BRep!);
+            Check(filletInspect[0]>0&&filletInspect[1]==1&&filletInspect[2]>=6,"native fillet produces valid solid B-Rep");
+
+            var filletEdges=OcctFeatureKernel.EdgeReferences(filletPreview.Outputs[filletNode.Id].BRep!);
+            var chamferNode=new FeatureNode(Guid.NewGuid(),"Pah1",new ChamferFeatureParameters(filletNode.Id,1),
+                References:new[]{new FeatureReference(filletNode.Id,TopologyKind.Edge,filletEdges[0])});
+            var detailDoc=filletDoc with{Features=filletDoc.Features.Append(chamferNode).ToArray()};
+            var detailPreview=session.Preview(detailDoc);
+            Check(detailPreview.Success,"native OCCT chamfer after fillet succeeds");
+            var chamferInspect=OcctFeatureKernel.Inspect(detailPreview.Outputs[chamferNode.Id].BRep!);
+            Check(chamferInspect[0]>0&&chamferInspect[1]==1,"native chamfer produces valid solid B-Rep");
+
             void Volume(double expected,string message)
             {
                 var data=OcctFeatureKernel.Inspect(session.Output(cut.Id)!.BRep!);
