@@ -721,6 +721,23 @@ public partial class MainWindow : Window
         {
             var summary = new WinForms.ToolStripMenuItem(_viewer.SelectionSummary()) { Enabled = false };
             _viewportContextMenu.Items.Add(summary);
+
+            if ((_hasSolid || _partSession is not null) && _viewer.TryGetSelectedPlanarFace(out _))
+            {
+                var sketchOnFace = new WinForms.ToolStripMenuItem("Bu Yüzde Çizim Başlat");
+                sketchOnFace.Click += (_, _) => Dispatcher.BeginInvoke(new Action(() =>
+                    NewProfileSketch_Click(this,new RoutedEventArgs())));
+                _viewportContextMenu.Items.Add(sketchOnFace);
+            }
+
+            if (CutButton.IsEnabled)
+            {
+                var cut = new WinForms.ToolStripMenuItem("Ekstrüzyon Kes");
+                cut.Click += (_, _) => Dispatcher.BeginInvoke(new Action(() =>
+                    Cut_Click(this,new RoutedEventArgs())));
+                _viewportContextMenu.Items.Add(cut);
+            }
+
             _viewportContextMenu.Items.Add(new WinForms.ToolStripSeparator());
 
             AddSolidSelectionModeMenu("Yüz seçimi", CadSelectionMode.Face);
