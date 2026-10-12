@@ -333,6 +333,118 @@ public partial class MainWindow
 
     private void EdgeFeatureCancel_Click(object sender,RoutedEventArgs e)=>EndGraphFeature();
 
+    private void Hole_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession())return;
+        var baseNode=CurrentSolidFeature();
+        if(baseNode is null){Status("Delik için mevcut katı gerekiyor.");return;}
+        _viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Face);
+        var node=new FeatureNode(Guid.NewGuid(),NextGraphName("Delik"),
+            new HoleFeatureParameters(baseNode.Id,Vector3d.Zero,10,10,ExtrusionTermination.Blind,true));
+        BeginHoleFeature(node);
+        UpdateActiveHoleSelection();
+    }
+
+    private void BeginHoleFeature(FeatureNode node)
+    {
+        if(node.Parameters is not HoleFeatureParameters hole)throw new InvalidOperationException("Unsupported hole feature.");
+        _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;
+        HoleDiameter.Text=hole.Diameter.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        HoleDepth.Text=hole.Depth.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        HoleThroughAll.IsChecked=hole.Termination==ExtrusionTermination.ThroughAll;
+        HoleReverse.IsChecked=hole.Reverse;
+        HoleSelectionText.Text=(node.References?.Length??0)==1
+            ?$"Destek yüzü kayıtlı • merkez X={hole.Center.X:0.###} Y={hole.Center.Y:0.###} Z={hole.Center.Z:0.###}"
+            :"Düzlemsel yüz seçin ve delik merkezini tıklayın.";
+        HoleFeatureError.Text="";
+        HoleFeaturePanel.Visibility=Visibility.Visible;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;
+        EdgeFeaturePanel.Visibility=Visibility.Collapsed;
+        PropertyTitle.Text=node.Name;
+        PropertyInfo.Text="Düzlemsel yüz + konum • çap/derinlik • Tümünden Geç • canlı gerçek OCCT Boolean Cut";
+        ManagerTabs.SelectedItem=PropertyManagerTab;
+        _viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Face);
+        _loadingGraphParameters=false;
+        if((node.References?.Length??0)==1)UpdateHoleFeaturePreview();
+        RefreshCommandState();
+    }
+
+    internal void UpdateActiveHoleSelection()
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not HoleFeatureParameters hole)return;
+        if(!_viewer.TryGetSelectedPlanarFace(out var face))return;
+        var faceReference=_viewer.SelectedFaceReference();
+        if(string.IsNullOrWhiteSpace(faceReference))return;
+
+        var center=new Vector3d(face.Origin.X,face.Origin.Y,face.Origin.Z);
+        if(_viewer.ScreenToPlane(_lastMouseX,_lastMouseY,
+            face.Origin.X,face.Origin.Y,face.Origin.Z,
+            face.Normal.X,face.Normal.Y,face.Normal.Z,out var world))
+            center=new Vector3d(world.X,world.Y,world.Z);
+
+        _graphFeatureEdit=_graphFeatureEdit with
+        {
+            Parameters=hole with{Center=center},
+            References=new[]{new FeatureReference(hole.BaseFeatureId,TopologyKind.Face,faceReference)}
+        };
+        HoleSelectionText.Text=$"Yüz seçildi • merkez X={center.X:0.###} Y={center.Y:0.###} Z={center.Z:0.###}";
+        UpdateHoleFeaturePreview();
+    }
+
+    private FeatureDocument? HoleFeatureCandidate()
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not HoleFeatureParameters hole||
+           (_graphFeatureEdit.References?.Length??0)!=1||
+           !DimensionNumbers.TryParse(HoleDiameter.Text,SketchDimensionType.LineLength,out var diameter,out _)||
+           !DimensionNumbers.TryParse(HoleDepth.Text,SketchDimensionType.LineLength,out var depth,out _)||
+           diameter<=1e-9||depth<=1e-9)return null;
+        var parameters=hole with
+        {
+            Diameter=diameter,Depth=depth,
+            Termination=HoleThroughAll.IsChecked==true?ExtrusionTermination.ThroughAll:ExtrusionTermination.Blind,
+            Reverse=HoleReverse.IsChecked==true
+        };
+        return ReplaceGraphNode(_graphFeatureEdit with{Parameters=parameters});
+    }
+
+    private void HoleFeatureParameterChanged(object sender,RoutedEventArgs e)
+    {
+        if(!_loadingGraphParameters)UpdateHoleFeaturePreview();
+    }
+
+    private void UpdateHoleFeaturePreview()
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not HoleFeatureParameters)return;
+        var candidate=HoleFeatureCandidate();
+        if(candidate is null)
+        {
+            _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.0);
+            HoleFeatureError.Text=(_graphFeatureEdit.References?.Length??0)==0
+                ?"Düzlemsel yüz ve delik konumu seçin.":"Pozitif çap ve derinlik girin.";
+            return;
+        }
+        var preview=_partSession.Preview(candidate);
+        var body=preview.Success?LastBody(candidate,id=>preview.Outputs.GetValueOrDefault(id)):null;
+        if(body is not null&&_viewer.PreviewFeatureBody(body))
+        {
+            _viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.72);
+            HoleFeatureError.Text="";return;
+        }
+        _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.0);
+        HoleFeatureError.Text=preview.Report.Nodes.LastOrDefault(n=>n.State==RebuildState.Failed)?.Error??preview.Report.Error??"Delik önizlemesi oluşturulamadı.";
+    }
+
+    private void HoleFeatureOk_Click(object sender,RoutedEventArgs e)
+    {
+        var candidate=HoleFeatureCandidate();
+        if(candidate is null||_partSession is null){HoleFeatureError.Text="Yüz, konum, çap ve derinlik gerekiyor.";return;}
+        if(!_partSession.TryCommit(candidate)){HoleFeatureError.Text=GraphError();return;}
+        var id=_graphFeatureEdit!.Id;EndGraphFeature();RefreshPartTree(id);
+        Status("Parametrik delik onaylandı; model yeniden oluşturuldu.");
+    }
+
+    private void HoleFeatureCancel_Click(object sender,RoutedEventArgs e)=>EndGraphFeature();
+
     private void BeginGraphExtrude()
     {
         if(_inSketch||_extrudeCommandActive||_partSession is null||SelectedGraphId is not Guid id||_partSession.Document.Node(id).Kind!=FeatureKind.Sketch)return;
@@ -348,6 +460,7 @@ public partial class MainWindow
     private void BeginGraphFeature(FeatureNode node)
     {
         if(node.Parameters is FilletFeatureParameters or ChamferFeatureParameters){BeginEdgeFeature(node);return;}
+        if(node.Parameters is HoleFeatureParameters){BeginHoleFeature(node);return;}
         _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;_depthWheel.Reset();
         var cut=node.Parameters as CutFeatureParameters;
         var depth=cut?.Depth??Math.Abs(((ExtrudeFeatureParameters)node.Parameters).Depth);
@@ -392,7 +505,7 @@ public partial class MainWindow
     {
         _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.0);
         _graphFeatureEdit=null;_extrudeCommandActive=false;
-        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;
         _viewer.ClearSelection();_viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Face);
         ManagerTabs.SelectedItem=FeatureManagerTab;RefreshCommandState();
     }
@@ -412,5 +525,6 @@ public partial class MainWindow
         foreach(var node in _partNodes)PartNode.Items.Remove(node);_partNodes.Clear();
         GraphFeaturePanel.Visibility=Visibility.Collapsed;
         EdgeFeaturePanel.Visibility=Visibility.Collapsed;
+        HoleFeaturePanel.Visibility=Visibility.Collapsed;
     }
 }

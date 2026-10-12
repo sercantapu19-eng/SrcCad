@@ -65,7 +65,7 @@
                     <Button Style="{StaticResource CadCommandButton}" Content="Loft" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Radyus" Click="Fillet_Click" x:Name="FilletButton" ToolTip="Kenarları seçin; gerçek OCCT 3B radyus oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Pah" Click="Chamfer_Click" x:Name="ChamferButton" ToolTip="Kenarları seçin; gerçek OCCT 3B pah oluşturur."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Delik" Click="CadCommandPlaceholder_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Delik" Click="Hole_Click" x:Name="HoleButton" ToolTip="Düzlemsel yüz seçin; tıklanan konumda gerçek parametrik delik oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Kabuk" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Draft" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Nervür" Click="CadCommandPlaceholder_Click"/>
@@ -268,6 +268,22 @@
                                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                     <Button Content="✓" Width="52" Height="34" Click="EdgeFeatureOk_Click"/>
                                     <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="EdgeFeatureCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="HoleFeaturePanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Delik Çapı (mm)" FontWeight="Bold"/>
+                                <TextBox x:Name="HoleDiameter" TextChanged="HoleFeatureParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock Text="Derinlik (mm)" FontWeight="Bold"/>
+                                <TextBox x:Name="HoleDepth" TextChanged="HoleFeatureParameterChanged" Margin="0,4,0,8"/>
+                                <CheckBox x:Name="HoleThroughAll" Content="Tümünden Geç" Checked="HoleFeatureParameterChanged" Unchecked="HoleFeatureParameterChanged" Margin="0,0,0,8"/>
+                                <CheckBox x:Name="HoleReverse" Content="Yönü Ters Çevir" Checked="HoleFeatureParameterChanged" Unchecked="HoleFeatureParameterChanged" Margin="0,0,0,8"/>
+                                <TextBlock Text="Konum / Destek" FontWeight="Bold"/>
+                                <TextBlock x:Name="HoleSelectionText" Text="Düzlemsel yüz seçin ve konumu tıklayın." TextWrapping="Wrap" Margin="0,4,0,8"/>
+                                <TextBlock x:Name="HoleFeatureError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="HoleFeatureOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="HoleFeatureCancel_Click"/>
                                 </StackPanel>
                             </StackPanel>
 
