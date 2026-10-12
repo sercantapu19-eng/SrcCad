@@ -159,15 +159,46 @@ public partial class MainWindow
         FinishSketchInteraction();_viewer.ClearSketch();_viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.0);
         RefreshPartTree();Status("Çizim düzenlemesi iptal edildi; feature geçmişi değişmedi.");
     }
+    private FeatureNode? CutProfileCandidate()
+    {
+        if(_partSession is null)return null;
+        if(SelectedGraphNode is {Kind:FeatureKind.Sketch} selected)return selected;
+
+        var ordered=_partSession.Document.Ordered();
+        var lastBody=-1;
+        for(var i=0;i<ordered.Length;i++)
+            if(_partSession.Output(ordered[i].Id)?.BRep is not null)lastBody=i;
+        if(lastBody<0)return null;
+
+        return ordered.Skip(lastBody+1).LastOrDefault(n=>n.Kind==FeatureKind.Sketch);
+    }
+
     private void Cut_Click(object sender,RoutedEventArgs e)
     {
         if(_inSketch||_extrudeCommandActive||_partSession is null)return;
         var document=_partSession.Document;
-        if(SelectedGraphId is not Guid sketchId||document.Node(sketchId).Kind!=FeatureKind.Sketch)
-        {Status("FeatureManager'dan kesme profilini seçin.");return;}
+        var sketchNode=CutProfileCandidate();
+        if(sketchNode is null){Status("Kesme için katı yüzünde/düzleminde kapalı bir çizim oluşturun.");return;}
+
         var baseNode=document.Ordered().LastOrDefault(n=>_partSession.Output(n.Id)?.BRep is not null);
         if(baseNode is null){Status("Kesme için mevcut katı gerekiyor.");return;}
-        BeginGraphFeature(new(Guid.NewGuid(),NextGraphName("Kes-Ekstrüzyon"),new CutFeatureParameters(baseNode.Id,sketchId,10)));
+
+        var sketchParameters=(SketchFeatureParameters)sketchNode.Parameters;
+        var reverse=string.Equals(sketchParameters.Plane.Name,"Seçili Yüz",StringComparison.Ordinal);
+        var node=new FeatureNode(Guid.NewGuid(),NextGraphName("Kes-Ekstrüzyon"),
+            new CutFeatureParameters(baseNode.Id,sketchNode.Id,10,ExtrusionTermination.Blind,reverse));
+
+        // Face normals point outward. Prefer the direction into the body, then
+        // probe the opposite direction for arbitrary reference-plane sketches.
+        var first=_partSession.Preview(ReplaceGraphNode(node));
+        if(!first.Success)
+        {
+            var cut=(CutFeatureParameters)node.Parameters;
+            var alternate=node with{Parameters=cut with{Reverse=!cut.Reverse}};
+            if(_partSession.Preview(ReplaceGraphNode(alternate)).Success)node=alternate;
+        }
+
+        BeginGraphFeature(node);
     }
     private void BeginGraphExtrude()
     {

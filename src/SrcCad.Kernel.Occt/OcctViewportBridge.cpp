@@ -405,14 +405,39 @@ namespace SrcCad::Kernel::Occt
 
             gp_Ax3 axes = geometry->Pln().Position();
             gp_Pnt origin = axes.Location();
-            gp_Dir u = axes.XDirection();
-            gp_Dir v = axes.YDirection();
             gp_Dir normal = axes.Direction();
-            if (face.Orientation() == TopAbs_REVERSED)
+            if (face.Orientation() == TopAbs_REVERSED) normal.Reverse();
+
+            // Use the longest real boundary edge as the sketch X direction.
+            // This produces a familiar Normal-To orientation instead of exposing
+            // OCCT's arbitrary planar-surface parameter frame.
+            gp_Dir u = axes.XDirection();
+            double bestLength=0.0;
+            TopTools_IndexedMapOfShape edgeMap;
+            TopExp::MapShapes(face,TopAbs_EDGE,edgeMap);
+            for(int i=1;i<=edgeMap.Extent();++i)
             {
-                normal.Reverse();
-                v.Reverse(); // Keep U x V = Normal for PlaneFrame.Validate().
+                TopoDS_Edge edge=TopoDS::Edge(edgeMap(i));
+                TopoDS_Vertex a,b;
+                TopExp::Vertices(edge,a,b);
+                if(a.IsNull()||b.IsNull())continue;
+                gp_Pnt pa=BRep_Tool::Pnt(a), pb=BRep_Tool::Pnt(b);
+                const double length=pa.Distance(pb);
+                if(length<=bestLength+1e-9)continue;
+                gp_Vec chord(pa,pb);
+                if(chord.Magnitude()<=1e-9)continue;
+                bestLength=length;
+                u=gp_Dir(chord);
             }
+
+            const double ax=std::abs(u.X()), ay=std::abs(u.Y()), az=std::abs(u.Z());
+            if((ax>=ay&&ax>=az&&u.X()<0.0)||
+               (ay>ax&&ay>=az&&u.Y()<0.0)||
+               (az>ax&&az>ay&&u.Z()<0.0))u.Reverse();
+
+            gp_Vec nVec(normal.X(),normal.Y(),normal.Z());
+            gp_Vec uVec(u.X(),u.Y(),u.Z());
+            gp_Dir v(nVec.Crossed(uVec));
 
             plane.Origin.X=origin.X(); plane.Origin.Y=origin.Y(); plane.Origin.Z=origin.Z();
             plane.U.X=u.X(); plane.U.Y=u.Y(); plane.U.Z=u.Z();

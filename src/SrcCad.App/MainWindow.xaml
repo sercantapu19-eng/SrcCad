@@ -197,7 +197,8 @@
                 <Border Grid.Row="0" Background="#F9FBFC" BorderBrush="#C8D2DA" BorderThickness="0,0,0,1">
                     <DockPanel Margin="8,2">
                         <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
-                            <Button Style="{StaticResource HeadButton}" Content="Fit" Click="Fit_Click"/>
+                            <Button Style="{StaticResource HeadButton}" Content="Fit" Click="Fit_Click" ToolTip="Ekrana Sığdır (F)"/>
+                            <Button Style="{StaticResource HeadButton}" Content="Dik Bak" Click="NormalTo_Click" ToolTip="Seçili düzlemsel yüze/düzleme dik bak (Ctrl+8)"/>
                             <Button Style="{StaticResource HeadButton}" Content="ISO" Click="Iso_Click"/>
                             <Button Style="{StaticResource HeadButton}" Content="Ön" Click="Front_Click"/>
                             <Button Style="{StaticResource HeadButton}" Content="Üst" Click="Top_Click"/>

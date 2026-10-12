@@ -197,6 +197,11 @@ public partial class MainWindow : Window
         {
             ShowViewOrientation();return true;
         }
+        if (control && key is Key.D8 or Key.NumPad8)
+        {
+            NormalToSelectedSupport();
+            return true;
+        }
         if (key == Key.F)
         {
             _viewer.FitAll();
@@ -310,6 +315,8 @@ public partial class MainWindow : Window
             var toggle = (WinForms.Control.ModifierKeys & WinForms.Keys.Control) == WinForms.Keys.Control;
             var selected = _viewer.SelectDetected(toggle);
             Status(selected ? _viewer.SelectionSummary() : "Seçim yok");
+            if (selected && e.Clicks >= 2 && !toggle)
+                NormalToSelectedSupport();
         }
     }
 
@@ -724,6 +731,10 @@ public partial class MainWindow : Window
 
             if ((_hasSolid || _partSession is not null) && _viewer.TryGetSelectedPlanarFace(out _))
             {
+                var normalTo = new WinForms.ToolStripMenuItem("Yüzeye Dik Bak (Ctrl+8)");
+                normalTo.Click += (_, _) => Dispatcher.BeginInvoke(new Action(() => NormalToSelectedSupport()));
+                _viewportContextMenu.Items.Add(normalTo);
+
                 var sketchOnFace = new WinForms.ToolStripMenuItem("Bu Yüzde Çizim Başlat");
                 sketchOnFace.Click += (_, _) => Dispatcher.BeginInvoke(new Action(() =>
                     NewProfileSketch_Click(this,new RoutedEventArgs())));
@@ -2040,7 +2051,35 @@ public partial class MainWindow : Window
         Status($"{_selectedPlane.Name} seçildi • Çizim komutuna basın.");
     }
 
+    private bool NormalToSelectedSupport()
+    {
+        if (_viewer.TryGetSelectedPlanarFace(out var face))
+        {
+            _viewer.SetNormalView(
+                face.Normal.X,face.Normal.Y,face.Normal.Z,
+                face.V.X,face.V.Y,face.V.Z);
+            _viewer.FitAll();
+            Status("Seçili yüzeye dik bakış • ekran yönü yüz kenarına hizalandı.");
+            return true;
+        }
+
+        if (FeatureTree.SelectedItem is TreeViewItem item && item.Tag is string tag && tag.StartsWith("plane:",StringComparison.Ordinal))
+        {
+            var plane=_selectedPlane;
+            _viewer.SetNormalView(
+                plane.Normal.X,plane.Normal.Y,plane.Normal.Z,
+                plane.V.X,plane.V.Y,plane.V.Z);
+            _viewer.FitAll();
+            Status(plane.Name+" • dik bakış");
+            return true;
+        }
+
+        Status("Dik Bak için düzlemsel bir yüz veya Ön/Üst/Sağ Düzlem seçin.");
+        return false;
+    }
+
     private void Fit_Click(object sender, RoutedEventArgs e) => _viewer.FitAll();
+    private void NormalTo_Click(object sender,RoutedEventArgs e) => NormalToSelectedSupport();
     private void Iso_Click(object sender, RoutedEventArgs e) => _viewer.SetIsoView();
     private void Front_Click(object sender, RoutedEventArgs e) => _viewer.SetFrontView();
     private void Top_Click(object sender, RoutedEventArgs e) => _viewer.SetTopView();
@@ -2165,7 +2204,7 @@ public partial class MainWindow : Window
         StartSketchButton.Content = "Çizim";
         CancelSourceSketchEditButton.Visibility = _sourceSketchEditBefore is null && _graphSketchEdit is null ? Visibility.Collapsed : Visibility.Visible;
         NewProfileSketchButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&(_hasSolid||_partSession is not null);
-        CutButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid&&_partSession is not null&&SelectedGraphId is Guid selected&&SelectedGraphNode?.Kind==SrcCad.Core.Features.FeatureKind.Sketch;
+        CutButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid&&_partSession is not null&&CutProfileCandidate() is not null;
         if(_partSession is not null)
         {
             ExtrudeButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&!_hasSolid&&SelectedGraphId is Guid sketchId&&SelectedGraphNode?.Kind==SrcCad.Core.Features.FeatureKind.Sketch;
