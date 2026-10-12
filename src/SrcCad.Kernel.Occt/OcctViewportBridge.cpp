@@ -64,6 +64,8 @@
 #include <BRepAlgoAPI_Fuse.hxx>
 #include <BRepFilletAPI_MakeFillet.hxx>
 #include <BRepFilletAPI_MakeChamfer.hxx>
+#include <BRepOffsetAPI_MakeThickSolid.hxx>
+#include <TopTools_ListOfShape.hxx>
 #include <BRepTools.hxx>
 #include <BRep_Builder.hxx>
 #include <BRepBndLib.hxx>
@@ -601,6 +603,21 @@ namespace SrcCad::Kernel::Occt
             return value.empty()?nullptr:gcnew String(value.c_str());
         }
         catch(const Standard_Failure&){return nullptr;}
+    }
+
+    array<String^>^ OcctViewportBridge::SelectedFaceReferences()
+    {
+        if(!IsInitialized())return gcnew array<String^>(0);
+        auto values=gcnew System::Collections::Generic::List<String^>();
+        for(myState->Context->InitSelected();myState->Context->MoreSelected();myState->Context->NextSelected())
+        {
+            if(!myState->Context->HasSelectedShape())continue;
+            TopoDS_Shape selected=myState->Context->SelectedShape();
+            if(selected.IsNull()||selected.ShapeType()!=TopAbs_FACE)continue;
+            auto value=encodeFaceReference(TopoDS::Face(selected));
+            if(!value.empty())values->Add(gcnew String(value.c_str()));
+        }
+        return values->ToArray();
     }
 
     bool OcctViewportBridge::TryGetSelectedPlanarFace(CadPlane3D% plane)
@@ -1197,6 +1214,27 @@ namespace SrcCad::Kernel::Occt
             if(!cut.IsDone())throw gcnew InvalidOperationException("OCCT revolved cut failed.");
             TopoDS_Shape result=cut.Shape();const double after=featureVolume(result);
             if(before-after<=std::max(1e-8,before*1e-10))throw gcnew InvalidOperationException("Revolved cut removes no material.");
+            return encodeFeature(result);
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
+    String^ OcctFeatureKernel::Shell(String^ baseBody,array<String^>^ faceReferences,double thickness,bool outward)
+    {
+        if(!std::isfinite(thickness)||thickness<=1e-9)throw gcnew ArgumentException("Shell thickness must be positive.");
+        if(faceReferences==nullptr||faceReferences->Length==0)throw gcnew ArgumentException("Shell requires at least one opening face.");
+        try
+        {
+            TopoDS_Shape baseShape=decodeFeature(baseBody);
+            TopTools_ListOfShape closingFaces;
+            for each(String^ reference in faceReferences)
+                closingFaces.Append(resolveFaceReference(baseShape,reference));
+
+            BRepOffsetAPI_MakeThickSolid shell;
+            const double offset=outward?thickness:-thickness;
+            shell.MakeThickSolidByJoin(baseShape,closingFaces,offset,1.0e-3);
+            if(!shell.IsDone())throw gcnew InvalidOperationException("OCCT shell operation failed.");
+            TopoDS_Shape result=shell.Shape();
             return encodeFeature(result);
         }
         catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}

@@ -20,6 +20,8 @@ namespace SrcCad::Kernel::Occt
         static System::String^ RevolveCut(System::String^ baseBody, array<double>^ outer, array<double>^ holes,
             array<double>^ circleHoles, array<double>^ circle, array<double>^ frame,
             array<double>^ axis, double angleDegrees, bool reverse);
+        static System::String^ Shell(System::String^ baseBody, array<System::String^>^ faceReferences,
+            double thickness, bool outward);
         static array<System::String^>^ EdgeReferences(System::String^ body);
         static array<System::String^>^ FaceReferences(System::String^ body);
         // volume, solid count, face count, edge count

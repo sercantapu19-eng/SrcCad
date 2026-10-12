@@ -65,6 +65,27 @@ internal static class NativeFeatureGraphTests
             var holeInspect=OcctFeatureKernel.Inspect(holePreview.Outputs[holeNode.Id].BRep!);
             Check(holeInspect[0]<24000&&holeInspect[1]==1,"hole feature produces valid material-removing B-Rep");
 
+            string? shellFace=null;
+            string? shelledBody=null;
+            foreach(var faceRef in faceRefs)
+            {
+                try
+                {
+                    var candidate=OcctFeatureKernel.Shell(bossBody,new[]{faceRef},2,false);
+                    var info=OcctFeatureKernel.Inspect(candidate);
+                    if(info[0]>0&&info[0]<24000){shellFace=faceRef;shelledBody=candidate;break;}
+                }
+                catch(InvalidOperationException){}
+            }
+            Check(shellFace is not null&&shelledBody is not null,"native shell resolves removable face and builds hollow body");
+            var shellNode=new FeatureNode(Guid.NewGuid(),"Kabuk1",new ShellFeatureParameters(boss.Id,2),
+                References:new[]{new FeatureReference(boss.Id,TopologyKind.Face,shellFace!)});
+            var shellDoc=doc with{Features=doc.Features.Append(shellNode).ToArray()};
+            var shellPreview=session.Preview(shellDoc);
+            Check(shellPreview.Success,"shell preview succeeds through feature graph");
+            var shellInspect=OcctFeatureKernel.Inspect(shellPreview.Outputs[shellNode.Id].BRep!);
+            Check(shellInspect[0]>0&&shellInspect[0]<24000&&shellInspect[1]==1,"shell feature produces valid hollow solid");
+
             var revolveSketch=new SketchModel(plane);
             var ra=revolveSketch.CreatePointExact(new(0,-10));
             var rb=revolveSketch.CreatePointExact(new(0,30));
