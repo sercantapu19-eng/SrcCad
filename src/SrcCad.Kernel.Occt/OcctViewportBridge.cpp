@@ -33,6 +33,7 @@
 #include <BRepBuilderAPI_MakeFace.hxx>
 #include <BRepBuilderAPI_MakeVertex.hxx>
 #include <BRepPrimAPI_MakePrism.hxx>
+#include <BRepPrimAPI_MakeCylinder.hxx>
 #include <BRepCheck_Analyzer.hxx>
 #include <BRepGProp.hxx>
 #include <GProp_GProps.hxx>
@@ -182,6 +183,111 @@ namespace SrcCad::Kernel::Occt
             resolved.push_back(TopoDS::Edge(edgeMap(bestIndex)));
         }
         return resolved;
+    }
+
+    static bool planarFaceFrame(const TopoDS_Face& face,gp_Pnt& origin,gp_Dir& u,gp_Dir& v,gp_Dir& normal)
+    {
+        Handle(Geom_Surface) surface=BRep_Tool::Surface(face);
+        Handle(Geom_RectangularTrimmedSurface) trimmed=Handle(Geom_RectangularTrimmedSurface)::DownCast(surface);
+        if(!trimmed.IsNull())surface=trimmed->BasisSurface();
+        Handle(Geom_Plane) geometry=Handle(Geom_Plane)::DownCast(surface);
+        if(geometry.IsNull())return false;
+
+        gp_Ax3 axes=geometry->Pln().Position();
+        origin=axes.Location();
+        normal=axes.Direction();
+        if(face.Orientation()==TopAbs_REVERSED)normal.Reverse();
+
+        u=axes.XDirection();
+        double bestLength=0.0;
+        TopTools_IndexedMapOfShape edgeMap;
+        TopExp::MapShapes(face,TopAbs_EDGE,edgeMap);
+        for(int i=1;i<=edgeMap.Extent();++i)
+        {
+            TopoDS_Edge edge=TopoDS::Edge(edgeMap(i));
+            TopoDS_Vertex a,b;
+            TopExp::Vertices(edge,a,b);
+            if(a.IsNull()||b.IsNull())continue;
+            gp_Pnt pa=BRep_Tool::Pnt(a),pb=BRep_Tool::Pnt(b);
+            const double length=pa.Distance(pb);
+            if(length<=bestLength+1e-9)continue;
+            gp_Vec chord(pa,pb);
+            if(chord.Magnitude()<=1e-9)continue;
+            bestLength=length;
+            u=gp_Dir(chord);
+        }
+        const double ax=std::abs(u.X()),ay=std::abs(u.Y()),az=std::abs(u.Z());
+        if((ax>=ay&&ax>=az&&u.X()<0.0)||(ay>ax&&ay>=az&&u.Y()<0.0)||(az>ax&&az>ay&&u.Z()<0.0))u.Reverse();
+        gp_Vec nVec(normal.X(),normal.Y(),normal.Z()),uVec(u.X(),u.Y(),u.Z());
+        v=gp_Dir(nVec.Crossed(uVec));
+        return true;
+    }
+
+    struct FaceSemanticSignature
+    {
+        double Area=0.0;
+        double X=0.0,Y=0.0,Z=0.0;
+        double NX=0.0,NY=0.0,NZ=0.0;
+    };
+
+    static bool faceSemanticSignature(const TopoDS_Face& face,FaceSemanticSignature& signature)
+    {
+        gp_Pnt origin;gp_Dir u,v,normal;
+        if(!planarFaceFrame(face,origin,u,v,normal))return false;
+        GProp_GProps props;BRepGProp::SurfaceProperties(face,props);
+        gp_Pnt center=props.CentreOfMass();
+        signature={props.Mass(),center.X(),center.Y(),center.Z(),normal.X(),normal.Y(),normal.Z()};
+        return std::isfinite(signature.Area)&&signature.Area>1e-12;
+    }
+
+    static std::string encodeFaceReference(const TopoDS_Face& face)
+    {
+        FaceSemanticSignature signature;
+        if(!faceSemanticSignature(face,signature))return {};
+        std::ostringstream stream;
+        stream<<std::setprecision(17)<<"F;"<<signature.Area<<";"<<signature.X<<";"<<signature.Y<<";"<<signature.Z
+              <<";"<<signature.NX<<";"<<signature.NY<<";"<<signature.NZ;
+        return stream.str();
+    }
+
+    static bool decodeFaceReference(const std::string& text,FaceSemanticSignature& signature)
+    {
+        if(text.rfind("F;",0)!=0)return false;
+        std::string payload=text.substr(2);
+        std::replace(payload.begin(),payload.end(),';',' ');
+        std::istringstream stream(payload);
+        return (stream>>signature.Area>>signature.X>>signature.Y>>signature.Z>>signature.NX>>signature.NY>>signature.NZ) &&
+               std::isfinite(signature.Area)&&signature.Area>1e-12&&
+               std::isfinite(signature.X)&&std::isfinite(signature.Y)&&std::isfinite(signature.Z)&&
+               std::isfinite(signature.NX)&&std::isfinite(signature.NY)&&std::isfinite(signature.NZ);
+    }
+
+    static TopoDS_Face resolveFaceReference(const TopoDS_Shape& shape,String^ managed)
+    {
+        if(String::IsNullOrWhiteSpace(managed))throw gcnew ArgumentException("Face reference is required.");
+        FaceSemanticSignature wanted;
+        if(!decodeFaceReference(msclr::interop::marshal_as<std::string>(managed),wanted))
+            throw gcnew ArgumentException("Invalid persistent face reference.");
+
+        TopTools_IndexedMapOfShape faces;
+        TopExp::MapShapes(shape,TopAbs_FACE,faces);
+        int bestIndex=0;double bestScore=std::numeric_limits<double>::infinity();
+        gp_Dir wantedNormal(wanted.NX,wanted.NY,wanted.NZ);
+        for(int i=1;i<=faces.Extent();++i)
+        {
+            TopoDS_Face face=TopoDS::Face(faces(i));
+            FaceSemanticSignature current;
+            if(!faceSemanticSignature(face,current))continue;
+            const double areaScore=std::abs(std::log(current.Area/wanted.Area));
+            gp_Pnt a(current.X,current.Y,current.Z),b(wanted.X,wanted.Y,wanted.Z);
+            const double centerScore=a.Distance(b)/std::max(1.0,std::sqrt(wanted.Area));
+            gp_Dir currentNormal(current.NX,current.NY,current.NZ);
+            const double normalScore=(1.0-currentNormal.Dot(wantedNormal))*4.0;
+            const double score=areaScore+centerScore+normalScore;
+            if(score<bestScore){bestScore=score;bestIndex=i;}
+        }
+        if(bestIndex==0)throw gcnew InvalidOperationException("Referenced planar face can no longer be resolved.");
+        return TopoDS::Face(faces(bestIndex));
     }
 
     static void eraseList(OcctViewportState* state, std::vector<Handle(AIS_Shape)>& list)
@@ -479,6 +585,21 @@ namespace SrcCad::Kernel::Occt
         return values->ToArray();
     }
 
+    String^ OcctViewportBridge::SelectedFaceReference()
+    {
+        if(!IsInitialized()||myState->Context->NbSelected()!=1)return nullptr;
+        try
+        {
+            myState->Context->InitSelected();
+            if(!myState->Context->MoreSelected()||!myState->Context->HasSelectedShape())return nullptr;
+            TopoDS_Shape selected=myState->Context->SelectedShape();
+            if(selected.IsNull()||selected.ShapeType()!=TopAbs_FACE)return nullptr;
+            auto value=encodeFaceReference(TopoDS::Face(selected));
+            return value.empty()?nullptr:gcnew String(value.c_str());
+        }
+        catch(const Standard_Failure&){return nullptr;}
+    }
+
     bool OcctViewportBridge::TryGetSelectedPlanarFace(CadPlane3D% plane)
     {
         if (!IsInitialized() || myState->Context->NbSelected() != 1) return false;
@@ -488,50 +609,8 @@ namespace SrcCad::Kernel::Occt
             if (!myState->Context->MoreSelected() || !myState->Context->HasSelectedShape()) return false;
             TopoDS_Shape selected = myState->Context->SelectedShape();
             if (selected.IsNull() || selected.ShapeType() != TopAbs_FACE) return false;
-
-            TopoDS_Face face = TopoDS::Face(selected);
-            Handle(Geom_Surface) surface = BRep_Tool::Surface(face);
-            Handle(Geom_RectangularTrimmedSurface) trimmed = Handle(Geom_RectangularTrimmedSurface)::DownCast(surface);
-            if (!trimmed.IsNull()) surface = trimmed->BasisSurface();
-            Handle(Geom_Plane) geometry = Handle(Geom_Plane)::DownCast(surface);
-            if (geometry.IsNull()) return false;
-
-            gp_Ax3 axes = geometry->Pln().Position();
-            gp_Pnt origin = axes.Location();
-            gp_Dir normal = axes.Direction();
-            if (face.Orientation() == TopAbs_REVERSED) normal.Reverse();
-
-            // Use the longest real boundary edge as the sketch X direction.
-            // This produces a familiar Normal-To orientation instead of exposing
-            // OCCT's arbitrary planar-surface parameter frame.
-            gp_Dir u = axes.XDirection();
-            double bestLength=0.0;
-            TopTools_IndexedMapOfShape edgeMap;
-            TopExp::MapShapes(face,TopAbs_EDGE,edgeMap);
-            for(int i=1;i<=edgeMap.Extent();++i)
-            {
-                TopoDS_Edge edge=TopoDS::Edge(edgeMap(i));
-                TopoDS_Vertex a,b;
-                TopExp::Vertices(edge,a,b);
-                if(a.IsNull()||b.IsNull())continue;
-                gp_Pnt pa=BRep_Tool::Pnt(a), pb=BRep_Tool::Pnt(b);
-                const double length=pa.Distance(pb);
-                if(length<=bestLength+1e-9)continue;
-                gp_Vec chord(pa,pb);
-                if(chord.Magnitude()<=1e-9)continue;
-                bestLength=length;
-                u=gp_Dir(chord);
-            }
-
-            const double ax=std::abs(u.X()), ay=std::abs(u.Y()), az=std::abs(u.Z());
-            if((ax>=ay&&ax>=az&&u.X()<0.0)||
-               (ay>ax&&ay>=az&&u.Y()<0.0)||
-               (az>ax&&az>ay&&u.Z()<0.0))u.Reverse();
-
-            gp_Vec nVec(normal.X(),normal.Y(),normal.Z());
-            gp_Vec uVec(u.X(),u.Y(),u.Z());
-            gp_Dir v(nVec.Crossed(uVec));
-
+            gp_Pnt origin;gp_Dir u,v,normal;
+            if(!planarFaceFrame(TopoDS::Face(selected),origin,u,v,normal))return false;
             plane.Origin.X=origin.X(); plane.Origin.Y=origin.Y(); plane.Origin.Z=origin.Z();
             plane.U.X=u.X(); plane.U.Y=u.Y(); plane.U.Z=u.Z();
             plane.V.X=v.X(); plane.V.Y=v.Y(); plane.V.Z=v.Z();
@@ -1024,6 +1103,24 @@ namespace SrcCad::Kernel::Occt
         catch (const Standard_Failure& ex) { throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString())); }
     }
 
+    array<String^>^ OcctFeatureKernel::FaceReferences(String^ body)
+    {
+        try
+        {
+            TopoDS_Shape shape=decodeFeature(body);
+            TopTools_IndexedMapOfShape faces;
+            TopExp::MapShapes(shape,TopAbs_FACE,faces);
+            auto values=gcnew System::Collections::Generic::List<String^>();
+            for(int i=1;i<=faces.Extent();++i)
+            {
+                auto value=encodeFaceReference(TopoDS::Face(faces(i)));
+                if(!value.empty())values->Add(gcnew String(value.c_str()));
+            }
+            return values->ToArray();
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
     String^ OcctFeatureKernel::Fillet(String^ baseBody,array<String^>^ edgeReferences,double radius)
     {
         if(!std::isfinite(radius)||radius<=1e-9)throw gcnew ArgumentException("Fillet radius must be positive.");
@@ -1054,6 +1151,60 @@ namespace SrcCad::Kernel::Occt
             return encodeFeature(chamfer.Shape());
         }
         catch (const Standard_Failure& ex) { throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString())); }
+    }
+
+    String^ OcctFeatureKernel::Hole(String^ baseBody,String^ faceReference,
+        double centerX,double centerY,double centerZ,double diameter,double depth,bool throughAll,bool reverse)
+    {
+        if(!std::isfinite(centerX)||!std::isfinite(centerY)||!std::isfinite(centerZ)||
+           !std::isfinite(diameter)||diameter<=1e-9||!std::isfinite(depth)||depth<=1e-9)
+            throw gcnew ArgumentException("Invalid hole parameters.");
+        try
+        {
+            TopoDS_Shape baseShape=decodeFeature(baseBody);
+            const double before=featureVolume(baseShape);
+            TopoDS_Face support=resolveFaceReference(baseShape,faceReference);
+            gp_Pnt origin;gp_Dir u,v,normal;
+            if(!planarFaceFrame(support,origin,u,v,normal))
+                throw gcnew InvalidOperationException("Hole support is not planar.");
+
+            gp_Pnt requested(centerX,centerY,centerZ);
+            gp_Vec normalVec(normal.X(),normal.Y(),normal.Z());
+            const double offset=gp_Vec(origin,requested).Dot(normalVec);
+            gp_Pnt center=requested.Translated(normalVec.Multiplied(-offset));
+
+            gp_Dir direction=normal;
+            if(reverse)direction.Reverse();
+            double length=depth;
+            if(throughAll)
+            {
+                Bnd_Box bounds;BRepBndLib::Add(baseShape,bounds);
+                double xmin,ymin,zmin,xmax,ymax,zmax;bounds.Get(xmin,ymin,zmin,xmax,ymax,zmax);
+                gp_Vec d(direction.X(),direction.Y(),direction.Z());
+                double extent=0.0;
+                for(int xi=0;xi<2;xi++)for(int yi=0;yi<2;yi++)for(int zi=0;zi<2;zi++)
+                {
+                    gp_Pnt corner(xi?xmax:xmin,yi?ymax:ymin,zi?zmax:zmin);
+                    extent=std::max(extent,gp_Vec(center,corner).Dot(d));
+                }
+                if(extent<=1e-9)throw gcnew InvalidOperationException("No body in hole direction.");
+                length=extent+std::max(1.0,extent*1e-6);
+            }
+
+            const double epsilon=std::max(1e-6,length*1e-7);
+            gp_Vec d(direction.X(),direction.Y(),direction.Z());
+            gp_Pnt start=center.Translated(d.Multiplied(-epsilon));
+            BRepPrimAPI_MakeCylinder cylinder(gp_Ax2(start,direction),diameter*0.5,length+epsilon);
+            TopoDS_Shape tool=cylinder.Shape();
+            featureVolume(tool);
+            BRepAlgoAPI_Cut cut(baseShape,tool);cut.Build();
+            if(!cut.IsDone())throw gcnew InvalidOperationException("OCCT hole cut failed.");
+            TopoDS_Shape result=cut.Shape();const double after=featureVolume(result);
+            if(before-after<=std::max(1e-8,before*1e-10))
+                throw gcnew InvalidOperationException("Hole removes no material.");
+            return encodeFeature(result);
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
     }
 
     array<double>^ OcctFeatureKernel::Inspect(String^ body)

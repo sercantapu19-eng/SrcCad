@@ -42,6 +42,29 @@ internal static class NativeFeatureGraphTests
             var chamferInspect=OcctFeatureKernel.Inspect(detailPreview.Outputs[chamferNode.Id].BRep!);
             Check(chamferInspect[0]>0&&chamferInspect[1]==1,"native chamfer produces valid solid B-Rep");
 
+            var faceRefs=OcctFeatureKernel.FaceReferences(bossBody);
+            Check(faceRefs.Length>=6,"extruded body exposes persistent planar face references");
+            var topCenter=plane.Origin+plane.U*20+plane.V*15+plane.Normal*20;
+            string? workingFace=null;
+            foreach(var faceRef in faceRefs)
+            {
+                try
+                {
+                    var drilled=OcctFeatureKernel.Hole(bossBody,faceRef,topCenter.X,topCenter.Y,topCenter.Z,6,10,false,true);
+                    if(OcctFeatureKernel.Inspect(drilled)[0]<24000){workingFace=faceRef;break;}
+                }
+                catch(InvalidOperationException){}
+            }
+            Check(workingFace is not null,"native hole resolves a planar support and removes material");
+            var holeNode=new FeatureNode(Guid.NewGuid(),"Delik1",
+                new HoleFeatureParameters(boss.Id,topCenter,6,10),
+                References:new[]{new FeatureReference(boss.Id,TopologyKind.Face,workingFace!)});
+            var holeDoc=doc with{Features=doc.Features.Append(holeNode).ToArray()};
+            var holePreview=session.Preview(holeDoc);
+            Check(holePreview.Success,"face-referenced hole preview succeeds through feature graph");
+            var holeInspect=OcctFeatureKernel.Inspect(holePreview.Outputs[holeNode.Id].BRep!);
+            Check(holeInspect[0]<24000&&holeInspect[1]==1,"hole feature produces valid material-removing B-Rep");
+
             void Volume(double expected,string message)
             {
                 var data=OcctFeatureKernel.Inspect(session.Output(cut.Id)!.BRep!);

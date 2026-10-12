@@ -12,7 +12,10 @@ namespace SrcCad::Kernel::Occt
             array<double>^ frame, bool throughAll);
         static System::String^ Fillet(System::String^ baseBody, array<System::String^>^ edgeReferences, double radius);
         static System::String^ Chamfer(System::String^ baseBody, array<System::String^>^ edgeReferences, double distance);
+        static System::String^ Hole(System::String^ baseBody, System::String^ faceReference,
+            double centerX, double centerY, double centerZ, double diameter, double depth, bool throughAll, bool reverse);
         static array<System::String^>^ EdgeReferences(System::String^ body);
+        static array<System::String^>^ FaceReferences(System::String^ body);
         // volume, solid count, face count, edge count
         static array<double>^ Inspect(System::String^ body);
     };
