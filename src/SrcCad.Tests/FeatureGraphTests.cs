@@ -15,7 +15,14 @@ internal static class FeatureGraphTests
         public Output Build(FeatureNode node,IReadOnlyDictionary<Guid,Output> dependencies)
         {
             Built.Add(node.Id);if(node.Id==Fail)throw new InvalidOperationException("deliberate kernel rejection");
-            return new((node.Parameters is ExtrudeFeatureParameters p?p.Depth:1)+dependencies.Values.Sum(x=>x.Value));
+            var own=node.Parameters switch
+            {
+                ExtrudeFeatureParameters p=>p.Depth,
+                FilletFeatureParameters p=>p.Radius,
+                ChamferFeatureParameters p=>p.Distance,
+                _=>1
+            };
+            return new(own+dependencies.Values.Sum(x=>x.Value));
         }
     }
     public static void Run()
@@ -70,6 +77,17 @@ internal static class FeatureGraphTests
         finally{File.Delete(path);}
         var old=PartFile.Serialize(new(StandardPlanes.Front,sketch.CaptureSnapshot(),20));
         Check(FeatureDocumentFile.Deserialize(old).Features.Length==2,"schema 1 migrates to graph without lost sketch/extrusion");
+        var edgeReference=new FeatureReference(boss.Id,TopologyKind.Edge,"E;10;0;0;0");
+        var filletNode=new FeatureNode(Guid.NewGuid(),"Radyus1",new FilletFeatureParameters(boss.Id,2),References:new[]{edgeReference});
+        var chamferNode=new FeatureNode(Guid.NewGuid(),"Pah1",new ChamferFeatureParameters(filletNode.Id,1),
+            References:new[]{new FeatureReference(filletNode.Id,TopologyKind.Edge,"E;10;0;0;0")});
+        var detailDoc=initial with{Features=initial.Features.Concat(new[]{filletNode,chamferNode}).ToArray()};
+        var detailClone=FeatureDocumentFile.Clone(detailDoc);
+        Check(detailClone.Node(filletNode.Id).Kind==FeatureKind.Fillet&&detailClone.Node(chamferNode.Id).Kind==FeatureKind.Chamfer,
+            "fillet/chamfer parameter and persistent edge reference roundtrip");
+        Check(detailClone.Descendants(boss.Id).SetEquals(new[]{filletNode.Id,chamferNode.Id}),
+            "detail features participate in dependency graph");
+
         var external=session.Document;((IDictionary<int,SketchPoint>)((SketchFeatureParameters)external.Node(source.Id).Parameters).Sketch.Points).Clear();
         Check(((SketchFeatureParameters)session.Document.Node(source.Id).Parameters).Sketch.Points.Count>0,"external snapshot cannot mutate committed document");
         var unchangedRevision=session.Revision;var unchangedHistory=session.UndoCount;

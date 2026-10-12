@@ -7,7 +7,7 @@ using SrcCad.Core.Persistence;
 
 namespace SrcCad.Core.Features;
 
-public enum FeatureKind { Sketch, Extrude, ExtrudedCut }
+public enum FeatureKind { Sketch, Extrude, ExtrudedCut, Fillet, Chamfer }
 public enum RebuildState { Clean, Dirty, Suppressed, Blocked, Failed }
 public enum ExtrusionTermination { Blind, ThroughAll }
 public enum TopologyKind { Body, Face, Edge, Vertex }
@@ -18,21 +18,28 @@ public sealed record FeatureReference(Guid ProducerId, TopologyKind Kind, string
 [JsonDerivedType(typeof(SketchFeatureParameters), "sketch")]
 [JsonDerivedType(typeof(ExtrudeFeatureParameters), "extrude")]
 [JsonDerivedType(typeof(CutFeatureParameters), "extruded-cut")]
+[JsonDerivedType(typeof(FilletFeatureParameters), "fillet")]
+[JsonDerivedType(typeof(ChamferFeatureParameters), "chamfer")]
 public abstract record FeatureParameters;
 public sealed record SketchFeatureParameters(PlaneFrame Plane, SketchSnapshot Sketch) : FeatureParameters;
 public sealed record ExtrudeFeatureParameters(Guid SketchId, double Depth) : FeatureParameters;
 public sealed record CutFeatureParameters(Guid BaseFeatureId, Guid SketchId, double Depth,
     ExtrusionTermination Termination = ExtrusionTermination.Blind, bool Reverse = false) : FeatureParameters;
+public sealed record FilletFeatureParameters(Guid BaseFeatureId, double Radius) : FeatureParameters;
+public sealed record ChamferFeatureParameters(Guid BaseFeatureId, double Distance) : FeatureParameters;
 public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Parameters,
     bool Suppressed = false, FeatureReference[]? References = null)
 {
     [JsonIgnore] public FeatureKind Kind => Parameters switch
     { SketchFeatureParameters => FeatureKind.Sketch, ExtrudeFeatureParameters => FeatureKind.Extrude,
-      CutFeatureParameters => FeatureKind.ExtrudedCut, _ => throw new InvalidDataException("Unsupported feature") };
+      CutFeatureParameters => FeatureKind.ExtrudedCut, FilletFeatureParameters => FeatureKind.Fillet,
+      ChamferFeatureParameters => FeatureKind.Chamfer, _ => throw new InvalidDataException("Unsupported feature") };
     [JsonIgnore] public Guid[] Dependencies => (Parameters switch
     {
         ExtrudeFeatureParameters e => new[] { e.SketchId },
         CutFeatureParameters c => new[] { c.BaseFeatureId, c.SketchId },
+        FilletFeatureParameters f => new[] { f.BaseFeatureId },
+        ChamferFeatureParameters c => new[] { c.BaseFeatureId },
         _ => Array.Empty<Guid>()
     }).Concat((References ?? Array.Empty<FeatureReference>()).Select(r=>r.ProducerId)).Distinct().ToArray();
 }
@@ -113,7 +120,12 @@ public static class FeatureDocumentFile
         {
             if(string.IsNullOrWhiteSpace(node.Name))throw new InvalidDataException("Feature name required.");
             foreach(var reference in node.References??Array.Empty<FeatureReference>())
-                if(reference is null||!Enum.IsDefined(reference.Kind)||string.IsNullOrWhiteSpace(reference.SemanticName))throw new InvalidDataException("Invalid semantic reference.");
+            {
+                if(reference is null||!Enum.IsDefined(reference.Kind)||string.IsNullOrWhiteSpace(reference.SemanticName))
+                    throw new InvalidDataException("Invalid semantic reference.");
+                if(!document.Features.Any(f=>f.Id==reference.ProducerId))
+                    throw new InvalidDataException("Semantic reference producer is missing.");
+            }
             switch(node.Parameters)
             {
                 case SketchFeatureParameters s: _=PartFile.Serialize(new(s.Plane,s.Sketch,null));break;
@@ -121,6 +133,16 @@ public static class FeatureDocumentFile
                     if(!double.IsFinite(e.Depth)||Math.Abs(e.Depth)<1e-9||document.Node(e.SketchId).Kind!=FeatureKind.Sketch)throw new InvalidDataException("Invalid extrusion.");break;
                 case CutFeatureParameters c:
                     if(!Enum.IsDefined(c.Termination)||!double.IsFinite(c.Depth)||c.Depth<=1e-9||document.Node(c.SketchId).Kind!=FeatureKind.Sketch||document.Node(c.BaseFeatureId).Kind==FeatureKind.Sketch)throw new InvalidDataException("Invalid cut.");break;
+                case FilletFeatureParameters f:
+                    if(!double.IsFinite(f.Radius)||f.Radius<=1e-9||document.Node(f.BaseFeatureId).Kind==FeatureKind.Sketch||
+                       node.References is null||node.References.Length==0||node.References.Any(r=>r.Kind!=TopologyKind.Edge||r.ProducerId!=f.BaseFeatureId))
+                        throw new InvalidDataException("Invalid fillet.");
+                    break;
+                case ChamferFeatureParameters c:
+                    if(!double.IsFinite(c.Distance)||c.Distance<=1e-9||document.Node(c.BaseFeatureId).Kind==FeatureKind.Sketch||
+                       node.References is null||node.References.Length==0||node.References.Any(r=>r.Kind!=TopologyKind.Edge||r.ProducerId!=c.BaseFeatureId))
+                        throw new InvalidDataException("Invalid chamfer.");
+                    break;
                 default:throw new InvalidDataException("Unsupported feature parameters.");
             }
         }

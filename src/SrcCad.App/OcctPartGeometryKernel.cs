@@ -35,4 +35,8 @@ internal sealed class OcctPartGeometryKernel : IPartGeometryKernel
     {
         var p=Pack(source,depth);return OcctFeatureKernel.Cut(baseBody,p.Outer,p.Holes,p.CircleHoles,p.Circle,p.Frame,termination==ExtrusionTermination.ThroughAll);
     }
+    public string Fillet(string baseBody,IReadOnlyList<string> edgeReferences,double radius)
+        => OcctFeatureKernel.Fillet(baseBody,edgeReferences.ToArray(),radius);
+    public string Chamfer(string baseBody,IReadOnlyList<string> edgeReferences,double distance)
+        => OcctFeatureKernel.Chamfer(baseBody,edgeReferences.ToArray(),distance);
 }
