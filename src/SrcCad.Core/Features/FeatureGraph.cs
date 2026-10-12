@@ -7,7 +7,7 @@ using SrcCad.Core.Persistence;
 
 namespace SrcCad.Core.Features;
 
-public enum FeatureKind { Sketch, Extrude, ExtrudedCut, Fillet, Chamfer }
+public enum FeatureKind { Sketch, Extrude, ExtrudedCut, Fillet, Chamfer, Hole }
 public enum RebuildState { Clean, Dirty, Suppressed, Blocked, Failed }
 public enum ExtrusionTermination { Blind, ThroughAll }
 public enum TopologyKind { Body, Face, Edge, Vertex }
@@ -20,6 +20,7 @@ public sealed record FeatureReference(Guid ProducerId, TopologyKind Kind, string
 [JsonDerivedType(typeof(CutFeatureParameters), "extruded-cut")]
 [JsonDerivedType(typeof(FilletFeatureParameters), "fillet")]
 [JsonDerivedType(typeof(ChamferFeatureParameters), "chamfer")]
+[JsonDerivedType(typeof(HoleFeatureParameters), "hole")]
 public abstract record FeatureParameters;
 public sealed record SketchFeatureParameters(PlaneFrame Plane, SketchSnapshot Sketch) : FeatureParameters;
 public sealed record ExtrudeFeatureParameters(Guid SketchId, double Depth) : FeatureParameters;
@@ -27,19 +28,23 @@ public sealed record CutFeatureParameters(Guid BaseFeatureId, Guid SketchId, dou
     ExtrusionTermination Termination = ExtrusionTermination.Blind, bool Reverse = false) : FeatureParameters;
 public sealed record FilletFeatureParameters(Guid BaseFeatureId, double Radius) : FeatureParameters;
 public sealed record ChamferFeatureParameters(Guid BaseFeatureId, double Distance) : FeatureParameters;
+public sealed record HoleFeatureParameters(Guid BaseFeatureId, Vector3d Center, double Diameter, double Depth,
+    ExtrusionTermination Termination = ExtrusionTermination.Blind, bool Reverse = true) : FeatureParameters;
 public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Parameters,
     bool Suppressed = false, FeatureReference[]? References = null)
 {
     [JsonIgnore] public FeatureKind Kind => Parameters switch
     { SketchFeatureParameters => FeatureKind.Sketch, ExtrudeFeatureParameters => FeatureKind.Extrude,
       CutFeatureParameters => FeatureKind.ExtrudedCut, FilletFeatureParameters => FeatureKind.Fillet,
-      ChamferFeatureParameters => FeatureKind.Chamfer, _ => throw new InvalidDataException("Unsupported feature") };
+      ChamferFeatureParameters => FeatureKind.Chamfer, HoleFeatureParameters => FeatureKind.Hole,
+      _ => throw new InvalidDataException("Unsupported feature") };
     [JsonIgnore] public Guid[] Dependencies => (Parameters switch
     {
         ExtrudeFeatureParameters e => new[] { e.SketchId },
         CutFeatureParameters c => new[] { c.BaseFeatureId, c.SketchId },
         FilletFeatureParameters f => new[] { f.BaseFeatureId },
         ChamferFeatureParameters c => new[] { c.BaseFeatureId },
+        HoleFeatureParameters h => new[] { h.BaseFeatureId },
         _ => Array.Empty<Guid>()
     }).Concat((References ?? Array.Empty<FeatureReference>()).Select(r=>r.ProducerId)).Distinct().ToArray();
 }
@@ -142,6 +147,14 @@ public static class FeatureDocumentFile
                     if(!double.IsFinite(c.Distance)||c.Distance<=1e-9||document.Node(c.BaseFeatureId).Kind==FeatureKind.Sketch||
                        node.References is null||node.References.Length==0||node.References.Any(r=>r.Kind!=TopologyKind.Edge||r.ProducerId!=c.BaseFeatureId))
                         throw new InvalidDataException("Invalid chamfer.");
+                    break;
+                case HoleFeatureParameters h:
+                    if(!double.IsFinite(h.Center.X)||!double.IsFinite(h.Center.Y)||!double.IsFinite(h.Center.Z)||
+                       !double.IsFinite(h.Diameter)||h.Diameter<=1e-9||!double.IsFinite(h.Depth)||h.Depth<=1e-9||
+                       !Enum.IsDefined(h.Termination)||document.Node(h.BaseFeatureId).Kind==FeatureKind.Sketch||
+                       node.References is null||node.References.Length!=1||node.References[0].Kind!=TopologyKind.Face||
+                       node.References[0].ProducerId!=h.BaseFeatureId)
+                        throw new InvalidDataException("Invalid hole.");
                     break;
                 default:throw new InvalidDataException("Unsupported feature parameters.");
             }

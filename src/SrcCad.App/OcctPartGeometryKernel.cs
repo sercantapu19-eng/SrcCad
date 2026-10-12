@@ -39,4 +39,8 @@ internal sealed class OcctPartGeometryKernel : IPartGeometryKernel
         => OcctFeatureKernel.Fillet(baseBody,edgeReferences.ToArray(),radius);
     public string Chamfer(string baseBody,IReadOnlyList<string> edgeReferences,double distance)
         => OcctFeatureKernel.Chamfer(baseBody,edgeReferences.ToArray(),distance);
+    public string Hole(string baseBody,string faceReference,SrcCad.Core.Geometry.Vector3d center,double diameter,double depth,
+        ExtrusionTermination termination,bool reverse)
+        => OcctFeatureKernel.Hole(baseBody,faceReference,center.X,center.Y,center.Z,diameter,depth,
+            termination==ExtrusionTermination.ThroughAll,reverse);
 }

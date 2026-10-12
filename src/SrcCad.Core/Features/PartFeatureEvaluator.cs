@@ -1,4 +1,5 @@
 using SrcCad.Core.Sketch;
+using SrcCad.Core.Geometry;
 using SrcCad.Core.Persistence;
 namespace SrcCad.Core.Features;
 
@@ -8,6 +9,7 @@ public interface IPartGeometryKernel
     string Cut(string baseBody,SketchModel source,double depth,ExtrusionTermination termination);
     string Fillet(string baseBody,IReadOnlyList<string> edgeReferences,double radius);
     string Chamfer(string baseBody,IReadOnlyList<string> edgeReferences,double distance);
+    string Hole(string baseBody,string faceReference,Vector3d center,double diameter,double depth,ExtrusionTermination termination,bool reverse);
 }
 // Strings are immutable; native cache is detached from the document/viewport.
 public sealed record PartFeatureOutput(string? SketchData, string? BRep);
@@ -36,6 +38,9 @@ public sealed class PartFeatureEvaluator(IPartGeometryKernel kernel) : IFeatureE
                 Sketch(c.SketchId),c.Reverse?-c.Depth:c.Depth,c.Termination)),
             FilletFeatureParameters f => new(null,kernel.Fillet(Base(f.BaseFeatureId),EdgeReferences(f.BaseFeatureId),f.Radius)),
             ChamferFeatureParameters c => new(null,kernel.Chamfer(Base(c.BaseFeatureId),EdgeReferences(c.BaseFeatureId),c.Distance)),
+            HoleFeatureParameters h => new(null,kernel.Hole(Base(h.BaseFeatureId),
+                (node.References??Array.Empty<FeatureReference>()).Single(r=>r.Kind==TopologyKind.Face&&r.ProducerId==h.BaseFeatureId).SemanticName,
+                h.Center,h.Diameter,h.Depth,h.Termination,h.Reverse)),
             _=>throw new NotSupportedException("Feature evaluator unavailable.")
         };
     }

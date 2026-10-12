@@ -20,6 +20,7 @@ internal static class FeatureGraphTests
                 ExtrudeFeatureParameters p=>p.Depth,
                 FilletFeatureParameters p=>p.Radius,
                 ChamferFeatureParameters p=>p.Distance,
+                HoleFeatureParameters p=>p.Depth,
                 _=>1
             };
             return new(own+dependencies.Values.Sum(x=>x.Value));
@@ -87,6 +88,14 @@ internal static class FeatureGraphTests
             "fillet/chamfer parameter and persistent edge reference roundtrip");
         Check(detailClone.Descendants(boss.Id).SetEquals(new[]{filletNode.Id,chamferNode.Id}),
             "detail features participate in dependency graph");
+        var holeNode=new FeatureNode(Guid.NewGuid(),"Delik1",
+            new HoleFeatureParameters(boss.Id,new Vector3d(10,10,20),8,12),
+            References:new[]{new FeatureReference(boss.Id,TopologyKind.Face,"F;1200;20;15;20;0;0;1")});
+        var holeDoc=initial with{Features=initial.Features.Append(holeNode).ToArray()};
+        var holeClone=FeatureDocumentFile.Clone(holeDoc);
+        Check(holeClone.Node(holeNode.Id).Kind==FeatureKind.Hole&&
+              ((HoleFeatureParameters)holeClone.Node(holeNode.Id).Parameters).Diameter==8,
+            "hole parameters and persistent face reference roundtrip");
 
         var external=session.Document;((IDictionary<int,SketchPoint>)((SketchFeatureParameters)external.Node(source.Id).Parameters).Sketch.Points).Clear();
         Check(((SketchFeatureParameters)session.Document.Node(source.Id).Parameters).Sketch.Points.Count>0,"external snapshot cannot mutate committed document");
