@@ -2085,6 +2085,15 @@ public partial class MainWindow : Window
     private void Top_Click(object sender, RoutedEventArgs e) => _viewer.SetTopView();
     private void Right_Click(object sender, RoutedEventArgs e) => _viewer.SetRightView();
 
+    private void CadCommandPlaceholder_Click(object sender,RoutedEventArgs e)
+    {
+        var name=(sender as Button)?.Content?.ToString()??"CAD komutu";
+        PropertyTitle.Text=name;
+        PropertyInfo.Text=name+" komutu CommandManager'da aktif. Bu komut için gerçek parametrik OCCT B-Rep motoru bağlanmadan sahte geometri üretilmez.";
+        ManagerTabs.SelectedItem=PropertyManagerTab;
+        Status(name+" • komut yüzeyi hazır; gerçek feature motoru geliştirme sırasına alındı.");
+    }
+
     private void ShadedEdges_Click(object sender,RoutedEventArgs e)
     {
         _viewer.SetDisplayStyle(CadDisplayStyle.ShadedWithEdges);
