@@ -63,4 +63,8 @@ internal sealed class OcctPartGeometryKernel : IPartGeometryKernel
     }
     public string Shell(string baseBody,IReadOnlyList<string> faceReferences,double thickness,bool outward)
         => OcctFeatureKernel.Shell(baseBody,faceReferences.ToArray(),thickness,outward);
+    public string Mirror(string baseBody,SrcCad.Core.Geometry.PlaneFrame plane,bool keepOriginal)
+        => OcctFeatureKernel.Mirror(baseBody,
+            new[]{plane.Origin.X,plane.Origin.Y,plane.Origin.Z,plane.U.X,plane.U.Y,plane.U.Z,plane.Normal.X,plane.Normal.Y,plane.Normal.Z},
+            keepOriginal);
 }

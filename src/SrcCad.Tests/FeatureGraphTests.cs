@@ -24,6 +24,7 @@ internal static class FeatureGraphTests
                 RevolveFeatureParameters p=>p.AngleDegrees,
                 RevolveCutFeatureParameters p=>p.AngleDegrees,
                 ShellFeatureParameters p=>p.Thickness,
+                MirrorFeatureParameters=>1,
                 _=>1
             };
             return new(own+dependencies.Values.Sum(x=>x.Value));
@@ -123,6 +124,12 @@ internal static class FeatureGraphTests
         Check(shellClone.Node(shellNode.Id).Kind==FeatureKind.Shell&&
               ((ShellFeatureParameters)shellClone.Node(shellNode.Id).Parameters).Thickness==2,
             "shell thickness and persistent opening-face references roundtrip");
+        var mirrorNode=new FeatureNode(Guid.NewGuid(),"Aynala1",new MirrorFeatureParameters(boss.Id,StandardPlanes.Front));
+        var mirrorDoc=initial with{Features=initial.Features.Append(mirrorNode).ToArray()};
+        var mirrorClone=FeatureDocumentFile.Clone(mirrorDoc);
+        Check(mirrorClone.Node(mirrorNode.Id).Kind==FeatureKind.Mirror&&
+              ((MirrorFeatureParameters)mirrorClone.Node(mirrorNode.Id).Parameters).Plane.Name=="Ön Düzlem",
+            "mirror plane and keep-original intent roundtrip");
 
         var external=session.Document;((IDictionary<int,SketchPoint>)((SketchFeatureParameters)external.Node(source.Id).Parameters).Sketch.Points).Clear();
         Check(((SketchFeatureParameters)session.Document.Node(source.Id).Parameters).Sketch.Points.Count>0,"external snapshot cannot mutate committed document");

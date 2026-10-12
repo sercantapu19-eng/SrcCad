@@ -7,7 +7,7 @@ using SrcCad.Core.Persistence;
 
 namespace SrcCad.Core.Features;
 
-public enum FeatureKind { Sketch, Extrude, ExtrudedCut, Fillet, Chamfer, Hole, Revolve, RevolvedCut, Shell }
+public enum FeatureKind { Sketch, Extrude, ExtrudedCut, Fillet, Chamfer, Hole, Revolve, RevolvedCut, Shell, Mirror }
 public enum RebuildState { Clean, Dirty, Suppressed, Blocked, Failed }
 public enum ExtrusionTermination { Blind, ThroughAll }
 public enum TopologyKind { Body, Face, Edge, Vertex }
@@ -24,6 +24,7 @@ public sealed record FeatureReference(Guid ProducerId, TopologyKind Kind, string
 [JsonDerivedType(typeof(RevolveFeatureParameters), "revolve")]
 [JsonDerivedType(typeof(RevolveCutFeatureParameters), "revolved-cut")]
 [JsonDerivedType(typeof(ShellFeatureParameters), "shell")]
+[JsonDerivedType(typeof(MirrorFeatureParameters), "mirror")]
 public abstract record FeatureParameters;
 public sealed record SketchFeatureParameters(PlaneFrame Plane, SketchSnapshot Sketch) : FeatureParameters;
 public sealed record ExtrudeFeatureParameters(Guid SketchId, double Depth) : FeatureParameters;
@@ -36,6 +37,7 @@ public sealed record HoleFeatureParameters(Guid BaseFeatureId, Vector3d Center, 
 public sealed record RevolveFeatureParameters(Guid SketchId, int AxisEntityId, double AngleDegrees = 360, bool Reverse = false, Guid? BaseFeatureId = null) : FeatureParameters;
 public sealed record RevolveCutFeatureParameters(Guid BaseFeatureId, Guid SketchId, int AxisEntityId, double AngleDegrees = 360, bool Reverse = false) : FeatureParameters;
 public sealed record ShellFeatureParameters(Guid BaseFeatureId, double Thickness, bool Outward = false) : FeatureParameters;
+public sealed record MirrorFeatureParameters(Guid BaseFeatureId, PlaneFrame Plane, bool KeepOriginal = true) : FeatureParameters;
 public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Parameters,
     bool Suppressed = false, FeatureReference[]? References = null)
 {
@@ -44,7 +46,7 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
       CutFeatureParameters => FeatureKind.ExtrudedCut, FilletFeatureParameters => FeatureKind.Fillet,
       ChamferFeatureParameters => FeatureKind.Chamfer, HoleFeatureParameters => FeatureKind.Hole,
       RevolveFeatureParameters => FeatureKind.Revolve, RevolveCutFeatureParameters => FeatureKind.RevolvedCut,
-      ShellFeatureParameters => FeatureKind.Shell,
+      ShellFeatureParameters => FeatureKind.Shell, MirrorFeatureParameters => FeatureKind.Mirror,
       _ => throw new InvalidDataException("Unsupported feature") };
     [JsonIgnore] public Guid[] Dependencies => (Parameters switch
     {
@@ -56,6 +58,7 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
         RevolveFeatureParameters r => r.BaseFeatureId is Guid rb ? new[] { rb,r.SketchId } : new[] { r.SketchId },
         RevolveCutFeatureParameters r => new[] { r.BaseFeatureId,r.SketchId },
         ShellFeatureParameters s => new[] { s.BaseFeatureId },
+        MirrorFeatureParameters m => new[] { m.BaseFeatureId },
         _ => Array.Empty<Guid>()
     }).Concat((References ?? Array.Empty<FeatureReference>()).Select(r=>r.ProducerId)).Distinct().ToArray();
 }
@@ -186,6 +189,10 @@ public static class FeatureDocumentFile
                        node.References is null||node.References.Length==0||
                        node.References.Any(r=>r.Kind!=TopologyKind.Face||r.ProducerId!=s.BaseFeatureId))
                         throw new InvalidDataException("Invalid shell.");
+                    break;
+                case MirrorFeatureParameters m:
+                    if(document.Node(m.BaseFeatureId).Kind==FeatureKind.Sketch)throw new InvalidDataException("Invalid mirror base.");
+                    _=m.Plane.Validate();
                     break;
                 default:throw new InvalidDataException("Unsupported feature parameters.");
             }
