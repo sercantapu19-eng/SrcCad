@@ -10,7 +10,7 @@ public interface IPartGeometryKernel
     string Fillet(string baseBody,IReadOnlyList<string> edgeReferences,double radius);
     string Chamfer(string baseBody,IReadOnlyList<string> edgeReferences,double distance);
     string Hole(string baseBody,string faceReference,Vector3d center,double diameter,double depth,ExtrusionTermination termination,bool reverse);
-    string Revolve(SketchModel source,int axisEntityId,double angleDegrees,bool reverse);
+    string Revolve(string? baseBody,SketchModel source,int axisEntityId,double angleDegrees,bool reverse);
     string RevolveCut(string baseBody,SketchModel source,int axisEntityId,double angleDegrees,bool reverse);
 }
 // Strings are immutable; native cache is detached from the document/viewport.
@@ -43,7 +43,7 @@ public sealed class PartFeatureEvaluator(IPartGeometryKernel kernel) : IFeatureE
             HoleFeatureParameters h => new(null,kernel.Hole(Base(h.BaseFeatureId),
                 (node.References??Array.Empty<FeatureReference>()).Single(r=>r.Kind==TopologyKind.Face&&r.ProducerId==h.BaseFeatureId).SemanticName,
                 h.Center,h.Diameter,h.Depth,h.Termination,h.Reverse)),
-            RevolveFeatureParameters r => new(null,kernel.Revolve(Sketch(r.SketchId),r.AxisEntityId,r.AngleDegrees,r.Reverse)),
+            RevolveFeatureParameters r => new(null,kernel.Revolve(r.BaseFeatureId is Guid rb?Base(rb):null,Sketch(r.SketchId),r.AxisEntityId,r.AngleDegrees,r.Reverse)),
             RevolveCutFeatureParameters r => new(null,kernel.RevolveCut(Base(r.BaseFeatureId),Sketch(r.SketchId),r.AxisEntityId,r.AngleDegrees,r.Reverse)),
             _=>throw new NotSupportedException("Feature evaluator unavailable.")
         };

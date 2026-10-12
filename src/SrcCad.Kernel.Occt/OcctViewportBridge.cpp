@@ -61,6 +61,7 @@
 #include "OcctViewportBridge.h"
 #include "OcctFeatureKernel.h"
 #include <BRepAlgoAPI_Cut.hxx>
+#include <BRepAlgoAPI_Fuse.hxx>
 #include <BRepFilletAPI_MakeFillet.hxx>
 #include <BRepFilletAPI_MakeChamfer.hxx>
 #include <BRepTools.hxx>
@@ -1169,10 +1170,18 @@ namespace SrcCad::Kernel::Occt
         }
         catch (const Standard_Failure& ex) { throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString())); }
     }
-    String^ OcctFeatureKernel::Revolve(array<double>^ outer,array<double>^ holes,array<double>^ circleHoles,
+    String^ OcctFeatureKernel::Revolve(String^ baseBody,array<double>^ outer,array<double>^ holes,array<double>^ circleHoles,
         array<double>^ circle,array<double>^ frame,array<double>^ axis,double angleDegrees,bool reverse)
     {
-        try{return encodeFeature(featureRevolve(outer,holes,circleHoles,circle,frame,axis,angleDegrees,reverse));}
+        try
+        {
+            TopoDS_Shape revolved=featureRevolve(outer,holes,circleHoles,circle,frame,axis,angleDegrees,reverse);
+            if(String::IsNullOrWhiteSpace(baseBody))return encodeFeature(revolved);
+            TopoDS_Shape baseShape=decodeFeature(baseBody);
+            BRepAlgoAPI_Fuse fuse(baseShape,revolved);fuse.Build();
+            if(!fuse.IsDone())throw gcnew InvalidOperationException("OCCT revolve fuse failed.");
+            return encodeFeature(fuse.Shape());
+        }
         catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
     }
 

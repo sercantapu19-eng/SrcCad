@@ -32,7 +32,7 @@ public sealed record FilletFeatureParameters(Guid BaseFeatureId, double Radius) 
 public sealed record ChamferFeatureParameters(Guid BaseFeatureId, double Distance) : FeatureParameters;
 public sealed record HoleFeatureParameters(Guid BaseFeatureId, Vector3d Center, double Diameter, double Depth,
     ExtrusionTermination Termination = ExtrusionTermination.Blind, bool Reverse = true) : FeatureParameters;
-public sealed record RevolveFeatureParameters(Guid SketchId, int AxisEntityId, double AngleDegrees = 360, bool Reverse = false) : FeatureParameters;
+public sealed record RevolveFeatureParameters(Guid SketchId, int AxisEntityId, double AngleDegrees = 360, bool Reverse = false, Guid? BaseFeatureId = null) : FeatureParameters;
 public sealed record RevolveCutFeatureParameters(Guid BaseFeatureId, Guid SketchId, int AxisEntityId, double AngleDegrees = 360, bool Reverse = false) : FeatureParameters;
 public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Parameters,
     bool Suppressed = false, FeatureReference[]? References = null)
@@ -50,7 +50,7 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
         FilletFeatureParameters f => new[] { f.BaseFeatureId },
         ChamferFeatureParameters c => new[] { c.BaseFeatureId },
         HoleFeatureParameters h => new[] { h.BaseFeatureId },
-        RevolveFeatureParameters r => new[] { r.SketchId },
+        RevolveFeatureParameters r => r.BaseFeatureId is Guid rb ? new[] { rb,r.SketchId } : new[] { r.SketchId },
         RevolveCutFeatureParameters r => new[] { r.BaseFeatureId,r.SketchId },
         _ => Array.Empty<Guid>()
     }).Concat((References ?? Array.Empty<FeatureReference>()).Select(r=>r.ProducerId)).Distinct().ToArray();
@@ -166,7 +166,8 @@ public static class FeatureDocumentFile
                 case RevolveFeatureParameters r:
                     if(!double.IsFinite(r.AngleDegrees)||r.AngleDegrees<=1e-9||r.AngleDegrees>360.0||
                        document.Node(r.SketchId).Parameters is not SketchFeatureParameters rs||
-                       !rs.Sketch.Entities.OfType<SketchLine>().Any(l=>l.Id==r.AxisEntityId&&l.Construction))
+                       !rs.Sketch.Entities.OfType<SketchLine>().Any(l=>l.Id==r.AxisEntityId&&l.Construction)||
+                       (r.BaseFeatureId is Guid rb&&document.Node(rb).Kind==FeatureKind.Sketch))
                         throw new InvalidDataException("Invalid revolve.");
                     break;
                 case RevolveCutFeatureParameters r:

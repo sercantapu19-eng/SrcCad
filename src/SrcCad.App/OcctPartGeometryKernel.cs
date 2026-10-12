@@ -53,9 +53,9 @@ internal sealed class OcctPartGeometryKernel : IPartGeometryKernel
         if((b-a).Length<1e-9)throw new InvalidOperationException("Revolve axis has zero length.");
         return new[]{a.X,a.Y,a.Z,b.X,b.Y,b.Z};
     }
-    public string Revolve(SketchModel source,int axisEntityId,double angleDegrees,bool reverse)
+    public string Revolve(string? baseBody,SketchModel source,int axisEntityId,double angleDegrees,bool reverse)
     {
-        var p=Pack(source,1);return OcctFeatureKernel.Revolve(p.Outer,p.Holes,p.CircleHoles,p.Circle,p.Frame,Axis(source,axisEntityId),angleDegrees,reverse);
+        var p=Pack(source,1);return OcctFeatureKernel.Revolve(baseBody,p.Outer,p.Holes,p.CircleHoles,p.Circle,p.Frame,Axis(source,axisEntityId),angleDegrees,reverse);
     }
     public string RevolveCut(string baseBody,SketchModel source,int axisEntityId,double angleDegrees,bool reverse)
     {
