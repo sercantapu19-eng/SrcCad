@@ -34,6 +34,7 @@
 #include <BRepBuilderAPI_MakeVertex.hxx>
 #include <BRepPrimAPI_MakePrism.hxx>
 #include <BRepPrimAPI_MakeCylinder.hxx>
+#include <BRepPrimAPI_MakeRevol.hxx>
 #include <BRepCheck_Analyzer.hxx>
 #include <BRepGProp.hxx>
 #include <GProp_GProps.hxx>
@@ -42,6 +43,7 @@
 #include <Geom_Plane.hxx>
 #include <Geom_RectangularTrimmedSurface.hxx>
 #include <BRep_Tool.hxx>
+#include <gp_Ax1.hxx>
 #include <gp_Ax2.hxx>
 #include <gp_Ax3.hxx>
 #include <gp_Circ.hxx>
@@ -1011,6 +1013,88 @@ namespace SrcCad::Kernel::Occt
             throw gcnew ArgumentException("Invalid orthonormal feature frame.");
     }
 
+    static TopoDS_Face featureFace(array<double>^ outer,array<double>^ holes,array<double>^ circleHoles,
+                                  array<double>^ circle,array<double>^ f)
+    {
+        validateFeatureFrame(f);
+        if(circle!=nullptr&&circle->Length>0)
+        {
+            if(circle->Length!=3||!std::isfinite(circle[0])||!std::isfinite(circle[1])||
+               !std::isfinite(circle[2])||circle[2]<=1e-9)throw gcnew ArgumentException("Invalid circle profile.");
+            gp_Pnt center=planePoint(circle[0],circle[1],f[0],f[1],f[2],f[3],f[4],f[5],f[6],f[7],f[8]);
+            BRepBuilderAPI_MakeEdge edge(gp_Circ(gp_Ax2(center,gp_Dir(f[9],f[10],f[11]),gp_Dir(f[3],f[4],f[5])),circle[2]));
+            if(!edge.IsDone())throw gcnew InvalidOperationException("Circle profile edge failed.");
+            BRepBuilderAPI_MakeWire wire(edge.Edge());
+            if(!wire.IsDone())throw gcnew InvalidOperationException("Circle profile wire failed.");
+            BRepBuilderAPI_MakeFace face(wire.Wire(),true);
+            if(!face.IsDone())throw gcnew InvalidOperationException("Circle profile face failed.");
+            return face.Face();
+        }
+
+        if(outer==nullptr||outer->Length<6||(outer->Length%2)!=0)throw gcnew ArgumentException("Invalid closed profile.");
+        BRepBuilderAPI_MakePolygon polygon;
+        for(int i=0;i<outer->Length;i+=2)
+            polygon.Add(planePoint(outer[i],outer[i+1],f[0],f[1],f[2],f[3],f[4],f[5],f[6],f[7],f[8]));
+        polygon.Close();
+        if(!polygon.IsDone())throw gcnew InvalidOperationException("Profile polygon failed.");
+        BRepBuilderAPI_MakeFace faceMaker(polygon.Wire(),true);
+        if(!faceMaker.IsDone())throw gcnew InvalidOperationException("Profile face failed.");
+
+        if(holes!=nullptr)
+        {
+            int cursor=0;
+            while(cursor<holes->Length)
+            {
+                const int count=(int)holes[cursor++];
+                if(count<3||cursor+count*2>holes->Length)throw gcnew ArgumentException("Invalid inner profile.");
+                BRepBuilderAPI_MakePolygon holePolygon;
+                for(int i=0;i<count;i++)
+                {
+                    double u=holes[cursor++],vv=holes[cursor++];
+                    holePolygon.Add(planePoint(u,vv,f[0],f[1],f[2],f[3],f[4],f[5],f[6],f[7],f[8]));
+                }
+                holePolygon.Close();
+                if(!holePolygon.IsDone())throw gcnew InvalidOperationException("Inner profile polygon failed.");
+                TopoDS_Wire wire=holePolygon.Wire();wire.Reverse();faceMaker.Add(wire);
+            }
+        }
+        if(circleHoles!=nullptr)
+        {
+            if((circleHoles->Length%3)!=0)throw gcnew ArgumentException("Invalid circular holes.");
+            for(int i=0;i<circleHoles->Length;i+=3)
+            {
+                double cu=circleHoles[i],cv=circleHoles[i+1],radius=circleHoles[i+2];
+                if(radius<=1e-9)throw gcnew ArgumentException("Invalid circular hole radius.");
+                gp_Pnt center=planePoint(cu,cv,f[0],f[1],f[2],f[3],f[4],f[5],f[6],f[7],f[8]);
+                BRepBuilderAPI_MakeEdge edge(gp_Circ(gp_Ax2(center,gp_Dir(f[9],f[10],f[11]),gp_Dir(f[3],f[4],f[5])),radius));
+                BRepBuilderAPI_MakeWire wire(edge.Edge());
+                TopoDS_Wire holeWire=wire.Wire();holeWire.Reverse();faceMaker.Add(holeWire);
+            }
+        }
+        if(!faceMaker.IsDone())throw gcnew InvalidOperationException("Profile face failed.");
+        return faceMaker.Face();
+    }
+
+    static TopoDS_Shape featureRevolve(array<double>^ outer,array<double>^ holes,array<double>^ circleHoles,
+                                       array<double>^ circle,array<double>^ f,array<double>^ axis,
+                                       double angleDegrees,bool reverse)
+    {
+        if(axis==nullptr||axis->Length!=6)throw gcnew ArgumentException("Revolve axis requires 6 values.");
+        for each(double value in axis)if(!std::isfinite(value))throw gcnew ArgumentException("Invalid revolve axis.");
+        if(!std::isfinite(angleDegrees)||angleDegrees<=1e-9||angleDegrees>360.0)
+            throw gcnew ArgumentException("Revolve angle must be in (0,360].");
+        gp_Pnt a(axis[0],axis[1],axis[2]),b(axis[3],axis[4],axis[5]);
+        gp_Vec direction(a,b);
+        if(direction.Magnitude()<=1e-9)throw gcnew ArgumentException("Zero-length revolve axis.");
+        gp_Dir dir(direction);if(reverse)dir.Reverse();
+        TopoDS_Face face=featureFace(outer,holes,circleHoles,circle,f);
+        const double radians=angleDegrees*3.14159265358979323846/180.0;
+        BRepPrimAPI_MakeRevol revol(face,gp_Ax1(a,dir),radians,true);
+        TopoDS_Shape result=revol.Shape();
+        if(result.IsNull()||!BRepCheck_Analyzer(result).IsValid())throw gcnew InvalidOperationException("Invalid revolved B-Rep.");
+        return result;
+    }
+
     static TopoDS_Shape featurePrism(array<double>^ outer, array<double>^ holes, array<double>^ circleHoles,
                                     array<double>^ circle, array<double>^ f)
     {
@@ -1085,6 +1169,30 @@ namespace SrcCad::Kernel::Occt
         }
         catch (const Standard_Failure& ex) { throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString())); }
     }
+    String^ OcctFeatureKernel::Revolve(array<double>^ outer,array<double>^ holes,array<double>^ circleHoles,
+        array<double>^ circle,array<double>^ frame,array<double>^ axis,double angleDegrees,bool reverse)
+    {
+        try{return encodeFeature(featureRevolve(outer,holes,circleHoles,circle,frame,axis,angleDegrees,reverse));}
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
+    String^ OcctFeatureKernel::RevolveCut(String^ baseBody,array<double>^ outer,array<double>^ holes,
+        array<double>^ circleHoles,array<double>^ circle,array<double>^ frame,array<double>^ axis,double angleDegrees,bool reverse)
+    {
+        try
+        {
+            TopoDS_Shape baseShape=decodeFeature(baseBody);const double before=featureVolume(baseShape);
+            TopoDS_Shape tool=featureRevolve(outer,holes,circleHoles,circle,frame,axis,angleDegrees,reverse);
+            featureVolume(tool);
+            BRepAlgoAPI_Cut cut(baseShape,tool);cut.Build();
+            if(!cut.IsDone())throw gcnew InvalidOperationException("OCCT revolved cut failed.");
+            TopoDS_Shape result=cut.Shape();const double after=featureVolume(result);
+            if(before-after<=std::max(1e-8,before*1e-10))throw gcnew InvalidOperationException("Revolved cut removes no material.");
+            return encodeFeature(result);
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
     array<String^>^ OcctFeatureKernel::EdgeReferences(String^ body)
     {
         try

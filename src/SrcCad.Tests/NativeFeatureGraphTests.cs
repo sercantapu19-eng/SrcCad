@@ -65,6 +65,32 @@ internal static class NativeFeatureGraphTests
             var holeInspect=OcctFeatureKernel.Inspect(holePreview.Outputs[holeNode.Id].BRep!);
             Check(holeInspect[0]<24000&&holeInspect[1]==1,"hole feature produces valid material-removing B-Rep");
 
+            var revolveSketch=new SketchModel(plane);
+            var ra=revolveSketch.CreatePointExact(new(0,-10));
+            var rb=revolveSketch.CreatePointExact(new(0,30));
+            var revolveAxis=revolveSketch.AddLine(ra,rb,true);
+            revolveSketch.AddCornerRectangle(new(5,0),new(15,20),.001);
+            var revolveSketchNode=new FeatureNode(Guid.NewGuid(),"ÇizimR",new SketchFeatureParameters(plane,revolveSketch.CaptureSnapshot()));
+            var revolveNode=new FeatureNode(Guid.NewGuid(),"Döndürme1",new RevolveFeatureParameters(revolveSketchNode.Id,revolveAxis.Id,360));
+            var revolveDoc=new FeatureDocument(Guid.NewGuid(),new[]{revolveSketchNode,revolveNode});
+            var revolveSession=new FeatureSession<PartFeatureOutput>(revolveDoc,evaluator);
+            var revolveInspect=OcctFeatureKernel.Inspect(revolveSession.Output(revolveNode.Id)!.BRep!);
+            Check(Math.Abs(revolveInspect[0]-4000*Math.PI)<1e-3&&revolveInspect[1]==1,
+                "360-degree revolve creates expected annular cylinder B-Rep");
+
+            var rcSketch=new SketchModel(plane);
+            var rca=rcSketch.CreatePointExact(new(20,-5));
+            var rcb=rcSketch.CreatePointExact(new(20,35));
+            var rcAxis=rcSketch.AddLine(rca,rcb,true);
+            rcSketch.AddCornerRectangle(new(18,5),new(22,25),.001);
+            var rcSketchNode=new FeatureNode(Guid.NewGuid(),"ÇizimRC",new SketchFeatureParameters(plane,rcSketch.CaptureSnapshot()));
+            var rcNode=new FeatureNode(Guid.NewGuid(),"Döndürerek Kes1",new RevolveCutFeatureParameters(boss.Id,rcSketchNode.Id,rcAxis.Id,360));
+            var rcDoc=initial with{Features=initial.Features.Concat(new[]{rcSketchNode,rcNode}).ToArray()};
+            var rcPreview=session.Preview(rcDoc);
+            Check(rcPreview.Success,"revolved cut preview succeeds against real base body");
+            var rcInspect=OcctFeatureKernel.Inspect(rcPreview.Outputs[rcNode.Id].BRep!);
+            Check(rcInspect[0]>0&&rcInspect[0]<24000&&rcInspect[1]==1,"revolved cut removes real material");
+
             void Volume(double expected,string message)
             {
                 var data=OcctFeatureKernel.Inspect(session.Output(cut.Id)!.BRep!);
