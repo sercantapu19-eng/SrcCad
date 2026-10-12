@@ -919,6 +919,54 @@ namespace SrcCad::Kernel::Occt
         }
     }
 
+    bool OcctViewportBridge::PreviewFeatureBody(String^ body)
+    {
+        if (!IsInitialized()) return false;
+        try
+        {
+            TopoDS_Shape shape=decodeFeature(body);
+            CancelExtrusionPreview();
+            myState->PreviewSolid=displayShape(myState,shape,rgb(0.20,0.75,0.35),AIS_Shaded,false,0.55);
+            myState->PreviewSolidShape=shape;
+            HideCommittedSolid();myState->Context->UpdateCurrentViewer();return true;
+        }
+        catch (const Standard_Failure&) { CancelExtrusionPreview();ShowCommittedSolid();return false; }
+        catch (System::Exception^) { CancelExtrusionPreview();ShowCommittedSolid();return false; }
+    }
+    bool OcctViewportBridge::PublishFeatureBody(String^ body)
+    {
+        if (!IsInitialized()) return false;
+        Handle(AIS_Shape) candidate;
+        Handle(AIS_Shape) previous=myState->SolidPresentation;
+        TopoDS_Shape previousShape=myState->SolidShape;
+        try
+        {
+            if (String::IsNullOrEmpty(body)) { ClearModel(); return true; }
+            TopoDS_Shape shape=decodeFeature(body);
+            // Create the replacement presentation first; retain the previous body
+            // until OCCT accepts the new presentation.
+            candidate=displayShape(myState,shape,rgb(0.72,0.77,0.82),AIS_Shaded,true);
+            if (!myState->SolidPresentation.IsNull())myState->Context->Remove(myState->SolidPresentation,false);
+            myState->SolidPresentation=candidate;myState->SolidShape=shape;
+            CancelExtrusionPreview();SetSelectionMode(myState->SelectionMode);
+            myState->Context->UpdateCurrentViewer();return true;
+        }
+        catch (const Standard_Failure&)
+        {
+            if(!candidate.IsNull())myState->Context->Remove(candidate,false);
+            myState->SolidPresentation=previous;myState->SolidShape=previousShape;
+            if(!previous.IsNull())myState->Context->Display(previous,false);
+            ShowCommittedSolid();return false;
+        }
+        catch (System::Exception^)
+        {
+            if(!candidate.IsNull())myState->Context->Remove(candidate,false);
+            myState->SolidPresentation=previous;myState->SolidShape=previousShape;
+            if(!previous.IsNull())myState->Context->Display(previous,false);
+            ShowCommittedSolid();return false;
+        }
+    }
+
     bool OcctViewportBridge::CommitExtrusion()
     {
         if (!IsInitialized() || myState->PreviewSolidShape.IsNull()) return false;

@@ -35,7 +35,7 @@ public partial class MainWindow
         var report=Environment.GetEnvironmentVariable("SRCCAD_UI_REGRESSION_REPORT")!;
         var checks=new List<string>();string? failure=null;
         object? focusDiagnostic=null;
-        void Step(string name) => WindowsRegressionJournal.Write(new {Completed=false,Passed=checks.Count,Failed=0,Step=name,Checks=checks,Focus=focusDiagnostic,KeyRoute=_lastKeyRoute,HistoryCommand=_lastHistoryCommand,UndoDepth=_sketchUndo.Count,RedoDepth=_sketchRedo.Count});
+        void Step(string name) => WindowsRegressionJournal.Write(new {Completed=false,Passed=checks.Count,Failed=0,Step=name,Checks=checks,Focus=focusDiagnostic,KeyRoute=_lastKeyRoute,HistoryCommand=_lastHistoryCommand,UndoDepth=_sketchUndo.Count,RedoDepth=_sketchRedo.Count,FeatureUndoDepth=_partSession?.UndoCount,FeatureRedoDepth=_partSession?.RedoCount});
         void Check(bool ok,string name) {if(!ok)throw new InvalidOperationException(name);checks.Add(name);Step(name);}
         void Key(WinForms.Keys key)
         {
@@ -324,12 +324,72 @@ public partial class MainWindow
                 await Chord(WinForms.Keys.Y,viewport:scenario != "relation");
                 Check(SameSketch(deleted,_sketch.CaptureSnapshot()),"Delete Redo exact semantic snapshot: "+scenario);
             }
+            // Workbench integration follows all original interaction checks.
+            NewPart_Click(this,new RoutedEventArgs());
+            StartSketchButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            _sketch!.AddCornerRectangle(new(0,0),new(40,30),0.001);
+            RenderSketch();_viewer.FitAll();
+            ExitSketchButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            ExtrudeButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            ExtrudeDepthTextBox.Text="20";
+            ExtrudeAcceptButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            Check(_hasSolid,"workbench legacy base extrusion accepted");
+            NewProfileSketchButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            Check(_partSession is not null&&_graphSketchEdit is not null&&_inSketch,"new profile enters graph sketch on selected plane");
+            Check(_partSession!.UndoCount==1,"migration retains legacy extrusion Undo");
+            Circle_Click(this,new RoutedEventArgs());Mouse(new(20,15),true);Mouse(new(25,15),true);
+            Check(_sketch!.Entities.OfType<SketchCircle>().Count()==1,"HWND circle picks create actual cut profile");
+            // HWND picks are pixel-quantized: use the real model radius for exact
+            // B-Rep expectations instead of assuming an unrounded screen coordinate.
+            var cutRadius=_sketch.Entities.OfType<SketchCircle>().Single().Radius;
+            ExitSketchButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            Check(!_inSketch&&CutButton.IsEnabled,"second sketch exit enables actual Cut command");
+            var beforeCutRevision=_partSession.Revision;var beforeCutHistory=_partSession.UndoCount;
+            CutButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            Check(GraphFeaturePanel.IsVisible&&_graphFeatureEdit is not null,"Cut opens shared PropertyManager");
+            Check(_partSession.Revision==beforeCutRevision&&_partSession.UndoCount==beforeCutHistory,"Cut preview leaves history unchanged");
+            SendMessage(_viewportPanel.Handle,0x20A,(IntPtr)(120<<16),IntPtr.Zero);
+            Check(GraphDepth.Text=="20"&&_partSession.Revision==beforeCutRevision,"HWND wheel drives Cut depth preview by 10 mm without commit");
+            GraphDepth.Text="NaN";GraphAcceptButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            Check(_graphFeatureEdit is not null&&_partSession.Revision==beforeCutRevision&&_partSession.UndoCount==beforeCutHistory,"invalid Cut input rejects without document mutation");
+            Key(WinForms.Keys.Escape);
+            Check(_graphFeatureEdit is null&&_partSession.Revision==beforeCutRevision,"HWND Escape cancels Cut without mutation");
+            CutButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            GraphDepth.Text="10";
+            GraphAcceptButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            Check(_graphFeatureEdit is null&&_partSession.Document.Features.Count(n=>n.Kind==SrcCad.Core.Features.FeatureKind.ExtrudedCut)==1,"Cut OK creates actual history feature");
+            double GraphVolume()=>SrcCad.Kernel.Occt.OcctFeatureKernel.Inspect(LastBody(_partSession.Document,_partSession.Output)!)[0];
+            Check(Math.Abs(GraphVolume()-(24000-Math.PI*cutRadius*cutRadius*10))<1e-4,"Cut UI drives actual OCCT removed volume");
+            await Chord(WinForms.Keys.Z);
+            Check(Math.Abs(GraphVolume()-24000)<1e-4,"HWND Ctrl Z restores uncut solid");
+            await Chord(WinForms.Keys.Y);
+            Check(Math.Abs(GraphVolume()-(24000-Math.PI*cutRadius*cutRadius*10))<1e-4,"HWND Ctrl Y restores Cut B-Rep");
+            var cutId=_partSession.Document.Features.Single(n=>n.Kind==SrcCad.Core.Features.FeatureKind.ExtrudedCut).Id;
+            var cutItem=_partNodes.Single(n=>Equals(n.Tag,cutId));cutItem.IsSelected=true;
+            ((System.Windows.Controls.MenuItem)cutItem.ContextMenu.Items[0]).RaiseEvent(new RoutedEventArgs(System.Windows.Controls.MenuItem.ClickEvent));
+            Check(GraphDepth.Text=="10"&&_graphFeatureEdit?.Id==cutId,"FeatureManager edit loads existing Cut parameters");
+            GraphThroughAll.IsChecked=true;
+            GraphAcceptButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            Check(Math.Abs(GraphVolume()-(24000-Math.PI*cutRadius*cutRadius*20))<1e-4,"Through All edit removes full current depth");
+            var bossId=_partSession.Document.Features.Single(n=>n.Kind==SrcCad.Core.Features.FeatureKind.Extrude).Id;
+            var bossItem=_partNodes.Single(n=>Equals(n.Tag,bossId));bossItem.IsSelected=true;
+            ((System.Windows.Controls.MenuItem)bossItem.ContextMenu.Items[0]).RaiseEvent(new RoutedEventArgs(System.Windows.Controls.MenuItem.ClickEvent));
+            GraphDepth.Text="40";GraphAcceptButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            Check(Math.Abs(GraphVolume()-(48000-Math.PI*cutRadius*cutRadius*40))<1e-4,"upstream UI extrusion edit rebuilds downstream Through All Cut");
+            var graphPath=Path.Combine(Path.GetTempPath(),Guid.NewGuid()+".scpart");
+            try
+            {
+                SrcCad.Core.Features.FeatureDocumentFile.Save(graphPath,_partSession.Document);
+                Check(TryOpenGraphFile(graphPath)&&_partSession.Document.Features.Any(n=>n.Id==cutId),"graph file reopen preserves feature identities");
+                Check(Math.Abs(GraphVolume()-(48000-Math.PI*cutRadius*cutRadius*40))<1e-4,"graph file reopen rebuilds actual Cut solid");
+            }
+            finally{File.Delete(graphPath);}
         }
         catch(Exception ex) {failure=ex.ToString();}
         finally
         {
             keybd_event(0x11,0,2,UIntPtr.Zero);
-            WindowsRegressionJournal.Write(new {Completed=true,Scope="Windows HWND interaction; manual visual acceptance separate",Passed=checks.Count,Failed=failure is null?0:1,Checks=checks,Failure=failure,Focus=focusDiagnostic,KeyRoute=_lastKeyRoute,HistoryCommand=_lastHistoryCommand,UndoDepth=_sketchUndo.Count,RedoDepth=_sketchRedo.Count});
+            WindowsRegressionJournal.Write(new {Completed=true,Scope="Windows HWND interaction; manual visual acceptance separate",Passed=checks.Count,Failed=failure is null?0:1,Checks=checks,Failure=failure,Focus=focusDiagnostic,KeyRoute=_lastKeyRoute,HistoryCommand=_lastHistoryCommand,UndoDepth=_sketchUndo.Count,RedoDepth=_sketchRedo.Count,FeatureUndoDepth=_partSession?.UndoCount,FeatureRedoDepth=_partSession?.RedoCount});
             Application.Current.Shutdown(failure is null?0:1);
         }
     }

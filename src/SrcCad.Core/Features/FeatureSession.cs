@@ -21,6 +21,7 @@ public sealed class FeatureSession<T> where T : class
     private Dictionary<Guid,RebuildState> states=new();
     private readonly TransactionalHistory<FeatureDocument> history=new();
     private readonly IFeatureEvaluator<T> evaluator;
+    private readonly Func<FeatureDocument,IReadOnlyDictionary<Guid,T>,bool>? publish;
     public long Revision {get;private set;}
     public int UndoCount=>history.UndoCount;
     public int RedoCount=>history.RedoCount;
@@ -29,9 +30,12 @@ public sealed class FeatureSession<T> where T : class
     public T? Output(Guid id)=>outputs.GetValueOrDefault(id);
     public RebuildState State(Guid id)=>states[id];
     public FeatureBuildReport LastBuild {get;private set;}=new(true,Array.Empty<FeatureBuildStatus>());
-    public FeatureSession(FeatureDocument initial,IFeatureEvaluator<T> evaluator)
+    public FeatureSession(FeatureDocument initial,IFeatureEvaluator<T> evaluator,
+        Func<FeatureDocument,IReadOnlyDictionary<Guid,T>,bool>? publish=null,
+        TransactionalHistory<FeatureDocument>? importedHistory=null)
     {
-        this.evaluator=evaluator;document=new(initial.Id,Array.Empty<FeatureNode>());
+        this.evaluator=evaluator;this.publish=publish;document=new(initial.Id,Array.Empty<FeatureNode>());
+        history=importedHistory??new();
         if(!Apply(initial))throw new InvalidOperationException(LastBuild.Error);
     }
     public bool TryCommit(FeatureDocument candidate)
@@ -89,6 +93,10 @@ public sealed class FeatureSession<T> where T : class
             }
             LastBuild=new(!failed,report,failed?"Feature rebuild failed; previous document and B-Rep retained.":null);
             if(failed)return false;
+            // Renderer/kernel publication must accept the complete candidate before
+            // the document or history changes. Preview clones intentionally have no publisher.
+            if(publish is not null&&!publish(safe,new System.Collections.ObjectModel.ReadOnlyDictionary<Guid,T>(next)))
+            {LastBuild=new(false,report,"Candidate publication rejected; document/history unchanged.");return false;}
             document=safe;outputs=next;states=nextStates;Revision++;return true;
         }
         catch(Exception ex){LastBuild=new(false,report,ex.Message);return false;}

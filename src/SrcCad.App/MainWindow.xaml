@@ -57,6 +57,8 @@
                 <WrapPanel Margin="8">
                     <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadSketchIcon}" Content="Çizim" Click="StartSketch_Click" x:Name="StartSketchButton"/>
                     <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadExtrudeIcon}" Content="Ekstrüzyon" Click="Extrude_Click" x:Name="ExtrudeButton" IsEnabled="False"/>
+                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadSketchIcon}" Content="Yeni Çizim" Click="NewProfileSketch_Click" x:Name="NewProfileSketchButton" IsEnabled="False" ToolTip="Seçili Ön/Üst/Sağ düzlemde yeni profil oluştur"/>
+                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadCutIcon}" Content="Ekstrüzyon Kes" Click="Cut_Click" x:Name="CutButton" IsEnabled="False"/>
                     <Separator Margin="8,2"/>
                     <Button Style="{StaticResource CommandButton}" Content="Yeni Parça" Click="NewPart_Click"/>
                 </WrapPanel>
@@ -88,7 +90,7 @@
                     <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadDimensionIcon}" Content="Akıllı Ölçü" Click="SmartDimension_Click" x:Name="SmartDimensionButton"/>
                     <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadRelationIcon}" Content="İlişkiler" Click="ShowSketchRelations_Click"/>
                     <Separator Margin="8,2"/>
-                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadExitSketchIcon}" Content="Çizimden Çık" Click="ExitSketch_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadExitSketchIcon}" Content="Çizimden Çık" Click="ExitSketch_Click" x:Name="ExitSketchButton"/>
                     <Button x:Name="CancelSourceSketchEditButton" Style="{StaticResource CommandButton}" Content="Düzenlemeyi&#x0a;İptal Et" Click="CancelSourceSketchEdit_Click" Visibility="Collapsed"/>
                 </WrapPanel>
             </TabItem>
@@ -159,13 +161,24 @@
                                 <Button Content="Seçili Ölçüyü Düzenle" Margin="0,4,0,0" Click="EditSelectedDimension_Click"/>
                             </StackPanel>
 
+                            <StackPanel x:Name="GraphFeaturePanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Derinlik (mm)"/>
+                                <TextBox x:Name="GraphDepth" TextChanged="GraphParameterChanged" Margin="0,4,0,8"/>
+                                <CheckBox x:Name="GraphThroughAll" Content="Tümünden Geç" Checked="GraphParameterChanged" Unchecked="GraphParameterChanged"/>
+                                <CheckBox x:Name="GraphReverse" Content="Yönü Ters Çevir" Checked="GraphParameterChanged" Unchecked="GraphParameterChanged" Margin="0,8"/>
+                                <TextBlock x:Name="GraphFeatureError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="GraphFeatureOk_Click" x:Name="GraphAcceptButton"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="GraphFeatureCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
                             <StackPanel x:Name="ExtrudePanel" Visibility="Collapsed" Margin="0,16,0,0">
                                 <TextBlock Text="Ekstrüzyon" FontWeight="Bold" Margin="0,0,0,8"/>
                                 <TextBlock Text="Derinlik (mm)"/>
                                 <TextBox x:Name="ExtrudeDepthTextBox" Text="20" Margin="0,4,0,4" TextChanged="ExtrudeDepth_TextChanged"/>
                                 <TextBlock Text="Mouse tekeri: ±10 mm" Foreground="#5F6B76" Margin="0,0,0,10"/>
                                 <StackPanel Orientation="Horizontal">
-                                    <Button Content="✓" FontSize="18" Width="52" Height="34" Margin="0,0,8,0" Click="ExtrudeOk_Click"/>
+                                    <Button Content="✓" FontSize="18" Width="52" Height="34" Margin="0,0,8,0" Click="ExtrudeOk_Click" x:Name="ExtrudeAcceptButton"/>
                                     <Button Content="✕" FontSize="18" Width="52" Height="34" Click="ExtrudeCancel_Click"/>
                                 </StackPanel>
                             </StackPanel>

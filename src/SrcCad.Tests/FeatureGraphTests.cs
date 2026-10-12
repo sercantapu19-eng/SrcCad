@@ -86,6 +86,29 @@ internal static class FeatureGraphTests
         Check(trace.Built.Count==52&&large.Descendants(source.Id).Count==51,"52-node dependency smoke");
         trace.Built.Clear();var largeEdit=large with{Features=large.Features.Select(f=>f.Id==boss.Id?f with{Parameters=new ExtrudeFeatureParameters(source.Id,30)}:f).ToArray()};
         Check(largeSession.TryCommit(largeEdit)&&trace.Built.Count==51&&trace.Built[0]==boss.Id&&trace.Built[^1]==parent,"large downstream chain deterministic incremental rebuild");
+        bool acceptPublication=true;int publications=0;
+        var visual=new FeatureSession<Output>(doc,new Evaluator(),(_,_)=>{publications++;return acceptPublication;});
+        var visualRevision=visual.Revision;
+        Check(visual.Preview(edited).Success&&publications==1,"preview never publishes committed viewport body");
+        acceptPublication=false;
+        Check(!visual.TryCommit(edited)&&visual.UndoCount==0&&visual.Revision==visualRevision,"publication rejection retains document and history");
+        Check(((ExtrudeFeatureParameters)visual.Document.Node(boss.Id).Parameters).Depth==20,"rejected publication retains old parameters");
+        acceptPublication=true;Check(visual.TryCommit(edited)&&visual.UndoCount==1,"accepted publication commits once");
+        acceptPublication=false;Check(!visual.Undo()&&visual.UndoCount==1&&visual.RedoCount==0,"rejected Undo publication does not move history");
+        acceptPublication=true;Check(visual.Undo()&&visual.Redo(),"published undo and redo restore history");
+        var legacyHistory=new TransactionalHistory<ExtrusionState>();
+        var original=new ExtrusionState(StandardPlanes.Front,sketch.CaptureSnapshot(),null);
+        var twenty=original with{Depth=20};var forty=original with{Depth=40};
+        legacyHistory.Record(original,twenty);legacyHistory.Record(twenty,forty);
+        Check(legacyHistory.TryUndo(_=>true),"legacy history creates redo branch");
+        var stableDoc=Guid.NewGuid();var stableSketch=Guid.NewGuid();var stableBoss=Guid.NewGuid();
+        FeatureDocument Convert(ExtrusionState state)=>FeatureDocumentFile.FromLegacy(state,stableDoc,stableSketch,stableBoss);
+        var converted=legacyHistory.MapTo(Convert);
+        var migrated=new FeatureSession<Output>(Convert(twenty),new Evaluator(),importedHistory:converted);
+        Check(migrated.UndoCount==1&&migrated.RedoCount==1,"migration preserves both history stacks");
+        Check(migrated.Redo()&&((ExtrudeFeatureParameters)migrated.Document.Node(stableBoss).Parameters).Depth==40,"migrated redo edits existing stable feature ID");
+        Check(migrated.Undo()&&migrated.Undo()&&migrated.Document.Features.Length==1,"migration preserves undo to pre-extrude sketch");
+        Check(migrated.Redo()&&migrated.Document.Node(stableBoss).Id==stableBoss,"migration redo restores same feature identity");
         Console.WriteLine($"FEATURE GRAPH: {n} PASS (dependency/transaction/persistence contracts; evaluator spy is NOT B-Rep acceptance)");
     }
 }

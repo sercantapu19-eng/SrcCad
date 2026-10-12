@@ -5,13 +5,18 @@ public static class DimensionNumbers
 {
     // Accept either decimal separator, never thousands grouping. Input is finite
     // and validated by dimension kind before the model is touched.
+    public static bool TryParseScalar(string text,out double value)
+    {
+        value=0;text=text.Trim();
+        if(text.Contains(',')&&text.Contains('.'))return false;
+        return double.TryParse(text.Replace(',','.'),NumberStyles.Float,CultureInfo.InvariantCulture,out value)&&double.IsFinite(value);
+    }
     public static bool TryParse(string text,SketchDimensionType type,out double value,out string error)
     {
         value=0;error="Geçerli, sonlu bir sayı girin (45,5 veya 45.5).";
         text=text.Trim();
         if(type==SketchDimensionType.Angle&&text.EndsWith("°"))text=text[..^1].Trim();
-        if(text.Contains(',')&&text.Contains('.'))return false;
-        if(!double.TryParse(text.Replace(',','.'),NumberStyles.Float,CultureInfo.InvariantCulture,out value)||!double.IsFinite(value))return false;
+        if(!TryParseScalar(text,out value))return false;
         var zeroAllowed=type is SketchDimensionType.HorizontalDistance or SketchDimensionType.VerticalDistance or SketchDimensionType.PointLineDistance or SketchDimensionType.ParallelLineDistance;
         if(value<0||(!zeroAllowed&&value<=1e-9)){error=zeroAllowed?"Ölçü negatif olamaz.":"Ölçü sıfırdan büyük olmalıdır.";return false;}
         if(type==SketchDimensionType.Angle&&value>=180){error="Açı 0° ile 180° arasında olmalıdır (uçlar hariç).";return false;}

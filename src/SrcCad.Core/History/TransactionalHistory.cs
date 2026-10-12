@@ -39,5 +39,13 @@ public sealed class TransactionalHistory<T>
         return true;
     }
 
+    public TransactionalHistory<TNew> MapTo<TNew>(Func<T,TNew> map)
+    {
+        var target=new TransactionalHistory<TNew>();
+        foreach(var change in undo.Reverse())target.undo.Push(new TransactionalHistory<TNew>.Change(map(change.Before),map(change.After)));
+        foreach(var change in redo.Reverse())target.redo.Push(new TransactionalHistory<TNew>.Change(map(change.Before),map(change.After)));
+        return target;
+    }
+
     public void Clear() { undo.Clear(); redo.Clear(); }
 }

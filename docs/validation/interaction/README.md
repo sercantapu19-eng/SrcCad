@@ -85,3 +85,9 @@ HWND/thread diagnostics. UI remains PENDING WINDOWS; all 108 checks retained.
 managed 1046 PASS / 0 FAIL. [OCCT graph/cut backend](11-occt-feature-graph.md):
 81 new native checks PENDING WINDOWS. Native total 156; user-reported baseline
 75 applies to a3e9d146. Current UI 108 PENDING WINDOWS. Cut UI is not implemented.
+
+## 2026-10-12 Cut workbench integration
+
+[Implementation and validation](12-workbench-ui.md): managed 1057 PASS / 0 FAIL;
+42 graph contracts. Second datum-plane sketch, shared Cut/Extrude editor, graph
+tree and schema-2 Save/Open connected. 127 UI and 156 native checks PENDING WINDOWS.

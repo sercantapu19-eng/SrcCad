@@ -31,6 +31,8 @@ public partial class MainWindow
     }
     private bool ValidateDependentDimension(SketchModel candidate)
     {
+        if(_graphSketchEdit is not null&&_partSession is not null)
+            return _partSession.Preview(ReplaceGraphNode(_graphSketchEdit with{Parameters=new SrcCad.Core.Features.SketchFeatureParameters(candidate.Plane,candidate.CaptureSnapshot())})).Success;
         if(_sourceSketchEditBefore?.Depth is not double depth)return true;
         var p=candidate.Plane;
         try
@@ -55,6 +57,12 @@ public partial class MainWindow
     }
     private void MarkSourceSketchDirty()
     {
+        if(_graphSketchEdit is not null)
+        {
+            var ids=_partSession!.Document.Descendants(_graphSketchEdit.Id);ids.Add(_graphSketchEdit.Id);
+            foreach(var item in _partNodes)if(item.Tag is Guid id&&ids.Contains(id))item.Header=_partSession.Document.Node(id).Name+" *";
+            return;
+        }
         if(_sketch is null||_sourceSketchEditBefore is null)return;
         var dirty=!SameSketch(_sourceSketchEditBefore.Sketch,_sketch.CaptureSnapshot());
         if(_sketchNode is not null)_sketchNode.Header=dirty?"Çizim1 *":"Çizim1";

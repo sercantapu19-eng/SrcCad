@@ -86,14 +86,14 @@ public static class FeatureDocumentFile
         Validate(envelope.Document);return envelope.Document;
     }
     public static FeatureDocument Clone(FeatureDocument document)=>Deserialize(Serialize(document));
-    public static FeatureDocument FromLegacy(ExtrusionState model)
+    public static FeatureDocument FromLegacy(ExtrusionState model, Guid? documentId=null, Guid? sketchId=null, Guid? bossId=null)
     {
         // Reuse legacy validation, preserve exact sketch IDs and parameter intent.
         var safe=PartFile.Deserialize(PartFile.Serialize(model));
-        var sketch=new FeatureNode(Guid.NewGuid(),"Çizim1",new SketchFeatureParameters(safe.Plane,safe.Sketch));
+        var sketch=new FeatureNode(sketchId??Guid.NewGuid(),"Çizim1",new SketchFeatureParameters(safe.Plane,safe.Sketch));
         var nodes=new List<FeatureNode>{sketch};
-        if(safe.Depth is double depth)nodes.Add(new FeatureNode(Guid.NewGuid(),"Ekstrüzyon1",new ExtrudeFeatureParameters(sketch.Id,depth)));
-        return new FeatureDocument(Guid.NewGuid(),nodes.ToArray());
+        if(safe.Depth is double depth)nodes.Add(new FeatureNode(bossId??Guid.NewGuid(),"Ekstrüzyon1",new ExtrudeFeatureParameters(sketch.Id,depth)));
+        return new FeatureDocument(documentId??Guid.NewGuid(),nodes.ToArray());
     }
     public static void Save(string path,FeatureDocument document)
     {

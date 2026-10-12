@@ -203,6 +203,8 @@ public partial class MainWindow : Window
             return true;
         }
 
+        if(key==Key.Delete&&!_inSketch&&!_extrudeCommandActive&&_partSession is not null&&FeatureTree.IsKeyboardFocusWithin&&SelectedGraphId is Guid graphId)
+        {DeleteGraphFeature(graphId);return true;}
         if (key == Key.Delete && !_inSketch && !_extrudeCommandActive &&
             FeatureTree.IsKeyboardFocusWithin && FeatureTree.SelectedItem == _extrudeNode && _hasSolid)
         {
@@ -236,7 +238,7 @@ public partial class MainWindow : Window
                 ClearSketchSelection();
                 Status("Akıllı Ölçülendirme kapatıldı • seçim modu.");
             }
-            else if (_inSketch && _sketchCommand is null && _sourceSketchEditBefore is not null)
+            else if (_inSketch && _sketchCommand is null && (_sourceSketchEditBefore is not null || _graphSketchEdit is not null))
             {
                 CancelSourceSketchEdit_Click(this, new RoutedEventArgs());
             }
@@ -433,6 +435,12 @@ public partial class MainWindow : Window
 
     private void AdjustExtrusionDepth(int delta)
     {
+        if(_graphFeatureEdit is not null)
+        {
+            if(DimensionNumbers.TryParseScalar(GraphDepth.Text,out var value))
+                GraphDepth.Text=_depthWheel.Apply(value,delta).ToString("G17",CultureInfo.CurrentCulture);
+            return;
+        }
         // Keep invalid/zero input visible; never silently substitute a different solid.
         var text = ExtrudeDepthTextBox.Text.Trim().Replace(',', '.');
         if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var depth) ||
@@ -1524,6 +1532,14 @@ public partial class MainWindow : Window
     private void StartSketch_Click(object sender, RoutedEventArgs e)
     {
         if (_inSketch || _extrudeCommandActive) return;
+        if (_partSession is not null)
+        {
+            var document=_partSession.Document;
+            var node=SelectedGraphId is Guid id ? document.Node(id) : document.Features.FirstOrDefault(f=>f.Kind==SrcCad.Core.Features.FeatureKind.Sketch);
+            if(node is not null&&node.Kind==SrcCad.Core.Features.FeatureKind.Sketch)BeginGraphSketch(node);
+            else Status("Düzenlemek için FeatureManager'dan bir çizim seçin.");
+            return;
+        }
         if (_hasSolid)
         {
             _sourceSketchEditBefore = CaptureFeatureState();
@@ -1537,6 +1553,11 @@ public partial class MainWindow : Window
             _sketchUndo.Clear();
             _sketchRedo.Clear();
         }
+        BeginSketchInteraction();
+    }
+
+    private void BeginSketchInteraction()
+    {
         _inSketch = true;
         _smartDimensionMode = false;
         ResetSmartDimensionTargets();
@@ -1555,7 +1576,7 @@ public partial class MainWindow : Window
         SketchTab.IsEnabled = true;
         CommandTabs.SelectedItem = SketchTab;
 
-        if (_sketchNode is null)
+        if (_partSession is null && _sketchNode is null)
         {
             _sketchNode = new TreeViewItem { Header = "Çizim1", Tag = "sketch:1" };
             PartNode.Items.Add(_sketchNode);
@@ -1564,7 +1585,7 @@ public partial class MainWindow : Window
         var p = _sketch.Plane;
         _viewer.SetNormalView(p.Normal.X, p.Normal.Y, p.Normal.Z, p.V.X, p.V.Y, p.V.Z);
         RenderSketch();
-        _viewer.FitAll();
+        if(_partSession is null)_viewer.FitAll();
         PropertyTitle.Text = "Çizim1";
         PropertyInfo.Text = $"{p.Name} üzerinde gerçek 3B sketch. Origin ve mevcut endpoint'ler otomatik yakalanır.";
         ManagerTabs.SelectedItem = PropertyManagerTab;
@@ -1575,6 +1596,7 @@ public partial class MainWindow : Window
     private void ExitSketch_Click(object sender, RoutedEventArgs e)
     {
         if (!_inSketch) return;
+        if (_graphSketchEdit is not null && !CommitGraphSketch()) return;
         if (_sourceSketchEditBefore is { } before)
         {
             var after = CaptureFeatureState();
@@ -1593,6 +1615,20 @@ public partial class MainWindow : Window
             _viewer.ClearPreview();
             _sourceSketchEditBefore = null;
         }
+        FinishSketchInteraction();
+        if(_partSession is not null){Status("Çizim onaylandı; bağımlı feature grafiği yeniden oluşturuldu.");return;}
+        if (_hasSolid)
+            Status("Çizim düzenlemesi uygulandı • bağımlı Ekstrüzyon1 yeniden oluşturuldu • Ctrl+Z ile geri alın.");
+        else if (_sketch is not null && (_sketch.TryGetClosedPolyline(out _) || _sketch.TryGetSingleCircle(out _)))
+            Status("Çizimden çıkıldı • kapalı profil hazır • Ekstrüzyon kullanılabilir.");
+        else
+            Status("Çizimden çıkıldı • ekstrüzyon için tek kapalı profil gerekiyor.");
+
+        RefreshCommandState();
+    }
+
+    private void FinishSketchInteraction()
+    {
         LeaveSketchCommand();
         _inSketch = false;
         _smartDimensionMode = false;
@@ -1604,18 +1640,12 @@ public partial class MainWindow : Window
         CommandTabs.SelectedItem = FeaturesTab;
         ManagerTabs.SelectedItem = FeatureManagerTab;
 
-        if (_hasSolid)
-            Status("Çizim düzenlemesi uygulandı • bağımlı Ekstrüzyon1 yeniden oluşturuldu • Ctrl+Z ile geri alın.");
-        else if (_sketch is not null && (_sketch.TryGetClosedPolyline(out _) || _sketch.TryGetSingleCircle(out _)))
-            Status("Çizimden çıkıldı • kapalı profil hazır • Ekstrüzyon kullanılabilir.");
-        else
-            Status("Çizimden çıkıldı • ekstrüzyon için tek kapalı profil gerekiyor.");
-
         RefreshCommandState();
     }
 
     private void CancelSourceSketchEdit_Click(object sender, RoutedEventArgs e)
     {
+        if(_graphSketchEdit is not null){CancelGraphSketch();return;}
         if (_sourceSketchEditBefore is not { } before || _sketch is null) return;
         _sketch.RestoreSnapshot(before.Sketch,notifyChange:true);
         MarkSourceSketchDirty();
@@ -1775,14 +1805,15 @@ public partial class MainWindow : Window
     }
 
     private void UndoFeature()
-        => Status(_featureHistory.TryUndo(ApplyFeatureState)
-            ? "Özellik işlemi geri alındı • Ctrl+Y ile yineleyin."
-            : "Özellik işlemi geri alınamadı veya geçmiş boş.");
-
+    {
+        if(_partSession is not null){GraphUndo(false);return;}
+        Status(_featureHistory.TryUndo(ApplyFeatureState)?"Özellik işlemi geri alındı.":"Geri alınacak işlem yok veya rebuild başarısız.");
+    }
     private void RedoFeature()
-        => Status(_featureHistory.TryRedo(ApplyFeatureState)
-            ? "Özellik işlemi yinelendi • Ctrl+Z ile geri alın."
-            : "Özellik işlemi yinelenemedi veya geçmiş boş.");
+    {
+        if(_partSession is not null){GraphUndo(true);return;}
+        Status(_featureHistory.TryRedo(ApplyFeatureState)?"Özellik işlemi yinelendi.":"Yinelenecek işlem yok veya rebuild başarısız.");
+    }
 
     private void DeleteExtrusionFeature()
     {
@@ -1796,6 +1827,7 @@ public partial class MainWindow : Window
 
     private void Extrude_Click(object sender, RoutedEventArgs e)
     {
+        if(_partSession is not null){BeginGraphExtrude();return;}
         if (_sketch is null || _inSketch) return;
         if (!_sketch.TryGetExtrusionProfile(out _, out _) && !_sketch.TryGetSingleCircle(out _))
         {
@@ -1925,6 +1957,7 @@ public partial class MainWindow : Window
 
     private void CancelExtrude()
     {
+        if(_graphFeatureEdit is not null){EndGraphFeature();return;}
         _viewer.CancelExtrusionPreview();
         if (_editingExtrude)
         {
@@ -1946,6 +1979,7 @@ public partial class MainWindow : Window
 
     private void FeatureTree_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
+        if(_partSession is not null&&SelectedGraphId is Guid id){EditGraphFeature(id);e.Handled=true;return;}
         if (_inSketch || _extrudeCommandActive) return;
         if (FeatureTree.SelectedItem is TreeViewItem sketchItem && sketchItem.Tag as string == "sketch:1")
         {
@@ -1978,6 +2012,7 @@ public partial class MainWindow : Window
 
     private void FeatureTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
+        if(_partSession is not null)RefreshCommandState();
         if (e.NewValue is not TreeViewItem item || item.Tag is not string tag) return;
         switch (tag)
         {
@@ -2017,13 +2052,14 @@ public partial class MainWindow : Window
 
     private void SavePart_Click(object sender, RoutedEventArgs e)
     {
-        if (_sketch is null || _inSketch || _extrudeCommandActive)
+        if ((_sketch is null && _partSession is null) || _inSketch || _extrudeCommandActive)
         { Status("Kaydetmeden önce çizim/özellik düzenlemesini onaylayın veya iptal edin."); return; }
         var dialog = new Microsoft.Win32.SaveFileDialog { Filter = "SrcCad Parça (*.scpart)|*.scpart", DefaultExt = ".scpart", AddExtension = true };
         if (dialog.ShowDialog(this) != true) return;
         try
         {
-            PartFile.Save(dialog.FileName,CaptureFeatureState());
+            if(_partSession is not null)SrcCad.Core.Features.FeatureDocumentFile.Save(dialog.FileName,_partSession.Document);
+            else PartFile.Save(dialog.FileName,CaptureFeatureState());
             Status("Parametrik parça kaydedildi: " + dialog.FileName);
         }
         catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException or System.Text.Json.JsonException or InvalidOperationException)
@@ -2038,8 +2074,10 @@ public partial class MainWindow : Window
         if (dialog.ShowDialog(this) != true) return;
         try
         {
+            if(TryOpenGraphFile(dialog.FileName))return;
             var state = PartFile.Load(dialog.FileName);
             if (!ApplyFeatureState(state)) { Status("Dosya okundu fakat OCCT rebuild başarısız; mevcut belge korundu."); return; }
+            ResetPartWorkbench();
             if (_sketchNode is null)
             {
                 _sketchNode = new TreeViewItem { Header="Çizim1",Tag="sketch:1" };
@@ -2056,6 +2094,7 @@ public partial class MainWindow : Window
 
     private void NewPart_Click(object sender, RoutedEventArgs e)
     {
+        ResetPartWorkbench();
         _commandManager.Cancel();
         _sketchCommand = null;
         _commandContext = null;
@@ -2094,7 +2133,14 @@ public partial class MainWindow : Window
     {
         StartSketchButton.IsEnabled = !_inSketch && !_extrudeCommandActive;
         StartSketchButton.Content = _hasSolid ? "Çizimi Düzenle" : "Çizim";
-        CancelSourceSketchEditButton.Visibility = _sourceSketchEditBefore is null ? Visibility.Collapsed : Visibility.Visible;
+        CancelSourceSketchEditButton.Visibility = _sourceSketchEditBefore is null && _graphSketchEdit is null ? Visibility.Collapsed : Visibility.Visible;
+        NewProfileSketchButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&(_hasSolid||_partSession is not null);
+        CutButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid&&_partSession is not null&&SelectedGraphId is Guid selected&&SelectedGraphNode?.Kind==SrcCad.Core.Features.FeatureKind.Sketch;
+        if(_partSession is not null)
+        {
+            ExtrudeButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&!_hasSolid&&SelectedGraphId is Guid sketchId&&SelectedGraphNode?.Kind==SrcCad.Core.Features.FeatureKind.Sketch;
+            return;
+        }
         ExtrudeButton.IsEnabled = !_inSketch && !_hasSolid && _sketch is not null &&
                                   (_sketch.TryGetExtrusionProfile(out _, out _) || _sketch.TryGetSingleCircle(out _));
     }
