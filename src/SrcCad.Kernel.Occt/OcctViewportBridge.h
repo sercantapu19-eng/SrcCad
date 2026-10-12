@@ -10,6 +10,13 @@ namespace SrcCad::Kernel::Occt
         Face = 4
     };
 
+    public enum class CadDisplayStyle
+    {
+        ShadedWithEdges = 0,
+        Shaded = 1,
+        Wireframe = 2
+    };
+
     public value struct CadPoint3D
     {
         double X;
@@ -59,6 +66,7 @@ namespace SrcCad::Kernel::Occt
         System::String^ SelectionSummary();
         bool TryGetSelectedPlanarFace([System::Runtime::InteropServices::Out] CadPlane3D% plane);
         void SetCommittedSolidTransparency(double transparency);
+        void SetDisplayStyle(CadDisplayStyle style);
 
         bool ScreenToPlane(int x, int y,
                            double ox, double oy, double oz,

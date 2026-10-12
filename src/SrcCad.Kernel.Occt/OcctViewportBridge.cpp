@@ -22,6 +22,7 @@
 #include <Quantity_NameOfColor.hxx>
 #include <TopAbs_ShapeEnum.hxx>
 #include <TopoDS_Shape.hxx>
+#include <TopoDS.hxx>
 #include <TopoDS_Wire.hxx>
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Vertex.hxx>
@@ -36,10 +37,12 @@
 #include <BRepGProp.hxx>
 #include <GProp_GProps.hxx>
 #include <Geom_Circle.hxx>
+#include <Geom_Surface.hxx>
 #include <Geom_Plane.hxx>
 #include <Geom_RectangularTrimmedSurface.hxx>
 #include <BRep_Tool.hxx>
 #include <gp_Ax2.hxx>
+#include <gp_Ax3.hxx>
 #include <gp_Circ.hxx>
 #include <gp_Dir.hxx>
 #include <gp_Pnt.hxx>
@@ -84,6 +87,7 @@ namespace SrcCad::Kernel::Occt
         TopoDS_Shape PreviewSolidShape;
         TopoDS_Shape SolidShape;
         CadSelectionMode SelectionMode = CadSelectionMode::Face;
+        CadDisplayStyle DisplayStyle = CadDisplayStyle::ShadedWithEdges;
         bool Initialized = false;
     };
 
@@ -427,6 +431,30 @@ namespace SrcCad::Kernel::Occt
         myState->Context->UpdateCurrentViewer();
     }
 
+    void OcctViewportBridge::SetDisplayStyle(CadDisplayStyle style)
+    {
+        if (!IsInitialized()) return;
+        myState->DisplayStyle=style;
+        if (myState->SolidPresentation.IsNull()) return;
+
+        Handle(Prs3d_Drawer) drawer=myState->SolidPresentation->Attributes();
+        drawer->SetFaceBoundaryDraw(style==CadDisplayStyle::ShadedWithEdges);
+        if (style==CadDisplayStyle::ShadedWithEdges)
+        {
+            drawer->SetupOwnFaceBoundaryAspect();
+            if (!drawer->FaceBoundaryAspect().IsNull())
+            {
+                drawer->FaceBoundaryAspect()->SetColor(rgb(0.16,0.19,0.22));
+                drawer->FaceBoundaryAspect()->SetWidth(1.15);
+            }
+        }
+
+        const int mode=style==CadDisplayStyle::Wireframe?AIS_WireFrame:AIS_Shaded;
+        myState->Context->SetDisplayMode(myState->SolidPresentation,mode,false);
+        myState->Context->Redisplay(myState->SolidPresentation,false);
+        myState->Context->UpdateCurrentViewer();
+    }
+
     bool OcctViewportBridge::ScreenToPlane(int x, int y,
                                            double ox, double oy, double oz,
                                            double nx, double ny, double nz,
@@ -473,19 +501,24 @@ namespace SrcCad::Kernel::Occt
                                           double transparency = 0.0)
     {
         Handle(AIS_Shape) ais = new AIS_Shape(shape);
+        int effectiveMode=displayMode;
         if (displayMode == AIS_Shaded)
         {
-            // CAD-style "shaded with edges": readable faces and dark boundaries.
+            const bool boundaries=!selectable || state->DisplayStyle==CadDisplayStyle::ShadedWithEdges;
+            if (selectable && state->DisplayStyle==CadDisplayStyle::Wireframe) effectiveMode=AIS_WireFrame;
             Handle(Prs3d_Drawer) drawer=ais->Attributes();
-            drawer->SetFaceBoundaryDraw(true);
-            drawer->SetupOwnFaceBoundaryAspect();
-            if (!drawer->FaceBoundaryAspect().IsNull())
+            drawer->SetFaceBoundaryDraw(boundaries);
+            if (boundaries)
             {
-                drawer->FaceBoundaryAspect()->SetColor(rgb(0.16,0.19,0.22));
-                drawer->FaceBoundaryAspect()->SetWidth(1.15);
+                drawer->SetupOwnFaceBoundaryAspect();
+                if (!drawer->FaceBoundaryAspect().IsNull())
+                {
+                    drawer->FaceBoundaryAspect()->SetColor(rgb(0.16,0.19,0.22));
+                    drawer->FaceBoundaryAspect()->SetWidth(1.15);
+                }
             }
         }
-        state->Context->Display(ais, displayMode, selectable ? 0 : -1, false);
+        state->Context->Display(ais, effectiveMode, selectable ? 0 : -1, false);
         state->Context->SetColor(ais, color, false);
         if (transparency > 0.0) state->Context->SetTransparency(ais, transparency, false);
         return ais;

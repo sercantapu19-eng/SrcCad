@@ -65,7 +65,7 @@ public partial class MainWindow
             var item=new TreeViewItem{Header=feature.Name+(state==RebuildState.Clean?"":" ["+state+"]"),Tag=feature.Id};
             var menu=new ContextMenu();
             void AddAction(string title,Action action){var entry=new MenuItem{Header=title};entry.Click+=(_,_)=>action();menu.Items.Add(entry);}
-            AddAction("Düzenle",()=>EditGraphFeature(feature.Id));
+            AddAction(feature.Kind==FeatureKind.Sketch?"Çizimi Düzenle":"Özelliği Düzenle",()=>EditGraphFeature(feature.Id));
             AddAction(feature.Suppressed?"Baskılamayı Kaldır":"Baskıla",()=>CommitGraphDocument(ReplaceGraphNode(feature with{Suppressed=!feature.Suppressed})));
             AddAction("Sil",()=>DeleteGraphFeature(feature.Id));
             item.ContextMenu=menu;PartNode.Items.Add(item);_partNodes.Add(item);if(select==feature.Id)item.IsSelected=true;

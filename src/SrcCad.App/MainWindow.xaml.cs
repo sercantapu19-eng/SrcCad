@@ -2029,6 +2029,22 @@ public partial class MainWindow : Window
     private void Top_Click(object sender, RoutedEventArgs e) => _viewer.SetTopView();
     private void Right_Click(object sender, RoutedEventArgs e) => _viewer.SetRightView();
 
+    private void ShadedEdges_Click(object sender,RoutedEventArgs e)
+    {
+        _viewer.SetDisplayStyle(CadDisplayStyle.ShadedWithEdges);
+        Status("Görünüm: Gölgeli + Kenarlı");
+    }
+    private void Shaded_Click(object sender,RoutedEventArgs e)
+    {
+        _viewer.SetDisplayStyle(CadDisplayStyle.Shaded);
+        Status("Görünüm: Gölgeli");
+    }
+    private void Wireframe_Click(object sender,RoutedEventArgs e)
+    {
+        _viewer.SetDisplayStyle(CadDisplayStyle.Wireframe);
+        Status("Görünüm: Tel Kafes");
+    }
+
     private void FaceSelection_Click(object sender, RoutedEventArgs e)
     {
         _viewer.SetSelectionMode(CadSelectionMode.Face);
