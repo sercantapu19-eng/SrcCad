@@ -176,10 +176,10 @@
             </TabItem>
             <TabItem Header="ÖLÇÜM / İNCELEME">
                 <WrapPanel Margin="8">
-                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadDimensionIcon}" Content="Ölç" Click="CadCommandPlaceholder_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Kütle Özellikleri" Click="CadCommandPlaceholder_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadDimensionIcon}" Content="Ölç" Click="InspectMeasure_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Kütle Özellikleri" Click="InspectMassProperties_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Kesit Görünümü" Click="CadCommandPlaceholder_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Geometri Kontrolü" Click="CadCommandPlaceholder_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Geometri Kontrolü" Click="InspectGeometry_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Draft Analizi" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Çakışma" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Karşılaştır" Click="CadCommandPlaceholder_Click"/>

@@ -620,6 +620,36 @@ namespace SrcCad::Kernel::Occt
         return values->ToArray();
     }
 
+    array<double>^ OcctViewportBridge::SelectedTopologyMeasure()
+    {
+        if(!IsInitialized()||myState->Context->NbSelected()!=1)return gcnew array<double>(0);
+        try
+        {
+            myState->Context->InitSelected();
+            if(!myState->Context->MoreSelected()||!myState->Context->HasSelectedShape())return gcnew array<double>(0);
+            TopoDS_Shape selected=myState->Context->SelectedShape();
+            if(selected.IsNull())return gcnew array<double>(0);
+            GProp_GProps props;
+            if(selected.ShapeType()==TopAbs_EDGE)
+            {
+                BRepGProp::LinearProperties(selected,props);
+                return gcnew array<double>{2.0,props.Mass(),props.CentreOfMass().X(),props.CentreOfMass().Y(),props.CentreOfMass().Z()};
+            }
+            if(selected.ShapeType()==TopAbs_FACE)
+            {
+                BRepGProp::SurfaceProperties(selected,props);
+                return gcnew array<double>{4.0,props.Mass(),props.CentreOfMass().X(),props.CentreOfMass().Y(),props.CentreOfMass().Z()};
+            }
+            if(selected.ShapeType()==TopAbs_VERTEX)
+            {
+                gp_Pnt p=BRep_Tool::Pnt(TopoDS::Vertex(selected));
+                return gcnew array<double>{1.0,0.0,p.X(),p.Y(),p.Z()};
+            }
+            return gcnew array<double>(0);
+        }
+        catch(const Standard_Failure&){return gcnew array<double>(0);}
+    }
+
     bool OcctViewportBridge::TryGetSelectedPlanarFace(CadPlane3D% plane)
     {
         if (!IsInitialized() || myState->Context->NbSelected() != 1) return false;

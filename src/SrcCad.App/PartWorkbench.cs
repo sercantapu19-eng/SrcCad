@@ -668,6 +668,64 @@ public partial class MainWindow
 
     private void ShellFeatureCancel_Click(object sender,RoutedEventArgs e)=>EndGraphFeature();
 
+    private string? CurrentBodyBRep()
+    {
+        if(!EnsurePartSession()||_partSession is null)return null;
+        var node=CurrentSolidFeature();
+        return node is null?null:_partSession.Output(node.Id)?.BRep;
+    }
+
+    private void InspectMeasure_Click(object sender,RoutedEventArgs e)
+    {
+        var measure=_viewer.SelectedTopologyMeasure();
+        PropertyTitle.Text="Ölç";
+        if(measure.Length<5)
+        {
+            PropertyInfo.Text="Tek bir kenar, yüz veya köşe seçin. Kenarda uzunluk, yüzde alan, köşede koordinat ölçülür.";
+            ManagerTabs.SelectedItem=PropertyManagerTab;Status("Ölçüm için tek topolojik öğe seçin.");return;
+        }
+        var details=measure[0] switch
+        {
+            2=>$"Kenar Uzunluğu: {measure[1]:0.###} mm\nMerkez: X={measure[2]:0.###}, Y={measure[3]:0.###}, Z={measure[4]:0.###}",
+            4=>$"Yüz Alanı: {measure[1]:0.###} mm²\nAğırlık Merkezi: X={measure[2]:0.###}, Y={measure[3]:0.###}, Z={measure[4]:0.###}",
+            1=>$"Köşe Koordinatı: X={measure[2]:0.###}, Y={measure[3]:0.###}, Z={measure[4]:0.###}",
+            _=>"Bu seçim türü henüz ölçülemiyor."
+        };
+        PropertyInfo.Text=details;ManagerTabs.SelectedItem=PropertyManagerTab;Status("Seçili geometri ölçüldü.");
+    }
+
+    private void InspectMassProperties_Click(object sender,RoutedEventArgs e)
+    {
+        var body=CurrentBodyBRep();
+        PropertyTitle.Text="Kütle Özellikleri";
+        if(body is null){PropertyInfo.Text="Ölçülecek katı yok.";ManagerTabs.SelectedItem=PropertyManagerTab;return;}
+        try
+        {
+            var info=SrcCad.Kernel.Occt.OcctFeatureKernel.Inspect(body);
+            PropertyInfo.Text=$"Hacim: {info[0]:0.###} mm³\nKatı Sayısı: {info[1]:0}\nYüz Sayısı: {info[2]:0}\nKenar Sayısı: {info[3]:0}\n\nMalzeme/yoğunluk tanımlı olmadığı için kütle değeri hesaplanmadı.";
+            ManagerTabs.SelectedItem=PropertyManagerTab;Status("Geometrik kütle özellikleri hesaplandı.");
+        }
+        catch(Exception ex){PropertyInfo.Text="Kütle özellikleri hesaplanamadı: "+ex.Message;ManagerTabs.SelectedItem=PropertyManagerTab;}
+    }
+
+    private void InspectGeometry_Click(object sender,RoutedEventArgs e)
+    {
+        var body=CurrentBodyBRep();
+        PropertyTitle.Text="Geometri Kontrolü";
+        if(body is null){PropertyInfo.Text="Kontrol edilecek katı yok.";ManagerTabs.SelectedItem=PropertyManagerTab;return;}
+        try
+        {
+            var info=SrcCad.Kernel.Occt.OcctFeatureKernel.Inspect(body);
+            PropertyInfo.Text=$"OCCT B-Rep geçerli.\nKatı: {info[1]:0}\nYüz: {info[2]:0}\nKenar: {info[3]:0}\nHacim: {info[0]:0.###} mm³";
+            ManagerTabs.SelectedItem=PropertyManagerTab;Status("Geometri kontrolü: geçerli B-Rep.");
+        }
+        catch(Exception ex)
+        {
+            PropertyInfo.Text="Geometri geçersiz / rebuild hatası: "+ex.Message;
+            ManagerTabs.SelectedItem=PropertyManagerTab;Status("Geometri kontrolü hata buldu.");
+        }
+    }
+
     private void BeginGraphExtrude()
     {
         if(_inSketch||_extrudeCommandActive||_partSession is null||SelectedGraphId is not Guid id||_partSession.Document.Node(id).Kind!=FeatureKind.Sketch)return;
