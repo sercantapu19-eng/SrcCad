@@ -806,6 +806,122 @@ public partial class MainWindow
 
     private void MirrorFeatureCancel_Click(object sender,RoutedEventArgs e)=>EndGraphFeature();
 
+    private PlaneFrame CurrentPatternFrame()
+    {
+        if(_viewer.TryGetSelectedPlanarFace(out var face))
+        {
+            try
+            {
+                return new PlaneFrame("Seçili Yüz",
+                    new Vector3d(face.Origin.X,face.Origin.Y,face.Origin.Z),
+                    new Vector3d(face.U.X,face.U.Y,face.U.Z),
+                    new Vector3d(face.V.X,face.V.Y,face.V.Z),
+                    new Vector3d(face.Normal.X,face.Normal.Y,face.Normal.Z)).Validate();
+            }
+            catch(InvalidOperationException){}
+        }
+        return _selectedPlane;
+    }
+
+    private void LinearPattern_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession())return;
+        var baseNode=CurrentSolidFeature();
+        if(baseNode is null){Status("Doğrusal Dizilim için mevcut katı gerekiyor.");return;}
+        var frame=CurrentPatternFrame();
+        BeginPatternFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Doğrusal Dizilim"),
+            new LinearPatternFeatureParameters(baseNode.Id,frame.U,50,2)));
+    }
+
+    private void CircularPattern_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession())return;
+        var baseNode=CurrentSolidFeature();
+        if(baseNode is null){Status("Dairesel Dizilim için mevcut katı gerekiyor.");return;}
+        var frame=CurrentPatternFrame();
+        BeginPatternFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Dairesel Dizilim"),
+            new CircularPatternFeatureParameters(baseNode.Id,frame.Origin,frame.Normal,360,4)));
+    }
+
+    private void BeginPatternFeature(FeatureNode node)
+    {
+        _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;
+        switch(node.Parameters)
+        {
+            case LinearPatternFeatureParameters linear:
+                PatternFeatureTitle.Text="Doğrusal Dizilim";
+                PatternCount.Text=linear.Count.ToString(System.Globalization.CultureInfo.CurrentCulture);
+                PatternValueLabel.Text="Aralık (mm)";
+                PatternValue.Text=linear.Spacing.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+                PatternReferenceText.Text=$"Yön: X={linear.Direction.X:0.###}, Y={linear.Direction.Y:0.###}, Z={linear.Direction.Z:0.###}";
+                break;
+            case CircularPatternFeatureParameters circular:
+                PatternFeatureTitle.Text="Dairesel Dizilim";
+                PatternCount.Text=circular.Count.ToString(System.Globalization.CultureInfo.CurrentCulture);
+                PatternValueLabel.Text="Toplam Açı (°)";
+                PatternValue.Text=circular.AngleDegrees.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+                PatternReferenceText.Text=$"Eksen: O({circular.AxisOrigin.X:0.###},{circular.AxisOrigin.Y:0.###},{circular.AxisOrigin.Z:0.###}) • N({circular.AxisDirection.X:0.###},{circular.AxisDirection.Y:0.###},{circular.AxisDirection.Z:0.###})";
+                break;
+            default:throw new InvalidOperationException("Unsupported pattern feature.");
+        }
+        PatternFeatureError.Text="";
+        PatternFeaturePanel.Visibility=Visibility.Visible;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;
+        HoleFeaturePanel.Visibility=Visibility.Collapsed;RevolveFeaturePanel.Visibility=Visibility.Collapsed;
+        ShellFeaturePanel.Visibility=Visibility.Collapsed;MirrorFeaturePanel.Visibility=Visibility.Collapsed;
+        PropertyTitle.Text=node.Name;
+        PropertyInfo.Text="Gerçek OCCT gövde dizilimi • parametrik adet/aralık/açı • canlı B-Rep önizleme";
+        ManagerTabs.SelectedItem=PropertyManagerTab;
+        _loadingGraphParameters=false;
+        UpdatePatternFeaturePreview();RefreshCommandState();
+    }
+
+    private FeatureDocument? PatternFeatureCandidate()
+    {
+        if(_partSession is null||_graphFeatureEdit is null||
+           !int.TryParse(PatternCount.Text,System.Globalization.NumberStyles.Integer,System.Globalization.CultureInfo.CurrentCulture,out var count)||
+           count<2||count>500||
+           !DimensionNumbers.TryParseScalar(PatternValue.Text,out var value)||!double.IsFinite(value)||value<=1e-9)return null;
+        var parameters=_graphFeatureEdit.Parameters switch
+        {
+            LinearPatternFeatureParameters linear when double.IsFinite(value)=>(FeatureParameters)(linear with{Spacing=value,Count=count}),
+            CircularPatternFeatureParameters circular when value<=360.0=>circular with{AngleDegrees=value,Count=count},
+            _=>null
+        };
+        return parameters is null?null:ReplaceGraphNode(_graphFeatureEdit with{Parameters=parameters});
+    }
+
+    private void PatternFeatureParameterChanged(object sender,RoutedEventArgs e)
+    {
+        if(!_loadingGraphParameters)UpdatePatternFeaturePreview();
+    }
+
+    private void UpdatePatternFeaturePreview()
+    {
+        if(_partSession is null||_graphFeatureEdit is null)return;
+        var candidate=PatternFeatureCandidate();
+        if(candidate is null)
+        {
+            _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();
+            PatternFeatureError.Text="Adet 2–500 olmalı; aralık/açı pozitif ve daireselde en fazla 360° olmalı.";return;
+        }
+        var preview=_partSession.Preview(candidate);
+        var body=preview.Success?LastBody(candidate,id=>preview.Outputs.GetValueOrDefault(id)):null;
+        if(body is not null&&_viewer.PreviewFeatureBody(body)){PatternFeatureError.Text="";return;}
+        _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();
+        PatternFeatureError.Text=preview.Report.Nodes.LastOrDefault(n=>n.State==RebuildState.Failed)?.Error??preview.Report.Error??"Dizilim önizlemesi oluşturulamadı.";
+    }
+
+    private void PatternFeatureOk_Click(object sender,RoutedEventArgs e)
+    {
+        var candidate=PatternFeatureCandidate();
+        if(candidate is null||_partSession is null){PatternFeatureError.Text="Geçerli dizilim parametreleri gerekiyor.";return;}
+        if(!_partSession.TryCommit(candidate)){PatternFeatureError.Text=GraphError();return;}
+        var id=_graphFeatureEdit!.Id;EndGraphFeature();RefreshPartTree(id);Status("Parametrik dizilim onaylandı.");
+    }
+
+    private void PatternFeatureCancel_Click(object sender,RoutedEventArgs e)=>EndGraphFeature();
+
     private void BeginGraphExtrude()
     {
         if(_inSketch||_extrudeCommandActive||_partSession is null||SelectedGraphId is not Guid id||_partSession.Document.Node(id).Kind!=FeatureKind.Sketch)return;
@@ -825,6 +941,7 @@ public partial class MainWindow
         if(node.Parameters is RevolveFeatureParameters or RevolveCutFeatureParameters){BeginRevolveFeature(node);return;}
         if(node.Parameters is ShellFeatureParameters){BeginShellFeature(node);return;}
         if(node.Parameters is MirrorFeatureParameters){BeginMirrorFeature(node);return;}
+        if(node.Parameters is LinearPatternFeatureParameters or CircularPatternFeatureParameters){BeginPatternFeature(node);return;}
         _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;_depthWheel.Reset();
         var cut=node.Parameters as CutFeatureParameters;
         var depth=cut?.Depth??Math.Abs(((ExtrudeFeatureParameters)node.Parameters).Depth);
@@ -869,7 +986,7 @@ public partial class MainWindow
     {
         _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.0);
         _graphFeatureEdit=null;_extrudeCommandActive=false;
-        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;RevolveFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;MirrorFeaturePanel.Visibility=Visibility.Collapsed;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;RevolveFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;MirrorFeaturePanel.Visibility=Visibility.Collapsed;PatternFeaturePanel.Visibility=Visibility.Collapsed;
         _viewer.ClearSelection();_viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Face);
         ManagerTabs.SelectedItem=FeatureManagerTab;RefreshCommandState();
     }
@@ -893,5 +1010,6 @@ public partial class MainWindow
         RevolveFeaturePanel.Visibility=Visibility.Collapsed;
         ShellFeaturePanel.Visibility=Visibility.Collapsed;
         MirrorFeaturePanel.Visibility=Visibility.Collapsed;
+        PatternFeaturePanel.Visibility=Visibility.Collapsed;
     }
 }

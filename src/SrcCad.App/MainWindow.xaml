@@ -69,8 +69,8 @@
                     <Button Style="{StaticResource CadCommandButton}" Content="Kabuk" Click="Shell_Click" x:Name="ShellButton" ToolTip="Açılacak yüzleri seçin; kalınlıkla gerçek içi boş katı oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Draft" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Nervür" Click="CadCommandPlaceholder_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Doğrusal Dizilim" Click="CadCommandPlaceholder_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Dairesel Dizilim" Click="CadCommandPlaceholder_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Doğrusal Dizilim" Click="LinearPattern_Click" x:Name="LinearPatternButton" ToolTip="Seçili düzlem/yüzün X yönünde parametrik gövde dizilimi oluşturur."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Dairesel Dizilim" Click="CircularPattern_Click" x:Name="CircularPatternButton" ToolTip="Seçili düzlem/yüzün normal ekseni etrafında parametrik gövde dizilimi oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Aynala" Click="Mirror_Click" x:Name="MirrorButton" ToolTip="Düzlemsel yüz veya Ön/Üst/Sağ Düzlem seçin; katıyı gerçek 3B ayna dönüşümüyle çoğaltır."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Referans Geometri" Click="CadCommandPlaceholder_Click"/>
                     <Separator Margin="8,2"/>
@@ -322,6 +322,21 @@
                                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                     <Button Content="✓" Width="52" Height="34" Click="MirrorFeatureOk_Click"/>
                                     <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="MirrorFeatureCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="PatternFeaturePanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock x:Name="PatternFeatureTitle" Text="Dizilim" FontWeight="Bold"/>
+                                <TextBlock Text="Adet" Margin="0,6,0,0"/>
+                                <TextBox x:Name="PatternCount" TextChanged="PatternFeatureParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock x:Name="PatternValueLabel" Text="Aralık (mm)"/>
+                                <TextBox x:Name="PatternValue" TextChanged="PatternFeatureParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock Text="Referans Yön / Eksen" FontWeight="Bold"/>
+                                <TextBlock x:Name="PatternReferenceText" TextWrapping="Wrap" Margin="0,4,0,8"/>
+                                <TextBlock x:Name="PatternFeatureError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="PatternFeatureOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="PatternFeatureCancel_Click"/>
                                 </StackPanel>
                             </StackPanel>
 
