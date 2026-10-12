@@ -67,4 +67,8 @@ internal sealed class OcctPartGeometryKernel : IPartGeometryKernel
         => OcctFeatureKernel.Mirror(baseBody,
             new[]{plane.Origin.X,plane.Origin.Y,plane.Origin.Z,plane.U.X,plane.U.Y,plane.U.Z,plane.Normal.X,plane.Normal.Y,plane.Normal.Z},
             keepOriginal);
+    public string LinearPattern(string baseBody,SrcCad.Core.Geometry.Vector3d direction,double spacing,int count)
+        => OcctFeatureKernel.LinearPattern(baseBody,new[]{direction.X,direction.Y,direction.Z},spacing,count);
+    public string CircularPattern(string baseBody,SrcCad.Core.Geometry.Vector3d axisOrigin,SrcCad.Core.Geometry.Vector3d axisDirection,double angleDegrees,int count)
+        => OcctFeatureKernel.CircularPattern(baseBody,new[]{axisOrigin.X,axisOrigin.Y,axisOrigin.Z,axisDirection.X,axisDirection.Y,axisDirection.Z},angleDegrees,count);
 }

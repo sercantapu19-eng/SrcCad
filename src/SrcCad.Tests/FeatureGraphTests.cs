@@ -25,6 +25,8 @@ internal static class FeatureGraphTests
                 RevolveCutFeatureParameters p=>p.AngleDegrees,
                 ShellFeatureParameters p=>p.Thickness,
                 MirrorFeatureParameters=>1,
+                LinearPatternFeatureParameters p=>p.Count,
+                CircularPatternFeatureParameters p=>p.Count,
                 _=>1
             };
             return new(own+dependencies.Values.Sum(x=>x.Value));
@@ -130,6 +132,14 @@ internal static class FeatureGraphTests
         Check(mirrorClone.Node(mirrorNode.Id).Kind==FeatureKind.Mirror&&
               ((MirrorFeatureParameters)mirrorClone.Node(mirrorNode.Id).Parameters).Plane.Name=="Ön Düzlem",
             "mirror plane and keep-original intent roundtrip");
+        var linearNode=new FeatureNode(Guid.NewGuid(),"Doğrusal Dizilim1",
+            new LinearPatternFeatureParameters(boss.Id,Vector3d.UnitX,50,4));
+        var circularNode=new FeatureNode(Guid.NewGuid(),"Dairesel Dizilim1",
+            new CircularPatternFeatureParameters(boss.Id,Vector3d.Zero,Vector3d.UnitZ,360,6));
+        var patternDoc=initial with{Features=initial.Features.Concat(new[]{linearNode,circularNode}).ToArray()};
+        var patternClone=FeatureDocumentFile.Clone(patternDoc);
+        Check(patternClone.Node(linearNode.Id).Kind==FeatureKind.LinearPattern&&patternClone.Node(circularNode.Id).Kind==FeatureKind.CircularPattern,
+            "linear/circular pattern parameters roundtrip");
 
         var external=session.Document;((IDictionary<int,SketchPoint>)((SketchFeatureParameters)external.Node(source.Id).Parameters).Sketch.Points).Clear();
         Check(((SketchFeatureParameters)session.Document.Node(source.Id).Parameters).Sketch.Points.Count>0,"external snapshot cannot mutate committed document");

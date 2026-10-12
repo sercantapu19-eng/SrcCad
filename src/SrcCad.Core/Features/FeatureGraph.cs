@@ -7,7 +7,7 @@ using SrcCad.Core.Persistence;
 
 namespace SrcCad.Core.Features;
 
-public enum FeatureKind { Sketch, Extrude, ExtrudedCut, Fillet, Chamfer, Hole, Revolve, RevolvedCut, Shell, Mirror }
+public enum FeatureKind { Sketch, Extrude, ExtrudedCut, Fillet, Chamfer, Hole, Revolve, RevolvedCut, Shell, Mirror, LinearPattern, CircularPattern }
 public enum RebuildState { Clean, Dirty, Suppressed, Blocked, Failed }
 public enum ExtrusionTermination { Blind, ThroughAll }
 public enum TopologyKind { Body, Face, Edge, Vertex }
@@ -25,6 +25,8 @@ public sealed record FeatureReference(Guid ProducerId, TopologyKind Kind, string
 [JsonDerivedType(typeof(RevolveCutFeatureParameters), "revolved-cut")]
 [JsonDerivedType(typeof(ShellFeatureParameters), "shell")]
 [JsonDerivedType(typeof(MirrorFeatureParameters), "mirror")]
+[JsonDerivedType(typeof(LinearPatternFeatureParameters), "linear-pattern")]
+[JsonDerivedType(typeof(CircularPatternFeatureParameters), "circular-pattern")]
 public abstract record FeatureParameters;
 public sealed record SketchFeatureParameters(PlaneFrame Plane, SketchSnapshot Sketch) : FeatureParameters;
 public sealed record ExtrudeFeatureParameters(Guid SketchId, double Depth) : FeatureParameters;
@@ -38,6 +40,8 @@ public sealed record RevolveFeatureParameters(Guid SketchId, int AxisEntityId, d
 public sealed record RevolveCutFeatureParameters(Guid BaseFeatureId, Guid SketchId, int AxisEntityId, double AngleDegrees = 360, bool Reverse = false) : FeatureParameters;
 public sealed record ShellFeatureParameters(Guid BaseFeatureId, double Thickness, bool Outward = false) : FeatureParameters;
 public sealed record MirrorFeatureParameters(Guid BaseFeatureId, PlaneFrame Plane, bool KeepOriginal = true) : FeatureParameters;
+public sealed record LinearPatternFeatureParameters(Guid BaseFeatureId, Vector3d Direction, double Spacing, int Count) : FeatureParameters;
+public sealed record CircularPatternFeatureParameters(Guid BaseFeatureId, Vector3d AxisOrigin, Vector3d AxisDirection, double AngleDegrees, int Count) : FeatureParameters;
 public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Parameters,
     bool Suppressed = false, FeatureReference[]? References = null)
 {
@@ -47,6 +51,7 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
       ChamferFeatureParameters => FeatureKind.Chamfer, HoleFeatureParameters => FeatureKind.Hole,
       RevolveFeatureParameters => FeatureKind.Revolve, RevolveCutFeatureParameters => FeatureKind.RevolvedCut,
       ShellFeatureParameters => FeatureKind.Shell, MirrorFeatureParameters => FeatureKind.Mirror,
+      LinearPatternFeatureParameters => FeatureKind.LinearPattern, CircularPatternFeatureParameters => FeatureKind.CircularPattern,
       _ => throw new InvalidDataException("Unsupported feature") };
     [JsonIgnore] public Guid[] Dependencies => (Parameters switch
     {
@@ -59,6 +64,8 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
         RevolveCutFeatureParameters r => new[] { r.BaseFeatureId,r.SketchId },
         ShellFeatureParameters s => new[] { s.BaseFeatureId },
         MirrorFeatureParameters m => new[] { m.BaseFeatureId },
+        LinearPatternFeatureParameters p => new[] { p.BaseFeatureId },
+        CircularPatternFeatureParameters p => new[] { p.BaseFeatureId },
         _ => Array.Empty<Guid>()
     }).Concat((References ?? Array.Empty<FeatureReference>()).Select(r=>r.ProducerId)).Distinct().ToArray();
 }
@@ -193,6 +200,17 @@ public static class FeatureDocumentFile
                 case MirrorFeatureParameters m:
                     if(document.Node(m.BaseFeatureId).Kind==FeatureKind.Sketch)throw new InvalidDataException("Invalid mirror base.");
                     _=m.Plane.Validate();
+                    break;
+                case LinearPatternFeatureParameters p:
+                    if(document.Node(p.BaseFeatureId).Kind==FeatureKind.Sketch||!double.IsFinite(p.Spacing)||p.Spacing<=1e-9||
+                       p.Count<2||p.Count>500||!double.IsFinite(p.Direction.X)||!double.IsFinite(p.Direction.Y)||!double.IsFinite(p.Direction.Z)||
+                       p.Direction.Length<=1e-9)throw new InvalidDataException("Invalid linear pattern.");
+                    break;
+                case CircularPatternFeatureParameters p:
+                    if(document.Node(p.BaseFeatureId).Kind==FeatureKind.Sketch||!double.IsFinite(p.AngleDegrees)||p.AngleDegrees<=1e-9||p.AngleDegrees>360||
+                       p.Count<2||p.Count>500||!double.IsFinite(p.AxisOrigin.X)||!double.IsFinite(p.AxisOrigin.Y)||!double.IsFinite(p.AxisOrigin.Z)||
+                       !double.IsFinite(p.AxisDirection.X)||!double.IsFinite(p.AxisDirection.Y)||!double.IsFinite(p.AxisDirection.Z)||
+                       p.AxisDirection.Length<=1e-9)throw new InvalidDataException("Invalid circular pattern.");
                     break;
                 default:throw new InvalidDataException("Unsupported feature parameters.");
             }

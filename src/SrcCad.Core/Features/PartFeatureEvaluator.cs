@@ -14,6 +14,8 @@ public interface IPartGeometryKernel
     string RevolveCut(string baseBody,SketchModel source,int axisEntityId,double angleDegrees,bool reverse);
     string Shell(string baseBody,IReadOnlyList<string> faceReferences,double thickness,bool outward);
     string Mirror(string baseBody,PlaneFrame plane,bool keepOriginal);
+    string LinearPattern(string baseBody,Vector3d direction,double spacing,int count);
+    string CircularPattern(string baseBody,Vector3d axisOrigin,Vector3d axisDirection,double angleDegrees,int count);
 }
 // Strings are immutable; native cache is detached from the document/viewport.
 public sealed record PartFeatureOutput(string? SketchData, string? BRep);
@@ -51,6 +53,8 @@ public sealed class PartFeatureEvaluator(IPartGeometryKernel kernel) : IFeatureE
                 (node.References??Array.Empty<FeatureReference>()).Where(r=>r.Kind==TopologyKind.Face&&r.ProducerId==s.BaseFeatureId).Select(r=>r.SemanticName).ToArray(),
                 s.Thickness,s.Outward)),
             MirrorFeatureParameters m => new(null,kernel.Mirror(Base(m.BaseFeatureId),m.Plane,m.KeepOriginal)),
+            LinearPatternFeatureParameters p => new(null,kernel.LinearPattern(Base(p.BaseFeatureId),p.Direction,p.Spacing,p.Count)),
+            CircularPatternFeatureParameters p => new(null,kernel.CircularPattern(Base(p.BaseFeatureId),p.AxisOrigin,p.AxisDirection,p.AngleDegrees,p.Count)),
             _=>throw new NotSupportedException("Feature evaluator unavailable.")
         };
     }
