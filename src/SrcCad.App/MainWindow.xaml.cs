@@ -446,7 +446,7 @@ public partial class MainWindow : Window
     {
         if(_graphFeatureEdit is not null)
         {
-            if(_graphFeatureEdit.Parameters is FilletFeatureParameters or ChamferFeatureParameters or HoleFeatureParameters)return;
+            if(_graphFeatureEdit.Parameters is FilletFeatureParameters or ChamferFeatureParameters or HoleFeatureParameters or RevolveFeatureParameters or RevolveCutFeatureParameters)return;
             if(DimensionNumbers.TryParseScalar(GraphDepth.Text,out var value))
                 GraphDepth.Text=_depthWheel.Apply(value,delta).ToString("G17",CultureInfo.CurrentCulture);
             return;
@@ -2220,6 +2220,8 @@ public partial class MainWindow : Window
         FilletButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
         ChamferButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
         HoleButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
+        RevolveButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&(_sketch is not null||_partSession is not null);
+        RevolveCutButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
         if(_partSession is not null)
         {
             ExtrudeButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&!_hasSolid&&SelectedGraphId is Guid sketchId&&SelectedGraphNode?.Kind==SrcCad.Core.Features.FeatureKind.Sketch;
