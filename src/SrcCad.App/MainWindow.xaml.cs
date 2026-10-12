@@ -314,6 +314,7 @@ public partial class MainWindow : Window
             _viewer.MoveTo(e.X, e.Y);
             var toggle = (WinForms.Control.ModifierKeys & WinForms.Keys.Control) == WinForms.Keys.Control;
             var selected = _viewer.SelectDetected(toggle);
+            UpdateActiveEdgeFeatureSelection();
             Status(selected ? _viewer.SelectionSummary() : "Seçim yok");
             if (selected && e.Clicks >= 2 && !toggle)
                 NormalToSelectedSupport();
@@ -444,6 +445,7 @@ public partial class MainWindow : Window
     {
         if(_graphFeatureEdit is not null)
         {
+            if(_graphFeatureEdit.Parameters is FilletFeatureParameters or ChamferFeatureParameters)return;
             if(DimensionNumbers.TryParseScalar(GraphDepth.Text,out var value))
                 GraphDepth.Text=_depthWheel.Apply(value,delta).ToString("G17",CultureInfo.CurrentCulture);
             return;
@@ -2214,6 +2216,8 @@ public partial class MainWindow : Window
         CancelSourceSketchEditButton.Visibility = _sourceSketchEditBefore is null && _graphSketchEdit is null ? Visibility.Collapsed : Visibility.Visible;
         NewProfileSketchButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&(_hasSolid||_partSession is not null);
         CutButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid&&_partSession is not null&&CutProfileCandidate() is not null;
+        FilletButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
+        ChamferButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
         if(_partSession is not null)
         {
             ExtrudeButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&!_hasSolid&&SelectedGraphId is Guid sketchId&&SelectedGraphNode?.Kind==SrcCad.Core.Features.FeatureKind.Sketch;

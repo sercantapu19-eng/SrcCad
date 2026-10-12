@@ -200,6 +200,139 @@ public partial class MainWindow
 
         BeginGraphFeature(node);
     }
+    private FeatureNode? CurrentSolidFeature()
+        => _partSession?.Document.Ordered().LastOrDefault(n=>_partSession.Output(n.Id)?.BRep is not null);
+
+    private FeatureReference[] SelectedEdgeReferences(Guid producerId)
+        => _viewer.SelectedEdgeReferences()
+            .Where(value=>!string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.Ordinal)
+            .Select(value=>new FeatureReference(producerId,TopologyKind.Edge,value))
+            .ToArray();
+
+    private void Fillet_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession())return;
+        var baseNode=CurrentSolidFeature();
+        if(baseNode is null){Status("Radyus için mevcut katı gerekiyor.");return;}
+        _viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Edge);
+        var node=new FeatureNode(Guid.NewGuid(),NextGraphName("Radyus"),new FilletFeatureParameters(baseNode.Id,2),
+            References:SelectedEdgeReferences(baseNode.Id));
+        BeginEdgeFeature(node);
+    }
+
+    private void Chamfer_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession())return;
+        var baseNode=CurrentSolidFeature();
+        if(baseNode is null){Status("Pah için mevcut katı gerekiyor.");return;}
+        _viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Edge);
+        var node=new FeatureNode(Guid.NewGuid(),NextGraphName("Pah"),new ChamferFeatureParameters(baseNode.Id,1),
+            References:SelectedEdgeReferences(baseNode.Id));
+        BeginEdgeFeature(node);
+    }
+
+    private void BeginEdgeFeature(FeatureNode node)
+    {
+        _graphFeatureEdit=node;
+        _extrudeCommandActive=true;
+        _loadingGraphParameters=true;
+        var value=node.Parameters switch
+        {
+            FilletFeatureParameters f=>f.Radius,
+            ChamferFeatureParameters c=>c.Distance,
+            _=>throw new InvalidOperationException("Unsupported edge feature.")
+        };
+        EdgeFeatureValue.Text=value.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        EdgeFeatureValueLabel.Text=node.Kind==FeatureKind.Fillet?"Radyus (mm)":"Pah Mesafesi (mm)";
+        EdgeFeaturePanel.Visibility=Visibility.Visible;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;
+        EdgeFeatureSelectionText.Text=(node.References?.Length??0)==0?"Kenar seçilmedi":$"{node.References!.Length} kenar seçili";
+        EdgeFeatureError.Text=(node.References?.Length??0)==0?"Kenar seçin.":"";
+        PropertyTitle.Text=node.Name;
+        PropertyInfo.Text="Gerçek OCCT B-Rep • Ctrl ile çoklu kenar • canlı önizleme • ✓ tek transaction";
+        ManagerTabs.SelectedItem=PropertyManagerTab;
+        _loadingGraphParameters=false;
+        if((node.References?.Length??0)>0)UpdateEdgeFeaturePreview();
+        else{_viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();}
+        RefreshCommandState();
+    }
+
+    internal void UpdateActiveEdgeFeatureSelection()
+    {
+        if(_partSession is null||_graphFeatureEdit is null||
+           _graphFeatureEdit.Parameters is not (FilletFeatureParameters or ChamferFeatureParameters))return;
+        var baseId=_graphFeatureEdit.Parameters switch
+        {
+            FilletFeatureParameters f=>f.BaseFeatureId,
+            ChamferFeatureParameters c=>c.BaseFeatureId,
+            _=>Guid.Empty
+        };
+        var references=SelectedEdgeReferences(baseId);
+        _graphFeatureEdit=_graphFeatureEdit with{References=references};
+        EdgeFeatureSelectionText.Text=references.Length==0?"Kenar seçilmedi":$"{references.Length} kenar seçili";
+        UpdateEdgeFeaturePreview();
+    }
+
+    private FeatureDocument? EdgeFeatureCandidate()
+    {
+        if(_partSession is null||_graphFeatureEdit is null||
+           !DimensionNumbers.TryParse(EdgeFeatureValue.Text,SketchDimensionType.LineLength,out var value,out _)||
+           value<=1e-9||(_graphFeatureEdit.References?.Length??0)==0)return null;
+        var parameters=_graphFeatureEdit.Parameters switch
+        {
+            FilletFeatureParameters f=>(FeatureParameters)(f with{Radius=value}),
+            ChamferFeatureParameters c=>c with{Distance=value},
+            _=>throw new InvalidOperationException("Unsupported edge feature.")
+        };
+        return ReplaceGraphNode(_graphFeatureEdit with{Parameters=parameters});
+    }
+
+    private void EdgeFeatureParameterChanged(object sender,RoutedEventArgs e)
+    {
+        if(!_loadingGraphParameters)UpdateEdgeFeaturePreview();
+    }
+
+    private void UpdateEdgeFeaturePreview()
+    {
+        if(_partSession is null||_graphFeatureEdit is null)return;
+        if((_graphFeatureEdit.References?.Length??0)==0)
+        {
+            _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.0);
+            EdgeFeatureError.Text="En az bir kenar seçin.";return;
+        }
+        var candidate=EdgeFeatureCandidate();
+        if(candidate is null)
+        {
+            _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.0);
+            EdgeFeatureError.Text="Pozitif, sonlu bir değer girin.";return;
+        }
+        var preview=_partSession.Preview(candidate);
+        var body=preview.Success?LastBody(candidate,id=>preview.Outputs.GetValueOrDefault(id)):null;
+        if(body is not null&&_viewer.PreviewFeatureBody(body))
+        {
+            _viewer.ShowCommittedSolid();
+            _viewer.SetCommittedSolidTransparency(0.72);
+            EdgeFeatureError.Text="";
+            return;
+        }
+        _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.0);
+        EdgeFeatureError.Text=preview.Report.Nodes.LastOrDefault(n=>n.State==RebuildState.Failed)?.Error??preview.Report.Error??"Önizleme oluşturulamadı.";
+    }
+
+    private void EdgeFeatureOk_Click(object sender,RoutedEventArgs e)
+    {
+        var candidate=EdgeFeatureCandidate();
+        if(candidate is null||_partSession is null){EdgeFeatureError.Text="Kenar ve geçerli değer gerekiyor.";return;}
+        if(!_partSession.TryCommit(candidate)){EdgeFeatureError.Text=GraphError();return;}
+        var id=_graphFeatureEdit!.Id;
+        EndGraphFeature();
+        RefreshPartTree(id);
+        Status("3B detay özelliği onaylandı; bağımlı model yeniden oluşturuldu.");
+    }
+
+    private void EdgeFeatureCancel_Click(object sender,RoutedEventArgs e)=>EndGraphFeature();
+
     private void BeginGraphExtrude()
     {
         if(_inSketch||_extrudeCommandActive||_partSession is null||SelectedGraphId is not Guid id||_partSession.Document.Node(id).Kind!=FeatureKind.Sketch)return;
@@ -214,6 +347,7 @@ public partial class MainWindow
     }
     private void BeginGraphFeature(FeatureNode node)
     {
+        if(node.Parameters is FilletFeatureParameters or ChamferFeatureParameters){BeginEdgeFeature(node);return;}
         _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;_depthWheel.Reset();
         var cut=node.Parameters as CutFeatureParameters;
         var depth=cut?.Depth??Math.Abs(((ExtrudeFeatureParameters)node.Parameters).Depth);
@@ -256,8 +390,11 @@ public partial class MainWindow
     private void GraphFeatureCancel_Click(object sender,RoutedEventArgs e)=>EndGraphFeature();
     private void EndGraphFeature()
     {
-        _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();_graphFeatureEdit=null;_extrudeCommandActive=false;
-        GraphFeaturePanel.Visibility=Visibility.Collapsed;ManagerTabs.SelectedItem=FeatureManagerTab;RefreshCommandState();
+        _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.0);
+        _graphFeatureEdit=null;_extrudeCommandActive=false;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;
+        _viewer.ClearSelection();_viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Face);
+        ManagerTabs.SelectedItem=FeatureManagerTab;RefreshCommandState();
     }
     private bool TryOpenGraphFile(string path)
     {
@@ -274,5 +411,6 @@ public partial class MainWindow
         _partSession=null;_graphSketchEdit=null;_graphFeatureEdit=null;
         foreach(var node in _partNodes)PartNode.Items.Remove(node);_partNodes.Clear();
         GraphFeaturePanel.Visibility=Visibility.Collapsed;
+        EdgeFeaturePanel.Visibility=Visibility.Collapsed;
     }
 }
