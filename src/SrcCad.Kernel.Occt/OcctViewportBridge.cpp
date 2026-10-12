@@ -1296,6 +1296,52 @@ namespace SrcCad::Kernel::Occt
         catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
     }
 
+    String^ OcctFeatureKernel::LinearPattern(String^ baseBody,array<double>^ direction,double spacing,int count)
+    {
+        if(direction==nullptr||direction->Length!=3||!std::isfinite(spacing)||spacing<=1e-9||count<2||count>500)
+            throw gcnew ArgumentException("Invalid linear pattern parameters.");
+        for each(double value in direction)if(!std::isfinite(value))throw gcnew ArgumentException("Invalid pattern direction.");
+        try
+        {
+            TopoDS_Shape seed=decodeFeature(baseBody),result=seed;
+            gp_Dir dir(direction[0],direction[1],direction[2]);
+            for(int i=1;i<count;++i)
+            {
+                gp_Trsf trsf;trsf.SetTranslation(gp_Vec(dir).Multiplied(spacing*i));
+                TopoDS_Shape copy=BRepBuilderAPI_Transform(seed,trsf,true).Shape();
+                BRepAlgoAPI_Fuse fuse(result,copy);fuse.Build();
+                if(!fuse.IsDone())throw gcnew InvalidOperationException("OCCT linear pattern fuse failed.");
+                result=fuse.Shape();
+            }
+            return encodeFeature(result);
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
+    String^ OcctFeatureKernel::CircularPattern(String^ baseBody,array<double>^ axis,double angleDegrees,int count)
+    {
+        if(axis==nullptr||axis->Length!=6||!std::isfinite(angleDegrees)||angleDegrees<=1e-9||angleDegrees>360.0||count<2||count>500)
+            throw gcnew ArgumentException("Invalid circular pattern parameters.");
+        for each(double value in axis)if(!std::isfinite(value))throw gcnew ArgumentException("Invalid pattern axis.");
+        try
+        {
+            TopoDS_Shape seed=decodeFeature(baseBody),result=seed;
+            gp_Pnt origin(axis[0],axis[1],axis[2]);gp_Dir direction(axis[3],axis[4],axis[5]);
+            const double total=angleDegrees*3.14159265358979323846/180.0;
+            const double step=std::abs(angleDegrees-360.0)<1e-9?total/count:total/(count-1);
+            for(int i=1;i<count;++i)
+            {
+                gp_Trsf trsf;trsf.SetRotation(gp_Ax1(origin,direction),step*i);
+                TopoDS_Shape copy=BRepBuilderAPI_Transform(seed,trsf,true).Shape();
+                BRepAlgoAPI_Fuse fuse(result,copy);fuse.Build();
+                if(!fuse.IsDone())throw gcnew InvalidOperationException("OCCT circular pattern fuse failed.");
+                result=fuse.Shape();
+            }
+            return encodeFeature(result);
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
     array<String^>^ OcctFeatureKernel::EdgeReferences(String^ body)
     {
         try

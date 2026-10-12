@@ -100,6 +100,26 @@ internal static class NativeFeatureGraphTests
             Check(mirrorPreview.Success&&OcctFeatureKernel.Inspect(mirrorPreview.Outputs[mirrorNode.Id].BRep!)[1]==2,
                 "mirror feature graph preview rebuilds multi-solid B-Rep");
 
+            var linearBody=OcctFeatureKernel.LinearPattern(bossBody,new[]{1.0,0.0,0.0},60,4);
+            var linearInspect=OcctFeatureKernel.Inspect(linearBody);
+            Check(Math.Abs(linearInspect[0]-96000)<1e-3&&linearInspect[1]==4,
+                "native linear pattern creates four spaced body instances");
+            var linearNode=new FeatureNode(Guid.NewGuid(),"Doğrusal Dizilim1",
+                new LinearPatternFeatureParameters(boss.Id,Vector3d.UnitX,60,4));
+            var linearDoc=doc with{Features=doc.Features.Append(linearNode).ToArray()};
+            var linearPreview=session.Preview(linearDoc);
+            Check(linearPreview.Success&&OcctFeatureKernel.Inspect(linearPreview.Outputs[linearNode.Id].BRep!)[1]==4,
+                "linear pattern rebuilds through feature graph");
+
+            var circularNode=new FeatureNode(Guid.NewGuid(),"Dairesel Dizilim1",
+                new CircularPatternFeatureParameters(boss.Id,new Vector3d(100,100,0),Vector3d.UnitZ,360,4));
+            var circularDoc=doc with{Features=doc.Features.Append(circularNode).ToArray()};
+            var circularPreview=session.Preview(circularDoc);
+            Check(circularPreview.Success,"circular pattern preview succeeds through feature graph");
+            var circularInspect=OcctFeatureKernel.Inspect(circularPreview.Outputs[circularNode.Id].BRep!);
+            Check(Math.Abs(circularInspect[0]-96000)<1e-2&&circularInspect[1]==4,
+                "native circular pattern creates four rotated body instances");
+
             var revolveSketch=new SketchModel(plane);
             var ra=revolveSketch.CreatePointExact(new(0,-10));
             var rb=revolveSketch.CreatePointExact(new(0,30));
