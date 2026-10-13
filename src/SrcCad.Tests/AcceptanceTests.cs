@@ -1,5 +1,7 @@
 using SrcCad.Core.Geometry;
 using SrcCad.Core.Sketch;
+using SrcCad.Core.Persistence;
+using SrcCad.Core.History;
 using SrcCad.Commands;
 
 internal static class AcceptanceTests
