@@ -30,6 +30,7 @@ public interface IPartGeometryKernel
     string Jog(string baseBody,IReadOnlyList<string> edgeReferences,double height,double offset,double thickness,bool reverse);
     string Rip(string baseBody,IReadOnlyList<string> edgeReferences,double gap);
     string CornerRelief(string baseBody,IReadOnlyList<string> edgeReferences,double radius);
+    string TrimToPlane(string baseBody,PlaneFrame plane,bool keepPositive);
     string EndCap(string baseBody,string faceReference,double thickness,bool reverse);
     string WeldBead(string baseBody,IReadOnlyList<string> edgeReferences,double radius);
 }
@@ -107,6 +108,7 @@ public sealed class PartFeatureEvaluator(IPartGeometryKernel kernel) : IFeatureE
             StructuralMemberFeatureParameters s => new(null,IsSpatial(s.PathSketchId)
                 ?kernel.SweepSpatial(null,Sketch(s.ProfileSketchId),SpatialPath(s.PathSketchId))
                 :kernel.Sweep(null,Sketch(s.ProfileSketchId),Sketch(s.PathSketchId))),
+            StructuralTrimFeatureParameters s => new(null,kernel.TrimToPlane(Base(s.BaseFeatureId),s.Plane,s.KeepPositive)),
             EndCapFeatureParameters e => new(null,kernel.EndCap(Base(e.BaseFeatureId),
                 (node.References??Array.Empty<FeatureReference>()).Single(r=>r.Kind==TopologyKind.Face&&r.ProducerId==e.BaseFeatureId).SemanticName,
                 e.Thickness,e.Reverse)),
