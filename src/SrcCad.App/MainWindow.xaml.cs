@@ -275,6 +275,15 @@ public partial class MainWindow : Window
         if (key == Key.Escape)
         {
             if(_boxStart is not null){FinishWindowSelection(0,0,true);return true;}
+            if(!_inSketch&&_inspectMeasureMode)
+            {
+                _inspectMeasureMode=false;
+                MeasureStatusText.Text="";
+                _viewer.ClearSelection();
+                _viewer.SetSelectionMode(CadSelectionMode.Face);
+                Status("Ölç kapatıldı • yüz seçimi aktif.");
+                return true;
+            }
             if (_extrudeCommandActive)
             {
                 CancelExtrude();
