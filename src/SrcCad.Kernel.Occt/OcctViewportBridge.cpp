@@ -209,7 +209,8 @@ namespace SrcCad::Kernel::Occt
                 const double score=lengthScore+centerScore;
                 if(score<bestScore){bestScore=score;bestIndex=i;}
             }
-            if(bestIndex==0)throw gcnew InvalidOperationException("Referenced edge can no longer be resolved.");
+            if(bestIndex==0||!std::isfinite(bestScore)||bestScore>3.5)
+                throw gcnew InvalidOperationException("Referenced edge changed too much and can no longer be resolved safely.");
             used.insert(bestIndex);
             resolved.push_back(TopoDS::Edge(edgeMap(bestIndex)));
         }
@@ -366,7 +367,8 @@ namespace SrcCad::Kernel::Occt
             const double score=areaScore+centerScore+normalScore+radiusScore;
             if(score<bestScore){bestScore=score;bestIndex=i;}
         }
-        if(bestIndex==0)throw gcnew InvalidOperationException("Referenced face can no longer be resolved.");
+        if(bestIndex==0||!std::isfinite(bestScore)||bestScore>4.5)
+            throw gcnew InvalidOperationException("Referenced face changed too much and can no longer be resolved safely.");
         return TopoDS::Face(faces(bestIndex));
     }
 
