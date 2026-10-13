@@ -640,6 +640,59 @@ public partial class MainWindow
             ((SketchFeatureParameters)n.Parameters).Sketch.Entities.OfType<SketchLine>().Any(l=>!l.Construction)).ToArray()
             ??Array.Empty<FeatureNode>();
 
+    private static double PolygonArea(IReadOnlyList<Point2d> points)
+    {
+        double area=0;
+        for(var i=0;i<points.Count;i++)
+        {
+            var a=points[i];var b=points[(i+1)%points.Count];
+            area+=a.X*b.Y-b.X*a.Y;
+        }
+        return Math.Abs(area)*0.5;
+    }
+
+    private static double StructuralProfileArea(SketchModel profile)
+    {
+        if(profile.TryGetSingleCircle(out var circle))return Math.PI*circle.Radius*circle.Radius;
+        if(!profile.TryGetExtrusionProfile(out var outer,out var polygonHoles,out var circleHoles))return 0;
+        var area=PolygonArea(outer)-polygonHoles.Sum(PolygonArea);
+        foreach(var hole in circleHoles)area-=Math.PI*hole.Radius*hole.Radius;
+        return Math.Max(0,area);
+    }
+
+    private static double StructuralPathLength(SketchModel path)
+        => path.Entities.OfType<SketchLine>().Where(l=>!l.Construction)
+            .Sum(l=>Point2d.Distance(path.Point(l.StartPointId).Position,path.Point(l.EndPointId).Position));
+
+    private void StructuralCutList_Click(object sender,RoutedEventArgs e)
+    {
+        if(_partSession is null){Status("Kesim listesi için yapısal eleman içeren parça gerekiyor.");return;}
+        var members=_partSession.Document.Features.Where(f=>f.Kind==FeatureKind.StructuralMember).ToArray();
+        PropertyTitle.Text="Kesim Listesi";
+        if(members.Length==0)
+        {
+            PropertyInfo.Text="Yapısal Eleman feature'ı bulunamadı.";
+            ManagerTabs.SelectedItem=PropertyManagerTab;return;
+        }
+
+        var rows=new List<string>();
+        var index=1;
+        foreach(var member in members)
+        {
+            var p=(StructuralMemberFeatureParameters)member.Parameters;
+            var profile=GraphSketchModel(_partSession.Document.Node(p.ProfileSketchId));
+            var path=GraphSketchModel(_partSession.Document.Node(p.PathSketchId));
+            var length=StructuralPathLength(path);
+            var area=StructuralProfileArea(profile);
+            var volume=_partSession.Output(member.Id)?.BRep is string body
+                ?SrcCad.Kernel.Occt.OcctFeatureKernel.Inspect(body)[0]:0;
+            rows.Add($"{index++}. {member.Name}\n   Boy: {length:0.###} mm • Kesit Alanı: {area:0.###} mm² • Hacim: {volume:0.###} mm³");
+        }
+        PropertyInfo.Text=string.Join("\n\n",rows);
+        ManagerTabs.SelectedItem=PropertyManagerTab;
+        Status($"{members.Length} yapısal eleman için gerçek kesim listesi hesaplandı.");
+    }
+
     private void SweepBoss_Click(object sender,RoutedEventArgs e)=>StartSweepLoft(false,false);
     private void SweepCut_Click(object sender,RoutedEventArgs e)=>StartSweepLoft(false,true);
     private void StructuralMember_Click(object sender,RoutedEventArgs e)
