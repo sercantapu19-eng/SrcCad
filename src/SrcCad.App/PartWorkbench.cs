@@ -1073,9 +1073,23 @@ public partial class MainWindow
         return Math.Max(0,area);
     }
 
-    private static double StructuralPathLength(SketchModel path)
-        => path.Entities.OfType<SketchLine>().Where(l=>!l.Construction)
-            .Sum(l=>Point2d.Distance(path.Point(l.StartPointId).Position,path.Point(l.EndPointId).Position));
+    private static double StructuralPathLength(FeatureNode pathNode)
+    {
+        return pathNode.Parameters switch
+        {
+            SketchFeatureParameters s=>StructuralSketchPathLength(s),
+            SpatialSketchFeatureParameters s=>s.Points.Zip(s.Points.Skip(1),(a,b)=>(b-a).Length).Sum()+
+                (s.Closed&&s.Points.Length>2?(s.Points[0]-s.Points[^1]).Length:0),
+            _=>throw new InvalidOperationException("Yapısal yol Sketch veya 3B Çizim olmalı.")
+        };
+
+        static double StructuralSketchPathLength(SketchFeatureParameters parameters)
+        {
+            var path=new SketchModel(parameters.Plane);path.RestoreSnapshot(parameters.Sketch);
+            return path.Entities.OfType<SketchLine>().Where(l=>!l.Construction)
+                .Sum(l=>Point2d.Distance(path.Point(l.StartPointId).Position,path.Point(l.EndPointId).Position));
+        }
+    }
 
     private void ProfileLibrary_Click(object sender,RoutedEventArgs e)
     {
@@ -1154,8 +1168,8 @@ public partial class MainWindow
         {
             var p=(StructuralMemberFeatureParameters)member.Parameters;
             var profile=GraphSketchModel(_partSession.Document.Node(p.ProfileSketchId));
-            var path=GraphSketchModel(_partSession.Document.Node(p.PathSketchId));
-            var length=StructuralPathLength(path);
+            var pathNode=_partSession.Document.Node(p.PathSketchId);
+            var length=StructuralPathLength(pathNode);
             var area=StructuralProfileArea(profile);
             var volume=_partSession.Output(member.Id)?.BRep is string body
                 ?SrcCad.Kernel.Occt.OcctFeatureKernel.Inspect(body)[0]:0;
