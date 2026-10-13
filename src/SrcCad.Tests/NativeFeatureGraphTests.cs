@@ -71,9 +71,34 @@ internal static class NativeFeatureGraphTests
             Check(farCommon<1e-8,"assembly interference returns zero for separated components");
             var projected=OcctFeatureKernel.ProjectEdges(bossBody,new[]{0.0,-1.0,0.0},new[]{0.0,0.0,1.0});
             Check(projected.Length>=16&&projected.Length%4==0,"technical drawing projection returns line segments");
+            var bounds=OcctFeatureKernel.Bounds(bossBody);
+            Check(bounds.Length==6&&bounds[3]>bounds[0]&&bounds[4]>bounds[1]&&bounds[5]>bounds[2],"technical drawing kernel exposes model bounds");
+            var section=OcctFeatureKernel.SectionEdges(bossBody,
+                new[]{(bounds[0]+bounds[3])*0.5,(bounds[1]+bounds[4])*0.5,(bounds[2]+bounds[5])*0.5},
+                new[]{1.0,0.0,0.0},new[]{0.0,-1.0,0.0},new[]{0.0,0.0,1.0});
+            Check(section.Length>=4&&section.Length%4==0,"technical drawing section kernel returns intersection segments");
 
             var bossEdges=OcctFeatureKernel.EdgeReferences(bossBody);
             Check(bossEdges.Length>=4,"extruded body exposes semantic edge references");
+
+            string? weldEdge=null;string? weldedBody=null;
+            foreach(var edgeRef in bossEdges)
+            {
+                try
+                {
+                    var candidate=OcctFeatureKernel.WeldBead(bossBody,new[]{edgeRef},0.75);
+                    var info=OcctFeatureKernel.Inspect(candidate);
+                    if(info[0]>24000&&info[1]>=1){weldEdge=edgeRef;weldedBody=candidate;break;}
+                }
+                catch(InvalidOperationException){}
+            }
+            Check(weldEdge is not null&&weldedBody is not null,"native weld bead sweeps and fuses real material on a selected edge");
+            var weldNode=new FeatureNode(Guid.NewGuid(),"Kaynak Dikişi1",new WeldBeadFeatureParameters(boss.Id,0.75),
+                References:new[]{new FeatureReference(boss.Id,TopologyKind.Edge,weldEdge!)});
+            var weldDoc=doc with{Features=doc.Features.Append(weldNode).ToArray()};
+            var weldPreview=session.Preview(weldDoc);
+            Check(weldPreview.Success&&OcctFeatureKernel.Inspect(weldPreview.Outputs[weldNode.Id].BRep!)[0]>24000,
+                "weld bead rebuilds through feature graph");
             var filletNode=new FeatureNode(Guid.NewGuid(),"Radyus1",new FilletFeatureParameters(boss.Id,2),
                 References:new[]{new FeatureReference(boss.Id,TopologyKind.Edge,bossEdges[0])});
             var filletDoc=doc with{Features=doc.Features.Append(filletNode).ToArray()};
@@ -93,6 +118,24 @@ internal static class NativeFeatureGraphTests
 
             var faceRefs=OcctFeatureKernel.FaceReferences(bossBody);
             Check(faceRefs.Length>=6,"extruded body exposes persistent planar face references");
+            string? endFace=null;string? cappedBody=null;
+            foreach(var faceRef in faceRefs)
+            {
+                try
+                {
+                    var candidate=OcctFeatureKernel.EndCap(bossBody,faceRef,2,false);
+                    var info=OcctFeatureKernel.Inspect(candidate);
+                    if(info[0]>24000){endFace=faceRef;cappedBody=candidate;break;}
+                }
+                catch(InvalidOperationException){}
+            }
+            Check(endFace is not null&&cappedBody is not null,"native end cap resolves a planar face and adds material");
+            var endCapNode=new FeatureNode(Guid.NewGuid(),"Uç Kapağı1",new EndCapFeatureParameters(boss.Id,2),
+                References:new[]{new FeatureReference(boss.Id,TopologyKind.Face,endFace!)});
+            var endCapDoc=doc with{Features=doc.Features.Append(endCapNode).ToArray()};
+            var endCapPreview=session.Preview(endCapDoc);
+            Check(endCapPreview.Success&&OcctFeatureKernel.Inspect(endCapPreview.Outputs[endCapNode.Id].BRep!)[0]>24000,
+                "end cap rebuilds through feature graph");
             var topCenter=plane.Origin+plane.U*20+plane.V*15+plane.Normal*20;
             string? workingFace=null;
             foreach(var faceRef in faceRefs)
