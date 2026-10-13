@@ -2733,7 +2733,7 @@ public partial class MainWindow
     private (double Thickness,double BendRadius,double KFactor)? SheetMetalDefaults()
     {
         if(_partSession is null)return null;
-        foreach(var feature in _partSession.Document.Features.Reverse())
+        foreach(var feature in _partSession.Document.Features.AsEnumerable().Reverse())
             switch(feature.Parameters)
             {
                 case SheetMetalBaseFeatureParameters b:return (b.Thickness,b.BendRadius,b.KFactor);
