@@ -1,5 +1,6 @@
 param(
-    [ValidateSet('Debug','Release','All')][string]$Configuration = 'All'
+    [ValidateSet('Debug','Release','All')][string]$Configuration = 'All',
+    [switch]$RunInteraction
 )
 
 $ErrorActionPreference = 'Stop'
@@ -102,6 +103,24 @@ try {
         finally { Pop-Location }
 
         Log "$config: BUILD + MANAGED + NATIVE PASS"
+    }
+
+    if ($RunInteraction) {
+        $acceptance = Join-Path $PSScriptRoot 'Run-SolidAcceptance.ps1'
+        Require-Path $acceptance 'Windows interaction acceptance script missing'
+        $occtRoot = Split-Path $occtRuntime -Parent
+        Log '=== Release Windows UI interaction acceptance ==='
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $acceptance -OcctRoot $occtRoot -Configuration Release -RunInteraction 2>&1 |
+            Tee-Object -FilePath $masterLog -Append
+        if ($LASTEXITCODE -ne 0) { throw "Windows UI interaction acceptance failed. ExitCode=$LASTEXITCODE" }
+
+        $uiReport = Join-Path $logs 'windows-interaction.json'
+        Require-Path $uiReport 'Windows interaction report missing'
+        $report = Get-Content -LiteralPath $uiReport -Raw | ConvertFrom-Json
+        if (!$report.Completed -or $report.Failed -ne 0) {
+            throw 'Windows interaction regression did not complete cleanly.'
+        }
+        Log ("Windows interaction PASS: " + $report.Passed)
     }
 
     Log 'VERIFY ALL PASS'
