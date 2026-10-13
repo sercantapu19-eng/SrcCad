@@ -1073,6 +1073,22 @@ public partial class MainWindow
     }
     private void LoftBoss_Click(object sender,RoutedEventArgs e)=>StartSweepLoft(true,false);
     private void LoftCut_Click(object sender,RoutedEventArgs e)=>StartSweepLoft(true,true);
+    private void BoundaryBoss_Click(object sender,RoutedEventArgs e)=>StartBoundary(false);
+    private void BoundaryCut_Click(object sender,RoutedEventArgs e)=>StartBoundary(true);
+
+    private void StartBoundary(bool cut)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession()||_partSession is null)return;
+        var baseNode=CurrentSolidFeature();
+        if(cut&&baseNode is null){Status("Sınır Kes için mevcut katı gerekiyor.");return;}
+        var profiles=ClosedProfileSketches();
+        if(profiles.Length<2){Status("Sınır özelliği için en az iki kapalı profil çizimi gerekiyor.");return;}
+        var ids=profiles.TakeLast(2).Select(n=>n.Id).ToArray();
+        FeatureNode node=cut
+            ?new(Guid.NewGuid(),NextGraphName("Sınır Kes"),new BoundaryCutFeatureParameters(baseNode!.Id,ids))
+            :new(Guid.NewGuid(),NextGraphName("Sınır"),new BoundaryFeatureParameters(ids,baseNode?.Id));
+        BeginMultiSketchFeature(node);
+    }
 
     private void StartSweepLoft(bool loft,bool cut)
     {
@@ -1116,6 +1132,8 @@ public partial class MainWindow
             case SweepCutFeatureParameters s:p1=s.ProfileSketchId;path=s.PathSketchId;break;
             case LoftFeatureParameters l:p1=l.ProfileSketchIds.ElementAtOrDefault(0);p2=l.ProfileSketchIds.ElementAtOrDefault(1);break;
             case LoftCutFeatureParameters l:p1=l.ProfileSketchIds.ElementAtOrDefault(0);p2=l.ProfileSketchIds.ElementAtOrDefault(1);break;
+            case BoundaryFeatureParameters b:p1=b.ProfileSketchIds.ElementAtOrDefault(0);p2=b.ProfileSketchIds.ElementAtOrDefault(1);break;
+            case BoundaryCutFeatureParameters b:p1=b.ProfileSketchIds.ElementAtOrDefault(0);p2=b.ProfileSketchIds.ElementAtOrDefault(1);break;
             case StructuralMemberFeatureParameters s:p1=s.ProfileSketchId;path=s.PathSketchId;break;
             default:throw new InvalidOperationException("Unsupported sweep/loft/structural feature.");
         }
@@ -1123,9 +1141,10 @@ public partial class MainWindow
         {
             FeatureKind.Sweep=>"Süpürme",FeatureKind.SweptCut=>"Süpürerek Kes",
             FeatureKind.Loft=>"Loft",FeatureKind.LoftedCut=>"Loft Kes",
+            FeatureKind.Boundary=>"Sınır",FeatureKind.BoundaryCut=>"Sınır Kes",
             FeatureKind.StructuralMember=>"Yapısal Eleman",_=>"Süpürme / Loft"
         };
-        MultiProfile2Panel.Visibility=node.Parameters is LoftFeatureParameters or LoftCutFeatureParameters?Visibility.Visible:Visibility.Collapsed;
+        MultiProfile2Panel.Visibility=node.Parameters is LoftFeatureParameters or LoftCutFeatureParameters or BoundaryFeatureParameters or BoundaryCutFeatureParameters?Visibility.Visible:Visibility.Collapsed;
         MultiPathPanel.Visibility=node.Parameters is SweepFeatureParameters or SweepCutFeatureParameters or StructuralMemberFeatureParameters?Visibility.Visible:Visibility.Collapsed;
         FillSketchCombo(MultiProfile1,profiles,p1);
         FillSketchCombo(MultiProfile2,profiles,p2);
@@ -1162,6 +1181,10 @@ public partial class MainWindow
                 =>l with{ProfileSketchIds=new[]{first.Value,second}},
             LoftCutFeatureParameters l when ComboFeatureId(MultiProfile2) is Guid second&&second!=first
                 =>l with{ProfileSketchIds=new[]{first.Value,second}},
+            BoundaryFeatureParameters b when ComboFeatureId(MultiProfile2) is Guid second&&second!=first
+                =>b with{ProfileSketchIds=new[]{first.Value,second}},
+            BoundaryCutFeatureParameters b when ComboFeatureId(MultiProfile2) is Guid second&&second!=first
+                =>b with{ProfileSketchIds=new[]{first.Value,second}},
             StructuralMemberFeatureParameters member when ComboFeatureId(MultiPath) is Guid memberPath&&memberPath!=first
                 =>member with{ProfileSketchId=first.Value,PathSketchId=memberPath},
             _=>null
@@ -2393,7 +2416,8 @@ public partial class MainWindow
             SheetMetalHemFeatureParameters or SheetMetalRipFeatureParameters or SheetMetalCornerReliefFeatureParameters){BeginEdgeFeature(node);return;}
         if(node.Parameters is HoleFeatureParameters){BeginHoleFeature(node);return;}
         if(node.Parameters is RevolveFeatureParameters or RevolveCutFeatureParameters){BeginRevolveFeature(node);return;}
-        if(node.Parameters is SweepFeatureParameters or SweepCutFeatureParameters or LoftFeatureParameters or LoftCutFeatureParameters or StructuralMemberFeatureParameters){BeginMultiSketchFeature(node);return;}
+        if(node.Parameters is SweepFeatureParameters or SweepCutFeatureParameters or LoftFeatureParameters or LoftCutFeatureParameters or
+            BoundaryFeatureParameters or BoundaryCutFeatureParameters or StructuralMemberFeatureParameters){BeginMultiSketchFeature(node);return;}
         if(node.Parameters is StructuralTrimFeatureParameters){BeginStructuralTrimFeature(node);return;}
         if(node.Parameters is EndCapFeatureParameters){BeginEndCapFeature(node);return;}
         if(node.Parameters is ShellFeatureParameters){BeginShellFeature(node);return;}
