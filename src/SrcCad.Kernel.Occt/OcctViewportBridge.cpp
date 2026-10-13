@@ -1690,6 +1690,35 @@ namespace SrcCad::Kernel::Occt
         catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
     }
 
+    String^ OcctFeatureKernel::EndCap(String^ baseBody,String^ faceReference,double thickness,bool reverse)
+    {
+        if(!std::isfinite(thickness)||thickness<=1e-9)throw gcnew ArgumentException("End cap thickness must be positive.");
+        try
+        {
+            TopoDS_Shape baseShape=decodeFeature(baseBody);
+            const double before=featureVolume(baseShape);
+            TopoDS_Face support=resolveFaceReference(baseShape,faceReference);
+            gp_Pnt origin;gp_Dir u,v,normal;
+            if(!planarFaceFrame(support,origin,u,v,normal))
+                throw gcnew InvalidOperationException("End cap requires a planar face.");
+            gp_Vec direction(normal.X(),normal.Y(),normal.Z());
+            if(reverse)direction.Reverse();
+            const double overlap=std::max(1e-5,std::min(thickness*0.02,0.05));
+            gp_Trsf shift;shift.SetTranslation(direction.Multiplied(-overlap));
+            TopoDS_Shape shifted=BRepBuilderAPI_Transform(support,shift,true).Shape();
+            BRepPrimAPI_MakePrism prism(shifted,direction.Multiplied(thickness+overlap),true,true);
+            TopoDS_Shape cap=prism.Shape();featureVolume(cap);
+            BRepAlgoAPI_Fuse fuse(baseShape,cap);fuse.Build();
+            if(!fuse.IsDone())throw gcnew InvalidOperationException("OCCT end cap fuse failed.");
+            TopoDS_Shape result=fuse.Shape();
+            const double after=featureVolume(result);
+            if(after-before<=std::max(1e-8,before*1e-10))
+                throw gcnew InvalidOperationException("End cap adds no material; reverse the direction or select an outer end face.");
+            return encodeFeature(result);
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
     static TopoDS_Shape transformedFeatureBody(String^ body,array<double>^ transform6)
     {
         if(transform6==nullptr||transform6->Length!=6)throw gcnew ArgumentException("Transform requires X/Y/Z and Rx/Ry/Rz.");
