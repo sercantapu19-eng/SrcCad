@@ -161,7 +161,7 @@
             </TabItem>
             <TabItem Header="PROFİLLER">
                 <WrapPanel Margin="8">
-                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadSketchIcon}" Content="3B Çizim" Click="CadCommandPlaceholder_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadSketchIcon}" Content="3B Çizim" Click="SpatialSketch_Click" ToolTip="Dünya koordinatlarında parametrik 3B yol noktaları oluşturur; Sweep ve Yapısal Eleman yolunda kullanılabilir."/>
                     <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadExtrudeIcon}" Content="Yapısal Eleman" Click="StructuralMember_Click" ToolTip="Kapalı profil çizimini yol çizimi boyunca gerçek OCCT katısı olarak oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadTrimIcon}" Content="Kırp / Uzat" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Köşebent" Click="Gusset_Click" ToolTip="Açık çizimden gerçek OCCT nervür/gusset katısı oluşturur."/>
@@ -317,6 +317,28 @@
                                 <StackPanel Orientation="Horizontal">
                                     <Button Content="✓" Width="52" Height="34" Click="AssemblyPatternOk_Click"/>
                                     <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="AssemblyPatternCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="SpatialSketchPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="3B Çizim / Yol" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <TextBlock Text="Yeni Nokta X / Y / Z (mm)"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,8">
+                                    <TextBox x:Name="SpatialPointX" Width="70" Text="0"/>
+                                    <TextBox x:Name="SpatialPointY" Width="70" Margin="4,0,0,0" Text="0"/>
+                                    <TextBox x:Name="SpatialPointZ" Width="70" Margin="4,0,0,0" Text="0"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                    <Button Content="Nokta Ekle" Click="SpatialPointAdd_Click" Padding="8,4"/>
+                                    <Button Content="Son Noktayı Sil" Click="SpatialPointRemove_Click" Padding="8,4" Margin="6,0,0,0"/>
+                                </StackPanel>
+                                <CheckBox x:Name="SpatialClosed" Content="Yolu Kapat" Margin="0,0,0,8" Checked="SpatialSketchChanged" Unchecked="SpatialSketchChanged"/>
+                                <TextBlock Text="Noktalar" FontWeight="Bold"/>
+                                <TextBlock x:Name="SpatialPointList" Text="Henüz nokta yok." TextWrapping="Wrap" Margin="0,4,0,8"/>
+                                <TextBlock x:Name="SpatialSketchError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="SpatialSketchOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="SpatialSketchCancel_Click"/>
                                 </StackPanel>
                             </StackPanel>
 
