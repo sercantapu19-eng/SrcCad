@@ -62,6 +62,34 @@ internal static class NativeFeatureGraphTests
                 "sheet metal edge flange rebuilds through feature graph");
 
             var bossBody=session.Output(boss.Id)!.BRep!;
+
+            var midNode=new FeatureNode(Guid.NewGuid(),"Orta Düzlem1",
+                new ExtrudeFeatureParameters(doc.Features[0].Id,40,MidPlane:true));
+            var midDoc=new FeatureDocument(Guid.NewGuid(),new[]{doc.Features[0],midNode});
+            var midSession=new FeatureSession<PartFeatureOutput>(midDoc,evaluator);
+            var midBody=midSession.Output(midNode.Id)!.BRep!;
+            var midInfo=OcctFeatureKernel.Inspect(midBody);
+            var midBounds=OcctFeatureKernel.Bounds(midBody);
+            Check(Math.Abs(midInfo[0]-48000)<1e-3&&midInfo[1]==1,
+                "mid-plane extrusion fuses two half-depth prisms into one solid");
+            double NormalMin(double[] bounds,Vector3d normal)
+                => Math.Abs(normal.X)>0.5?bounds[0]:Math.Abs(normal.Y)>0.5?bounds[1]:bounds[2];
+            double NormalMax(double[] bounds,Vector3d normal)
+                => Math.Abs(normal.X)>0.5?bounds[3]:Math.Abs(normal.Y)>0.5?bounds[4]:bounds[5];
+            Check(Math.Abs(NormalMin(midBounds,plane.Normal)+20)<1e-5&&Math.Abs(NormalMax(midBounds,plane.Normal)-20)<1e-5,
+                "mid-plane extrusion is centered on sketch plane");
+
+            var twoNode=new FeatureNode(Guid.NewGuid(),"İki Yön1",
+                new ExtrudeFeatureParameters(doc.Features[0].Id,25,Direction2Depth:15));
+            var twoDoc=new FeatureDocument(Guid.NewGuid(),new[]{doc.Features[0],twoNode});
+            var twoSession=new FeatureSession<PartFeatureOutput>(twoDoc,evaluator);
+            var twoBody=twoSession.Output(twoNode.Id)!.BRep!;
+            var twoInfo=OcctFeatureKernel.Inspect(twoBody);var twoBounds=OcctFeatureKernel.Bounds(twoBody);
+            Check(Math.Abs(twoInfo[0]-48000)<1e-3&&twoInfo[1]==1,
+                "two-direction extrusion fuses independent direction depths");
+            Check(Math.Abs(NormalMin(twoBounds,plane.Normal)+15)<1e-5&&Math.Abs(NormalMax(twoBounds,plane.Normal)-25)<1e-5,
+                "two-direction extrusion honors first and second direction depths");
+
             var stepPath=Path.Combine(Path.GetTempPath(),Guid.NewGuid().ToString("N")+".step");
             var igesPath=Path.Combine(Path.GetTempPath(),Guid.NewGuid().ToString("N")+".iges");
             try
