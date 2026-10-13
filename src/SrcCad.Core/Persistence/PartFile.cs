@@ -71,9 +71,9 @@ public sealed record PartFile(int SchemaVersion, string Units, ExtrusionState Mo
                         throw new InvalidDataException("Geçersiz yay geometrisi.");
                     break;
                 }
-                case SketchEllipse e when s.Points.ContainsKey(e.CenterPointId)&&
-                    double.IsFinite(e.RadiusX)&&double.IsFinite(e.RadiusY)&&double.IsFinite(e.RotationRadians)&&
-                    e.RadiusX>1e-9&&e.RadiusY>1e-9:break;
+                case SketchEllipse ellipse when s.Points.ContainsKey(ellipse.CenterPointId)&&
+                    double.IsFinite(ellipse.RadiusX)&&double.IsFinite(ellipse.RadiusY)&&double.IsFinite(ellipse.RotationRadians)&&
+                    ellipse.RadiusX>1e-9&&ellipse.RadiusY>1e-9:break;
                 default:throw new InvalidDataException("Geçersiz geometri veya nokta referansı.");
             }
         var model=new SketchModel(frame);model.RestoreSnapshot(s);
