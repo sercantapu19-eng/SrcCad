@@ -1717,8 +1717,10 @@ namespace SrcCad::Kernel::Occt
                 if(!circleEdge.IsDone())throw gcnew InvalidOperationException("Weld profile edge failed.");
                 BRepBuilderAPI_MakeWire profile(circleEdge.Edge());
                 if(!profile.IsDone())throw gcnew InvalidOperationException("Weld profile wire failed.");
+                BRepBuilderAPI_MakeFace profileFace(profile.Wire(),true);
+                if(!profileFace.IsDone())throw gcnew InvalidOperationException("Weld profile face failed.");
 
-                BRepOffsetAPI_MakePipe pipe(spine.Wire(),profile.Wire());
+                BRepOffsetAPI_MakePipe pipe(spine.Wire(),profileFace.Face());
                 TopoDS_Shape bead=pipe.Shape();
                 if(bead.IsNull()||!BRepCheck_Analyzer(bead).IsValid())
                     throw gcnew InvalidOperationException("Weld bead pipe failed.");
