@@ -658,6 +658,68 @@ namespace SrcCad::Kernel::Occt
         return values->ToArray();
     }
 
+    String^ OcctViewportBridge::SelectedAssemblyComponentId()
+    {
+        if(!IsInitialized()||myState->Context->NbSelected()!=1)return nullptr;
+        try
+        {
+            myState->Context->InitSelected();
+            if(!myState->Context->MoreSelected())return nullptr;
+            Handle(AIS_InteractiveObject) selected=myState->Context->SelectedInteractive();
+            if(selected.IsNull())return nullptr;
+            for(size_t i=0;i<myState->AssemblyObjects.size()&&i<myState->AssemblyIds.size();++i)
+            {
+                Handle(AIS_InteractiveObject) candidate=myState->AssemblyObjects[i];
+                if(selected==candidate&&!myState->AssemblyIds[i].empty())
+                    return gcnew String(myState->AssemblyIds[i].c_str());
+            }
+            return nullptr;
+        }
+        catch(const Standard_Failure&){return nullptr;}
+    }
+
+    String^ OcctViewportBridge::SelectedAssemblyFaceReference()
+    {
+        if(!IsInitialized()||myState->Context->NbSelected()!=1)return nullptr;
+        try
+        {
+            myState->Context->InitSelected();
+            if(!myState->Context->MoreSelected()||!myState->Context->HasSelectedShape())return nullptr;
+            Handle(AIS_InteractiveObject) selectedObject=myState->Context->SelectedInteractive();
+            TopoDS_Shape selected=myState->Context->SelectedShape();
+            if(selectedObject.IsNull()||selected.IsNull()||selected.ShapeType()!=TopAbs_FACE)return nullptr;
+
+            int index=-1;
+            for(size_t i=0;i<myState->AssemblyObjects.size();++i)
+            {
+                Handle(AIS_InteractiveObject) candidate=myState->AssemblyObjects[i];
+                if(selectedObject==candidate){index=(int)i;break;}
+            }
+            if(index<0||index>=(int)myState->AssemblyTransforms.size())return nullptr;
+            auto t=myState->AssemblyTransforms[index];
+
+            TopoDS_Shape local=selected;
+            if(std::abs(t[0])>1e-12||std::abs(t[1])>1e-12||std::abs(t[2])>1e-12)
+            {
+                gp_Trsf tr;tr.SetTranslation(gp_Vec(-t[0],-t[1],-t[2]));
+                local=BRepBuilderAPI_Transform(local,tr,true).Shape();
+            }
+            auto rotateBack=[&](const gp_Dir& axis,double degrees)
+            {
+                if(std::abs(degrees)<=1e-12)return;
+                gp_Trsf tr;tr.SetRotation(gp_Ax1(gp_Pnt(0,0,0),axis),-degrees*3.14159265358979323846/180.0);
+                local=BRepBuilderAPI_Transform(local,tr,true).Shape();
+            };
+            rotateBack(gp_Dir(0,0,1),t[5]);
+            rotateBack(gp_Dir(0,1,0),t[4]);
+            rotateBack(gp_Dir(1,0,0),t[3]);
+
+            auto value=encodeFaceReference(TopoDS::Face(local));
+            return value.empty()?nullptr:gcnew String(value.c_str());
+        }
+        catch(const Standard_Failure&){return nullptr;}
+    }
+
     array<double>^ OcctViewportBridge::SelectedTopologyMeasure()
     {
         if(!IsInitialized()||myState->Context->NbSelected()!=1)return gcnew array<double>(0);
