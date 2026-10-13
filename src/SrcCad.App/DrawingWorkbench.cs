@@ -630,12 +630,9 @@ public partial class MainWindow
         try
         {
             var assembly=AssemblyDocumentFile.Load(full);
-            var directory=Path.GetDirectoryName(full)??Environment.CurrentDirectory;
             foreach(var component in assembly.Components.Where(c=>!c.Suppressed))
             {
-                var child=Path.IsPathRooted(component.SourcePath)
-                    ?component.SourcePath
-                    :Path.Combine(directory,component.SourcePath);
+                var child=AssemblyDocumentFile.ResolveSourcePath(full,component.SourcePath);
                 foreach(var part in EnumerateBomParts(child,recursion))yield return part;
             }
         }
