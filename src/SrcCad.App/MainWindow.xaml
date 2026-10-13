@@ -170,7 +170,12 @@
                         </ContextMenu></Button.ContextMenu>
                     </Button>
                     <Separator Margin="8,2"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Yay" Click="Arc_Click" ToolTip="Merkez, başlangıç ve bitiş yönüyle gerçek parametrik yay oluşturur."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Yay ▾" Click="CommandFamily_Click">
+                        <Button.ContextMenu><ContextMenu>
+                            <MenuItem Header="Merkez Yay" Click="Arc_Click"/>
+                            <MenuItem Header="3 Nokta Yay" Click="ThreePointArc_Click"/>
+                        </ContextMenu></Button.ContextMenu>
+                    </Button>
                     <Button Style="{StaticResource CadCommandButton}" Content="Slot" Click="Slot_Click" ToolTip="İki merkez noktası ve genişlikle gerçek çizgi+yay kapalı slot oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Çokgen" Click="Polygon_Click" ToolTip="Kenar sayısını girin; merkez ve çevre noktasıyla düzenli çokgen oluşturun."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Elips" Click="Ellipse_Click" ToolTip="Merkez, ana eksen ve ikinci eksen ile gerçek parametrik elips oluşturur."/>
