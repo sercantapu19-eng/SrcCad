@@ -259,7 +259,7 @@ public partial class MainWindow
         PartNode.Visibility=Visibility.Collapsed;
         RefreshAssemblyTree();
         CommandTabs.SelectedIndex=4;
-        Status("Yeni Montaj • Bileşen Ekle ile .scpart parçalarını ekleyin.");
+        Status("Yeni Montaj • Bileşen Ekle ile .scpart parça veya .scasm alt montaj ekleyin.");
     }
 
     private void AddAssemblyComponent_Click(object sender,RoutedEventArgs e)
