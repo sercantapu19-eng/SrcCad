@@ -44,6 +44,10 @@ namespace SrcCad::Kernel::Occt
         static double CommonVolume(System::String^ bodyA, array<double>^ transformA,
             System::String^ bodyB, array<double>^ transformB);
         static array<double>^ ProjectEdges(System::String^ body, array<double>^ direction, array<double>^ up);
+        static array<double>^ ProjectCircles(System::String^ body, array<double>^ direction, array<double>^ up);
+        static array<double>^ SectionEdges(System::String^ body, array<double>^ planeOrigin, array<double>^ planeNormal,
+            array<double>^ direction, array<double>^ up);
+        static array<double>^ Bounds(System::String^ body);
         static array<System::String^>^ EdgeReferences(System::String^ body);
         static array<System::String^>^ FaceReferences(System::String^ body);
         // volume, solid count, face count, edge count
