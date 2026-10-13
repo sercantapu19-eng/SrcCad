@@ -86,6 +86,20 @@ internal static class FeatureGraphTests
             "imported body feature payload roundtrip");
 
         var source=initial.Features[0];var boss=initial.Features[1];
+
+        var midPlaneBoss=boss with{Id=Guid.NewGuid(),Name="Orta Düzlem Ekstrüzyon",
+            Parameters=new ExtrudeFeatureParameters(source.Id,40,MidPlane:true)};
+        var twoDirectionBoss=boss with{Id=Guid.NewGuid(),Name="İki Yön Ekstrüzyon",
+            Parameters=new ExtrudeFeatureParameters(source.Id,25,MidPlane:false,Direction2Depth:15)};
+        var extrusionModes=new FeatureDocument(Guid.NewGuid(),new[]{source,midPlaneBoss,twoDirectionBoss});
+        var extrusionModesClone=FeatureDocumentFile.Clone(extrusionModes);
+        var midClone=(ExtrudeFeatureParameters)extrusionModesClone.Node(midPlaneBoss.Id).Parameters;
+        var twoClone=(ExtrudeFeatureParameters)extrusionModesClone.Node(twoDirectionBoss.Id).Parameters;
+        Check(midClone.MidPlane&&midClone.Depth==40&&midClone.Direction2Depth==0,
+            "mid-plane extrusion parameters roundtrip");
+        Check(!twoClone.MidPlane&&twoClone.Depth==25&&twoClone.Direction2Depth==15,
+            "two-direction extrusion parameters roundtrip");
+
         var second=new FeatureNode(Guid.NewGuid(),"Çizim2",source.Parameters);
         var cut=new FeatureNode(Guid.NewGuid(),"Kes-Ekstrüzyon1",new CutFeatureParameters(boss.Id,second.Id,10));
         var doc=initial with{Features=initial.Features.Concat(new[]{second,cut}).ToArray()};
