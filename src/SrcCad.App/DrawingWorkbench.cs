@@ -178,8 +178,10 @@ public partial class MainWindow
             var source=RebuildAssemblyComponent(
                 AssemblyDocumentFile.ResolveSourcePath(full,component.SourcePath));
             var t=component.Transform;
+            var explode=component.ExplodeOffset??Vector3d.Zero;
             var transformed=SrcCad.Kernel.Occt.OcctFeatureKernel.Transform(source,
-                new[]{t.Translation.X,t.Translation.Y,t.Translation.Z,t.RotationDegrees.X,t.RotationDegrees.Y,t.RotationDegrees.Z});
+                new[]{t.Translation.X+explode.X,t.Translation.Y+explode.Y,t.Translation.Z+explode.Z,
+                      t.RotationDegrees.X,t.RotationDegrees.Y,t.RotationDegrees.Z});
             if(component.MirrorPlane is PlaneFrame mirror)
                 transformed=SrcCad.Kernel.Occt.OcctFeatureKernel.Mirror(transformed,
                     new[]{mirror.Origin.X,mirror.Origin.Y,mirror.Origin.Z,mirror.U.X,mirror.U.Y,mirror.U.Z,mirror.Normal.X,mirror.Normal.Y,mirror.Normal.Z},false);
