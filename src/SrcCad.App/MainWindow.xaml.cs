@@ -1717,10 +1717,10 @@ public partial class MainWindow : Window
         if(_partSession is not null){Status("Çizim onaylandı; bağımlı feature grafiği yeniden oluşturuldu.");return;}
         if (_hasSolid)
             Status("Çizim düzenlemesi uygulandı • bağımlı Ekstrüzyon1 yeniden oluşturuldu • Ctrl+Z ile geri alın.");
-        else if (_sketch is not null && (_sketch.TryGetClosedPolyline(out _) || _sketch.TryGetSingleCircle(out _)))
-            Status("Çizimden çıkıldı • kapalı profil hazır • Ekstrüzyon kullanılabilir.");
+        else if (_sketch is not null && _sketch.TryGetExtrusionRegions(out var regions) && regions.Count>0)
+            Status($"Çizimden çıkıldı • {regions.Count} kapalı malzeme bölgesi hazır • Ekstrüzyon kullanılabilir.");
         else
-            Status("Çizimden çıkıldı • ekstrüzyon için tek kapalı profil gerekiyor.");
+            Status("Çizimden çıkıldı • ekstrüzyon için geçerli kapalı bölge gerekiyor.");
 
         RefreshCommandState();
     }
@@ -2070,23 +2070,13 @@ public partial class MainWindow : Window
 
     private void Extrude_Click(object sender, RoutedEventArgs e)
     {
-        if(_partSession is not null){BeginGraphExtrude();return;}
-        if (_sketch is null || _inSketch) return;
-        if (!_sketch.TryGetExtrusionProfile(out _, out _) && !_sketch.TryGetSingleCircle(out _))
+        if(_inSketch||_extrudeCommandActive)return;
+        if(!EnsurePartSession()||_partSession is null)
         {
-            Status("Ekstrüzyon için kapalı dış profil gerekiyor. İç daireler delik olarak kullanılabilir.");
+            Status("Ekstrüzyon için geçerli kapalı Çizim seçin.");
             return;
         }
-
-        _depthWheel.Reset();
-        _extrudeCommandActive = true;
-        ExtrudeDepthTextBox.Text = _extrudeDepth.ToString("0.###", CultureInfo.CurrentCulture);
-        ExtrudePanel.Visibility = Visibility.Visible;
-        PropertyTitle.Text = "Ekstrüzyon";
-        PropertyInfo.Text = "Kapalı Çizim1 profilini kendi düzlem normalinde gerçek OCCT B-Rep katıya dönüştürür.";
-        ManagerTabs.SelectedItem = PropertyManagerTab;
-        UpdateExtrudePreview();
-        Status("Ekstrüzyon önizlemesi • mouse tekeri: ±10 mm • ✓ ile onaylayın.");
+        BeginGraphExtrude();
     }
 
     private void ExtrudeDepth_TextChanged(object sender, TextChangedEventArgs e)
@@ -2505,7 +2495,7 @@ public partial class MainWindow : Window
             return;
         }
         ExtrudeButton.IsEnabled = !_inSketch && !_hasSolid && _sketch is not null &&
-                                  (_sketch.TryGetExtrusionProfile(out _, out _) || _sketch.TryGetSingleCircle(out _));
+                                  (_sketch.TryGetExtrusionRegions(out var regions) && regions.Count>0);
     }
 
     private void Status(string text) => StatusText.Text = text;
