@@ -50,6 +50,9 @@ public enum SketchDimensionType
 {
     LineLength,
     CircleDiameter,
+    ArcRadius,
+    EllipseAxis1Diameter,
+    EllipseAxis2Diameter,
     PointDistance,
     HorizontalDistance,
     VerticalDistance,
@@ -629,6 +632,15 @@ public sealed partial class SketchModel
         const double eps = 1e-6;
         if (Points.Values.Any(p => !double.IsFinite(p.Position.X) || !double.IsFinite(p.Position.Y))) return false;
         if (Circles().Any(c => !double.IsFinite(c.Radius) || c.Radius<=1e-9)) return false;
+        if (Ellipses().Any(e => !double.IsFinite(e.RadiusX)||!double.IsFinite(e.RadiusY)||!double.IsFinite(e.RotationRadians)||
+            e.RadiusX<=1e-9||e.RadiusY<=1e-9)) return false;
+        if (Arcs().Any(a =>
+        {
+            var center=Point(a.CenterPointId).Position;
+            var ra=Point2d.Distance(center,Point(a.StartPointId).Position);
+            var rb=Point2d.Distance(center,Point(a.EndPointId).Position);
+            return !double.IsFinite(ra)||!double.IsFinite(rb)||ra<=1e-9||Math.Abs(ra-rb)>Math.Max(1e-6,ra*1e-5);
+        })) return false;
         if (Lines().Any(l => Point2d.Distance(Point(l.StartPointId).Position, Point(l.EndPointId).Position) <= 1e-9)) return false;
         if (Dimensions.Any(d => d.Driving && (!double.IsFinite(Measure(d)) || Math.Abs(Measure(d)-d.Value)>eps))) return false;
         if (Dimensions.Any(d => d.Driving && d.ReferenceA is not null && ReferenceDimensionResiduals(d).Any(v => !double.IsFinite(v) || Math.Abs(v)>eps))) return false;
@@ -748,6 +760,9 @@ public sealed partial class SketchModel
         {
             SketchDimensionType.LineLength => SetLineLength(dim.EntityA, dim.Value),
             SketchDimensionType.CircleDiameter => SetCircleDiameter(dim.EntityA, dim.Value),
+            SketchDimensionType.ArcRadius => SetArcRadius(dim.EntityA, dim.Value),
+            SketchDimensionType.EllipseAxis1Diameter => SetEllipseAxisDiameter(dim.EntityA, dim.Value, true),
+            SketchDimensionType.EllipseAxis2Diameter => SetEllipseAxisDiameter(dim.EntityA, dim.Value, false),
             SketchDimensionType.PointDistance => SetPointDistance(dim.PointA, dim.PointB, dim.Value),
             SketchDimensionType.HorizontalDistance => SetHorizontalDistance(dim.PointA, dim.PointB, dim.Value),
             SketchDimensionType.VerticalDistance => SetVerticalDistance(dim.PointA, dim.PointB, dim.Value),
@@ -928,6 +943,31 @@ public sealed partial class SketchModel
         var index = Entities.FindIndex(x => x.Id == circleId);
         if (index < 0) return false;
         Entities[index] = circle with { Radius = value / 2.0 };
+        return true;
+    }
+
+    private bool SetArcRadius(int arcId,double value)
+    {
+        if(Entity(arcId) is not SketchArc arc||value<=1e-9)return false;
+        var center=Point(arc.CenterPointId).Position;
+        var start=Point(arc.StartPointId).Position;
+        var end=Point(arc.EndPointId).Position;
+        var rs=Point2d.Distance(center,start);var re=Point2d.Distance(center,end);
+        if(rs<=1e-12||re<=1e-12)return false;
+        if(Point(arc.StartPointId).Fixed||Point(arc.EndPointId).Fixed)return false;
+        SetPointPosition(arc.StartPointId,new Point2d(center.X+(start.X-center.X)/rs*value,center.Y+(start.Y-center.Y)/rs*value));
+        SetPointPosition(arc.EndPointId,new Point2d(center.X+(end.X-center.X)/re*value,center.Y+(end.Y-center.Y)/re*value));
+        return true;
+    }
+
+    private bool SetEllipseAxisDiameter(int ellipseId,double value,bool firstAxis)
+    {
+        if(Entity(ellipseId) is not SketchEllipse ellipse||value<=1e-9)return false;
+        var index=Entities.FindIndex(x=>x.Id==ellipseId);
+        if(index<0)return false;
+        Entities[index]=firstAxis
+            ?ellipse with{RadiusX=value/2.0}
+            :ellipse with{RadiusY=value/2.0};
         return true;
     }
 
@@ -1155,6 +1195,15 @@ public sealed partial class SketchModel
 
             SketchDimensionType.CircleDiameter when Entity(entityA) is SketchCircle circle =>
                 circle.Radius * 2.0,
+
+            SketchDimensionType.ArcRadius when Entity(entityA) is SketchArc arc =>
+                Point2d.Distance(Point(arc.CenterPointId).Position,Point(arc.StartPointId).Position),
+
+            SketchDimensionType.EllipseAxis1Diameter when Entity(entityA) is SketchEllipse ellipse =>
+                ellipse.RadiusX * 2.0,
+
+            SketchDimensionType.EllipseAxis2Diameter when Entity(entityA) is SketchEllipse ellipse =>
+                ellipse.RadiusY * 2.0,
 
             SketchDimensionType.PointDistance when Points.ContainsKey(pointA) && Points.ContainsKey(pointB) =>
                 Point2d.Distance(Point(pointA).Position, Point(pointB).Position),
