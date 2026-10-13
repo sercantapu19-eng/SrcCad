@@ -38,6 +38,14 @@ internal static class AssemblyDocumentTests
         Check(coincidentSolved.Component(movable.Id).Transform.Translation==Vector3d.Zero,
             "standard plane coincident mate aligns component origins");
 
+        var reverseOrderDoc=new AssemblyDocument(Guid.NewGuid(),new[]{movable,a},Array.Empty<AssemblyMate>());
+        var reverseOrderMate=new AssemblyMate(Guid.NewGuid(),"TersSıra",MateType.Coincident,
+            new AssemblyReference(movable.Id,TopologyKind.Face,AssemblyReferenceCatalog.TopPlane),
+            new AssemblyReference(a.Id,TopologyKind.Face,AssemblyReferenceCatalog.TopPlane));
+        var reverseOrderSolved=AssemblyMateSolver.Apply(reverseOrderDoc,reverseOrderMate);
+        Check(reverseOrderSolved.Component(movable.Id).Transform.Translation==Vector3d.Zero,
+            "mate solver moves the non-fixed component regardless of A/B pick order");
+
         var distance=new AssemblyMate(Guid.NewGuid(),"Mesafe1",MateType.Distance,
             new AssemblyReference(a.Id,TopologyKind.Face,AssemblyReferenceCatalog.RightPlane),
             new AssemblyReference(movable.Id,TopologyKind.Face,AssemblyReferenceCatalog.RightPlane),25);
