@@ -67,7 +67,11 @@ public abstract record FeatureParameters;
 public sealed record ImportedBodyFeatureParameters(string Format,string BRep) : FeatureParameters;
 public sealed record SketchFeatureParameters(PlaneFrame Plane, SketchSnapshot Sketch) : FeatureParameters;
 public sealed record SpatialSketchFeatureParameters(Vector3d[] Points,bool Closed=false) : FeatureParameters;
-public sealed record ExtrudeFeatureParameters(Guid SketchId, double Depth) : FeatureParameters;
+public sealed record ExtrudeFeatureParameters(
+    Guid SketchId,
+    double Depth,
+    bool MidPlane = false,
+    double Direction2Depth = 0) : FeatureParameters;
 public sealed record BoundaryFeatureParameters(Guid[] ProfileSketchIds,Guid? BaseFeatureId=null) : FeatureParameters;
 public sealed record BoundaryCutFeatureParameters(Guid BaseFeatureId,Guid[] ProfileSketchIds) : FeatureParameters;
 public sealed record CutFeatureParameters(Guid BaseFeatureId, Guid SketchId, double Depth,
@@ -354,7 +358,12 @@ public static class FeatureDocumentFile
                         throw new InvalidDataException("Invalid 3D sketch.");
                     break;
                 case ExtrudeFeatureParameters e:
-                    if(!double.IsFinite(e.Depth)||Math.Abs(e.Depth)<1e-9||document.Node(e.SketchId).Kind!=FeatureKind.Sketch)throw new InvalidDataException("Invalid extrusion.");break;
+                    if(!double.IsFinite(e.Depth)||Math.Abs(e.Depth)<1e-9||
+                       !double.IsFinite(e.Direction2Depth)||e.Direction2Depth<0||
+                       (e.MidPlane&&e.Direction2Depth>1e-9)||
+                       document.Node(e.SketchId).Kind!=FeatureKind.Sketch)
+                        throw new InvalidDataException("Invalid extrusion.");
+                    break;
                 case BoundaryFeatureParameters b:
                     if(b.ProfileSketchIds is null||b.ProfileSketchIds.Length<2||b.ProfileSketchIds.Distinct().Count()!=b.ProfileSketchIds.Length||
                        b.ProfileSketchIds.Any(id=>document.Node(id).Kind!=FeatureKind.Sketch)||
