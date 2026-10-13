@@ -69,6 +69,8 @@
 #include <BRepFilletAPI_MakeChamfer.hxx>
 #include <BRepOffsetAPI_MakeThickSolid.hxx>
 #include <BRepOffsetAPI_DraftAngle.hxx>
+#include <BRepOffsetAPI_MakePipe.hxx>
+#include <BRepOffsetAPI_ThruSections.hxx>
 #include <TopTools_ListOfShape.hxx>
 #include <BRepTools.hxx>
 #include <BRep_Builder.hxx>
@@ -1127,6 +1129,74 @@ namespace SrcCad::Kernel::Occt
         return faceMaker.Face();
     }
 
+    static TopoDS_Wire featureProfileWire(array<double>^ outer,array<double>^ circle,array<double>^ f)
+    {
+        validateFeatureFrame(f);
+        if(circle!=nullptr&&circle->Length>0)
+        {
+            if(circle->Length!=3||!std::isfinite(circle[0])||!std::isfinite(circle[1])||!std::isfinite(circle[2])||circle[2]<=1e-9)
+                throw gcnew ArgumentException("Invalid circular sweep/loft profile.");
+            gp_Pnt center=planePoint(circle[0],circle[1],f[0],f[1],f[2],f[3],f[4],f[5],f[6],f[7],f[8]);
+            BRepBuilderAPI_MakeEdge edge(gp_Circ(gp_Ax2(center,gp_Dir(f[9],f[10],f[11]),gp_Dir(f[3],f[4],f[5])),circle[2]));
+            BRepBuilderAPI_MakeWire wire(edge.Edge());
+            if(!wire.IsDone())throw gcnew InvalidOperationException("Circular profile wire failed.");
+            return wire.Wire();
+        }
+        if(outer==nullptr||outer->Length<6||(outer->Length%2)!=0)
+            throw gcnew ArgumentException("Sweep/loft requires a valid closed profile.");
+        BRepBuilderAPI_MakePolygon polygon;
+        for(int i=0;i<outer->Length;i+=2)
+            polygon.Add(planePoint(outer[i],outer[i+1],f[0],f[1],f[2],f[3],f[4],f[5],f[6],f[7],f[8]));
+        polygon.Close();
+        if(!polygon.IsDone())throw gcnew InvalidOperationException("Profile wire failed.");
+        return polygon.Wire();
+    }
+
+    static TopoDS_Wire sweepPathWire(array<double>^ points)
+    {
+        if(points==nullptr||points->Length<6||(points->Length%3)!=0)
+            throw gcnew ArgumentException("Sweep path requires at least two 3D points.");
+        BRepBuilderAPI_MakePolygon path;
+        for(int i=0;i<points->Length;i+=3)
+        {
+            if(!std::isfinite(points[i])||!std::isfinite(points[i+1])||!std::isfinite(points[i+2]))
+                throw gcnew ArgumentException("Invalid sweep path point.");
+            path.Add(gp_Pnt(points[i],points[i+1],points[i+2]));
+        }
+        if(!path.IsDone())throw gcnew InvalidOperationException("Sweep path wire failed.");
+        return path.Wire();
+    }
+
+    static TopoDS_Shape featureSweep(array<double>^ outer,array<double>^ circle,array<double>^ frame,array<double>^ pathPoints)
+    {
+        TopoDS_Wire spine=sweepPathWire(pathPoints);
+        TopoDS_Wire profile=featureProfileWire(outer,circle,frame);
+        BRepBuilderAPI_MakeFace profileFace(profile,true);
+        if(!profileFace.IsDone())throw gcnew InvalidOperationException("Sweep profile face failed.");
+        BRepOffsetAPI_MakePipe pipe(spine,profileFace.Face());
+        pipe.Build();
+        if(!pipe.IsDone())throw gcnew InvalidOperationException("OCCT sweep failed.");
+        TopoDS_Shape result=pipe.Shape();
+        featureVolume(result);
+        return result;
+    }
+
+    static TopoDS_Shape featureLoft(array<array<double>^>^ outers,array<array<double>^>^ circles,array<array<double>^>^ frames)
+    {
+        if(outers==nullptr||circles==nullptr||frames==nullptr||frames->Length<2||
+           outers->Length!=frames->Length||circles->Length!=frames->Length)
+            throw gcnew ArgumentException("Loft requires at least two matching profiles.");
+        BRepOffsetAPI_ThruSections loft(true,false,1.0e-6);
+        loft.CheckCompatibility(true);
+        for(int i=0;i<frames->Length;++i)
+            loft.AddWire(featureProfileWire(outers[i],circles[i],frames[i]));
+        loft.Build();
+        if(!loft.IsDone())throw gcnew InvalidOperationException("OCCT loft failed.");
+        TopoDS_Shape result=loft.Shape();
+        featureVolume(result);
+        return result;
+    }
+
     static TopoDS_Shape featureRevolve(array<double>^ outer,array<double>^ holes,array<double>^ circleHoles,
                                        array<double>^ circle,array<double>^ f,array<double>^ axis,
                                        double angleDegrees,bool reverse)
@@ -1248,6 +1318,64 @@ namespace SrcCad::Kernel::Occt
             if(!cut.IsDone())throw gcnew InvalidOperationException("OCCT revolved cut failed.");
             TopoDS_Shape result=cut.Shape();const double after=featureVolume(result);
             if(before-after<=std::max(1e-8,before*1e-10))throw gcnew InvalidOperationException("Revolved cut removes no material.");
+            return encodeFeature(result);
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
+    String^ OcctFeatureKernel::Sweep(String^ baseBody,array<double>^ outer,array<double>^ circle,array<double>^ frame,array<double>^ pathPoints)
+    {
+        try
+        {
+            TopoDS_Shape swept=featureSweep(outer,circle,frame,pathPoints);
+            if(String::IsNullOrWhiteSpace(baseBody))return encodeFeature(swept);
+            TopoDS_Shape baseShape=decodeFeature(baseBody);
+            BRepAlgoAPI_Fuse fuse(baseShape,swept);fuse.Build();
+            if(!fuse.IsDone())throw gcnew InvalidOperationException("OCCT sweep fuse failed.");
+            return encodeFeature(fuse.Shape());
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
+    String^ OcctFeatureKernel::SweepCut(String^ baseBody,array<double>^ outer,array<double>^ circle,array<double>^ frame,array<double>^ pathPoints)
+    {
+        try
+        {
+            TopoDS_Shape baseShape=decodeFeature(baseBody);const double before=featureVolume(baseShape);
+            TopoDS_Shape tool=featureSweep(outer,circle,frame,pathPoints);
+            BRepAlgoAPI_Cut cut(baseShape,tool);cut.Build();
+            if(!cut.IsDone())throw gcnew InvalidOperationException("OCCT swept cut failed.");
+            TopoDS_Shape result=cut.Shape();const double after=featureVolume(result);
+            if(before-after<=std::max(1e-8,before*1e-10))throw gcnew InvalidOperationException("Swept cut removes no material.");
+            return encodeFeature(result);
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
+    String^ OcctFeatureKernel::Loft(String^ baseBody,array<array<double>^>^ outers,array<array<double>^>^ circles,array<array<double>^>^ frames)
+    {
+        try
+        {
+            TopoDS_Shape lofted=featureLoft(outers,circles,frames);
+            if(String::IsNullOrWhiteSpace(baseBody))return encodeFeature(lofted);
+            TopoDS_Shape baseShape=decodeFeature(baseBody);
+            BRepAlgoAPI_Fuse fuse(baseShape,lofted);fuse.Build();
+            if(!fuse.IsDone())throw gcnew InvalidOperationException("OCCT loft fuse failed.");
+            return encodeFeature(fuse.Shape());
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
+    String^ OcctFeatureKernel::LoftCut(String^ baseBody,array<array<double>^>^ outers,array<array<double>^>^ circles,array<array<double>^>^ frames)
+    {
+        try
+        {
+            TopoDS_Shape baseShape=decodeFeature(baseBody);const double before=featureVolume(baseShape);
+            TopoDS_Shape tool=featureLoft(outers,circles,frames);
+            BRepAlgoAPI_Cut cut(baseShape,tool);cut.Build();
+            if(!cut.IsDone())throw gcnew InvalidOperationException("OCCT lofted cut failed.");
+            TopoDS_Shape result=cut.Shape();const double after=featureVolume(result);
+            if(before-after<=std::max(1e-8,before*1e-10))throw gcnew InvalidOperationException("Lofted cut removes no material.");
             return encodeFeature(result);
         }
         catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}

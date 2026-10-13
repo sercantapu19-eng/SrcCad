@@ -155,6 +155,32 @@ internal static class NativeFeatureGraphTests
             Check(Math.Abs(circularInspect[0]-96000)<1e-2&&circularInspect[1]==4,
                 "native circular pattern creates four rotated body instances");
 
+            var sweepProfile=new SketchModel(plane);
+            sweepProfile.AddCircle(sweepProfile.CreatePointExact(new(0,0)),3);
+            var sweepProfileNode=new FeatureNode(Guid.NewGuid(),"SweepProfil",new SketchFeatureParameters(plane,sweepProfile.CaptureSnapshot()));
+            var pathNormal=Vector3d.Cross(plane.Normal,plane.V).Normalized();
+            var sweepPathPlane=new PlaneFrame("SweepPath",plane.Origin,plane.Normal,plane.V,pathNormal).Validate();
+            var sweepPath=new SketchModel(sweepPathPlane);
+            var sp0=sweepPath.CreatePointExact(new(0,0));var sp1=sweepPath.CreatePointExact(new(20,0));sweepPath.AddLine(sp0,sp1);
+            var sweepPathNode=new FeatureNode(Guid.NewGuid(),"SweepYol",new SketchFeatureParameters(sweepPathPlane,sweepPath.CaptureSnapshot()));
+            var sweepNode=new FeatureNode(Guid.NewGuid(),"Süpürme1",new SweepFeatureParameters(sweepProfileNode.Id,sweepPathNode.Id));
+            var sweepDoc=new FeatureDocument(Guid.NewGuid(),new[]{sweepProfileNode,sweepPathNode,sweepNode});
+            var sweepSession=new FeatureSession<PartFeatureOutput>(sweepDoc,evaluator);
+            var sweepInspect=OcctFeatureKernel.Inspect(sweepSession.Output(sweepNode.Id)!.BRep!);
+            Check(Math.Abs(sweepInspect[0]-Math.PI*9*20)<1e-2&&sweepInspect[1]==1,"straight-path circular sweep creates valid solid");
+
+            var loftPlane2=plane with{Origin=plane.Origin+plane.Normal*20,Name="Loft2"};
+            var loft1=new SketchModel(plane);loft1.AddCircle(loft1.CreatePointExact(new(0,0)),5);
+            var loft2=new SketchModel(loftPlane2);loft2.AddCircle(loft2.CreatePointExact(new(0,0)),10);
+            var loftNode1=new FeatureNode(Guid.NewGuid(),"LoftP1",new SketchFeatureParameters(plane,loft1.CaptureSnapshot()));
+            var loftNode2=new FeatureNode(Guid.NewGuid(),"LoftP2",new SketchFeatureParameters(loftPlane2,loft2.CaptureSnapshot()));
+            var loftFeature=new FeatureNode(Guid.NewGuid(),"Loft1",new LoftFeatureParameters(new[]{loftNode1.Id,loftNode2.Id}));
+            var loftDoc=new FeatureDocument(Guid.NewGuid(),new[]{loftNode1,loftNode2,loftFeature});
+            var loftSession=new FeatureSession<PartFeatureOutput>(loftDoc,evaluator);
+            var loftInspect=OcctFeatureKernel.Inspect(loftSession.Output(loftFeature.Id)!.BRep!);
+            var loftExpected=Math.PI*20.0/3.0*(25+50+100);
+            Check(Math.Abs(loftInspect[0]-loftExpected)<1e-1&&loftInspect[1]==1,"two-circle loft creates frustum solid");
+
             var revolveSketch=new SketchModel(plane);
             var ra=revolveSketch.CreatePointExact(new(0,-10));
             var rb=revolveSketch.CreatePointExact(new(0,30));
