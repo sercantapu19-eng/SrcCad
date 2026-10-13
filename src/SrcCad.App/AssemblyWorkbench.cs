@@ -513,6 +513,10 @@ public partial class MainWindow
         {Status("Montaj ilişkisi için en az iki bileşen gerekiyor.");return;}
         _assemblyEditingMateId=mateId;
         var existing=mateId is Guid id?_assemblyDocument.Mates.FirstOrDefault(m=>m.Id==id):null;
+        _assemblyPickedMateA=existing is not null&&!IsStandardAssemblyReference(existing.A)?existing.A:null;
+        _assemblyPickedMateB=existing is not null&&!IsStandardAssemblyReference(existing.B)?existing.B:null;
+        AssemblyMateAReferenceText.Text=_assemblyPickedMateA is null?"Standart referans":"Kayıtlı gerçek yüz referansı";
+        AssemblyMateBReferenceText.Text=_assemblyPickedMateB is null?"Standart referans":"Kayıtlı gerçek yüz referansı";
 
         AssemblyMateA.Items.Clear();AssemblyMateB.Items.Clear();AssemblyMateType.Items.Clear();
         AssemblyMateAReference.Items.Clear();AssemblyMateBReference.Items.Clear();
@@ -541,13 +545,15 @@ public partial class MainWindow
         }
         if(AssemblyMateA.SelectedItem is null)AssemblyMateA.SelectedIndex=0;
         if(AssemblyMateB.SelectedItem is null)AssemblyMateB.SelectedIndex=Math.Min(1,AssemblyMateB.Items.Count-1);
-        if(AssemblyMateAReference.SelectedItem is null)AssemblyMateAReference.SelectedIndex=0;
-        if(AssemblyMateBReference.SelectedItem is null)AssemblyMateBReference.SelectedIndex=0;
+        if(_assemblyPickedMateA is null&&AssemblyMateAReference.SelectedItem is null)AssemblyMateAReference.SelectedIndex=0;
+        if(_assemblyPickedMateB is null&&AssemblyMateBReference.SelectedItem is null)AssemblyMateBReference.SelectedIndex=0;
+        if(_assemblyPickedMateA is not null)AssemblyMateAReference.SelectedIndex=-1;
+        if(_assemblyPickedMateB is not null)AssemblyMateBReference.SelectedIndex=-1;
         if(AssemblyMateType.SelectedItem is null)AssemblyMateType.SelectedIndex=0;
         AssemblyMateValue.Text=(existing?.Value??0).ToString("G17",CultureInfo.CurrentCulture);
         AssemblyMatePanel.Visibility=Visibility.Visible;AssemblyMovePanel.Visibility=Visibility.Collapsed;
         PropertyTitle.Text=existing is null?"Montaj İlişkisi":"Montaj İlişkisini Düzenle";
-        PropertyInfo.Text="İlişki .scasm içinde kalıcıdır; ✓ tek Undo/Redo transaction olarak uygulanır.";
+        PropertyInfo.Text="Standart Origin/Düzlem/Eksen veya gerçek seçili düzlemsel yüz • kalıcı semantic referans • 3B mate çözümü • tek Undo/Redo transaction.";
         ManagerTabs.SelectedItem=PropertyManagerTab;
     }
 
@@ -556,23 +562,31 @@ public partial class MainWindow
         if(_assemblyDocument is null||
            (AssemblyMateA.SelectedItem as ComboBoxItem)?.Tag is not Guid aId||
            (AssemblyMateB.SelectedItem as ComboBoxItem)?.Tag is not Guid bId||aId==bId||
-           (AssemblyMateAReference.SelectedItem as ComboBoxItem)?.Tag is not AssemblyReference aTemplate||
-           (AssemblyMateBReference.SelectedItem as ComboBoxItem)?.Tag is not AssemblyReference bTemplate||
            (AssemblyMateType.SelectedItem as ComboBoxItem)?.Tag is not MateType type||
            !TryAssemblyNumber(AssemblyMateValue.Text,out var value))
         {Status("Geçerli iki bileşen, referans ve ilişki değeri seçin.");return;}
 
+        AssemblyReference? aReference=_assemblyPickedMateA;
+        AssemblyReference? bReference=_assemblyPickedMateB;
+        if(aReference is null&&(AssemblyMateAReference.SelectedItem as ComboBoxItem)?.Tag is AssemblyReference aTemplate)
+            aReference=aTemplate with{ComponentId=aId};
+        if(bReference is null&&(AssemblyMateBReference.SelectedItem as ComboBoxItem)?.Tag is AssemblyReference bTemplate)
+            bReference=bTemplate with{ComponentId=bId};
+        if(aReference is null||bReference is null)
+        {Status("A ve B için standart referans veya gerçek düzlemsel yüz seçin.");return;}
+        if(aReference.ComponentId!=aId||bReference.ComponentId!=bId)
+        {Status("Yakalanan yüz referansı ile seçili bileşen eşleşmiyor.");return;}
+
         var previous=_assemblyEditingMateId is Guid editId?_assemblyDocument.Mates.FirstOrDefault(m=>m.Id==editId):null;
         var mate=new AssemblyMate(previous?.Id??Guid.NewGuid(),previous?.Name??"İlişki"+(_assemblyDocument.Mates.Length+1),type,
-            aTemplate with{ComponentId=aId},
-            bTemplate with{ComponentId=bId},value,previous?.Suppressed??false);
+            aReference,bReference,value,previous?.Suppressed??false);
 
         try
         {
             var withoutEdited=previous is null
                 ?_assemblyDocument
                 :_assemblyDocument with{Mates=_assemblyDocument.Mates.Where(m=>m.Id!=previous.Id).ToArray()};
-            var solved=AssemblyMateSolver.Apply(withoutEdited,mate);
+            var solved=SolveAssemblyMate(withoutEdited,mate);
             var mates=previous is null
                 ?solved.Mates.Append(mate).ToArray()
                 :_assemblyDocument.Mates.Select(m=>m.Id==mate.Id?mate:m).ToArray();
@@ -583,7 +597,7 @@ public partial class MainWindow
             Status("Montaj ilişkisi çözülemedi: "+ex.Message);return;
         }
 
-        _assemblyEditingMateId=null;
+        _assemblyEditingMateId=null;_assemblyPickedMateA=null;_assemblyPickedMateB=null;
         AssemblyMatePanel.Visibility=Visibility.Collapsed;RefreshAssemblyTree(bId);RenderAssembly(false);
         Status(mate.Name+(previous is null?" uygulandı.":" güncellendi."));
     }
