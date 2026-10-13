@@ -398,6 +398,15 @@ public sealed record AssemblyDocument(Guid Id,AssemblyComponent[] Components,Ass
 public static class AssemblyDocumentFile
 {
     private sealed record Envelope(int SchemaVersion,string Units,AssemblyDocument Document);
+
+    public static string ResolveSourcePath(string assemblyPath,string sourcePath)
+    {
+        if(string.IsNullOrWhiteSpace(assemblyPath))throw new ArgumentException("Assembly path is required.",nameof(assemblyPath));
+        if(string.IsNullOrWhiteSpace(sourcePath))throw new ArgumentException("Component source path is required.",nameof(sourcePath));
+        if(Path.IsPathRooted(sourcePath))return Path.GetFullPath(sourcePath);
+        var directory=Path.GetDirectoryName(Path.GetFullPath(assemblyPath))??Environment.CurrentDirectory;
+        return Path.GetFullPath(Path.Combine(directory,sourcePath));
+    }
     private static readonly JsonSerializerOptions Options=new(){WriteIndented=true,MaxDepth=64};
 
     public static string Serialize(AssemblyDocument document)
