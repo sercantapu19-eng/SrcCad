@@ -502,7 +502,7 @@ public sealed partial class SketchModel
             SketchLine l => l.StartPointId == pointId || l.EndPointId == pointId,
             SketchCircle c => c.CenterPointId == pointId,
             SketchArc a => a.CenterPointId==pointId||a.StartPointId==pointId||a.EndPointId==pointId,
-            SketchEllipse e => e.CenterPointId==pointId,
+            SketchEllipse ellipse => ellipse.CenterPointId==pointId,
             _ => false
         }).Select(e => e.Id).ToList();
 
