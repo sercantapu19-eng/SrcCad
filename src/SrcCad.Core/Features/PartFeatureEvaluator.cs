@@ -20,6 +20,7 @@ public interface IPartGeometryKernel
     string Loft(string? baseBody,IReadOnlyList<SketchModel> profiles);
     string LoftCut(string baseBody,IReadOnlyList<SketchModel> profiles);
     string Boolean(string bodyA,string bodyB,BodyBooleanOperation operation);
+    string Compound(IReadOnlyList<string> bodies);
     string MoveCopy(string baseBody,Vector3d translation,Vector3d rotationDegrees,bool keepOriginal);
     string Split(string baseBody,PlaneFrame plane);
     string Dome(string baseBody,string faceReference,double height);
@@ -69,17 +70,30 @@ public sealed class PartFeatureEvaluator(IPartGeometryKernel kernel) : IFeatureE
         string ExtrudeBody(ExtrudeFeatureParameters extrude)
         {
             var sketch=Sketch(extrude.SketchId);
+            string tool;
             if(extrude.MidPlane)
             {
                 var half=Math.Abs(extrude.Depth)/2.0;
                 var positive=kernel.Extrude(sketch,half);
                 var negative=kernel.Extrude(sketch,-half);
-                return kernel.Boolean(positive,negative,BodyBooleanOperation.Add);
+                tool=kernel.Boolean(positive,negative,BodyBooleanOperation.Add);
             }
-            var first=kernel.Extrude(sketch,extrude.Depth);
-            if(extrude.Direction2Depth<=1e-9)return first;
-            var second=kernel.Extrude(sketch,-extrude.Direction2Depth);
-            return kernel.Boolean(first,second,BodyBooleanOperation.Add);
+            else
+            {
+                var first=kernel.Extrude(sketch,extrude.Depth);
+                if(extrude.Direction2Depth<=1e-9)tool=first;
+                else
+                {
+                    var second=kernel.Extrude(sketch,-extrude.Direction2Depth);
+                    tool=kernel.Boolean(first,second,BodyBooleanOperation.Add);
+                }
+            }
+
+            if(extrude.BaseFeatureId is not Guid baseId)return tool;
+            var baseBody=Base(baseId);
+            return extrude.MergeResult
+                ?kernel.Boolean(baseBody,tool,BodyBooleanOperation.Add)
+                :kernel.Compound(new[]{baseBody,tool});
         }
 
         string Flatten(SheetMetalFlattenFeatureParameters flatten)
