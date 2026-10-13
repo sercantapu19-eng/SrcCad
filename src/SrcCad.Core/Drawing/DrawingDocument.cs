@@ -5,6 +5,7 @@ namespace SrcCad.Core.Drawing;
 
 public enum DrawingViewType { Front, Top, Right, Isometric, Projected, Section, Detail, Broken }
 public enum DrawingProjectionStandard { FirstAngle, ThirdAngle }
+public enum DrawingAnnotationKind { Text, OverallSize, HoleCallout, Balloon, BillOfMaterials }
 
 public sealed record DrawingSheet(
     Guid Id,
@@ -33,7 +34,9 @@ public sealed record DrawingAnnotation(
     Guid SheetId,
     Guid? ViewId,
     Point2d Position,
-    string Text);
+    string Text,
+    DrawingAnnotationKind Kind = DrawingAnnotationKind.Text,
+    string? Data = null);
 
 public sealed record DrawingDocument(
     Guid Id,
@@ -166,7 +169,7 @@ public static class DrawingDocumentFile
             if(annotation.Id==Guid.Empty||!sheetIds.Contains(annotation.SheetId)||
                (annotation.ViewId is Guid viewId&&!viewIds.Contains(viewId))||
                !double.IsFinite(annotation.Position.X)||!double.IsFinite(annotation.Position.Y)||
-               string.IsNullOrWhiteSpace(annotation.Text))
+               string.IsNullOrWhiteSpace(annotation.Text)||!Enum.IsDefined(annotation.Kind))
                 throw new InvalidDataException("Invalid drawing annotation.");
         }
     }
