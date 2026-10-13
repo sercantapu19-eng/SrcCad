@@ -233,6 +233,7 @@
             <TabItem Header="TEKNİK RESİM">
                 <WrapPanel Margin="8">
                     <Button Style="{StaticResource CadCommandButton}" Content="Yeni Pafta" Click="DrawingNewSheet_Click" ToolTip="Aktif paftanın boyut ve izdüşüm standardıyla yeni teknik resim paftası oluşturur."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Paftayı Sil" Click="DrawingDeleteSheet_Click" ToolTip="Aktif paftayı, görünüşlerini ve notlarını tek işlemde siler. Son pafta silinemez."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Önceki Pafta" Click="DrawingPreviousSheet_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Sonraki Pafta" Click="DrawingNextSheet_Click"/>
                     <Separator Margin="8,2"/>
