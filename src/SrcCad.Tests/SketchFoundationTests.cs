@@ -117,6 +117,8 @@ internal static class SketchFoundationTests
             command.Pick(new(new(20,0),-1,0.001,1));
             command.Pick(new(new(0,5),-1,0.001,1));
             Check(s.Lines(false).Count()==2&&s.Arcs(false).Count()==2,"slot creates two lines and two true arcs");
+            Check(s.Lines(true).Count(line=>line.Construction)==1,"slot keeps a measurable construction centerline");
+            Check(s.Relations.Any(r=>r.Type==SketchRelationType.Horizontal),"horizontal slot receives automatic horizontal relation");
             Check(s.TryGetExtrusionProfile(out var slotLoop,out _,out _)&&slotLoop.Count>20,
                 "arc slot is accepted as closed extrusion profile");
         }
