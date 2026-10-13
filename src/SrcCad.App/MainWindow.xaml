@@ -473,6 +473,8 @@
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                                     <Button Content="Nokta Ekle" Click="SpatialPointAdd_Click" Padding="8,4"/>
+                                    <Button Content="Seçimden Ekle" Click="SpatialPointFromSelection_Click" Padding="8,4" Margin="6,0,0,0"
+                                            ToolTip="Seçili gerçek köşeyi veya seçili düzlemsel yüz üzerindeki imleç noktasını 3B yola ekler."/>
                                     <Button Content="Son Noktayı Sil" Click="SpatialPointRemove_Click" Padding="8,4" Margin="6,0,0,0"/>
                                 </StackPanel>
                                 <CheckBox x:Name="SpatialClosed" Content="Yolu Kapat" Margin="0,0,0,8" Checked="SpatialSketchChanged" Unchecked="SpatialSketchChanged"/>
