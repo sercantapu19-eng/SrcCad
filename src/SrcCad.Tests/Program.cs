@@ -254,24 +254,48 @@ foreach (var plane in StandardPlanes.All)
 Console.WriteLine("SrcCad CAD core smoke tests: PASS");
 
 
-AcceptanceTests.Run();
-FeatureHistoryTests.Run();
-InteractionRegressionTests.Run();
-SourceSketchEditTests.Run();
-SketchFoundationTests.Run();
-PartFileTests.Run();
-GeneralConstraintTests.Run();
-ParallelDimensionTests.Run();
-TrimInteractionTests.Run();
-WindowSelectionTests.Run();
-DimensionEditingTests.Run();
-DeletionHistoryTests.Run();
-FeatureGraphTests.Run();
-ThreePointToolTests.Run();
-PerformanceSmokeTests.Run();
-AssemblyDocumentTests.Run();
-DrawingDocumentTests.Run();
+var regressionFailures=new List<string>();
+void RunSuite(string name,Action run)
+{
+    try
+    {
+        run();
+        Console.WriteLine($"SUITE PASS: {name}");
+    }
+    catch(Exception ex)
+    {
+        regressionFailures.Add($"{name}: {ex.GetType().Name}: {ex.Message}");
+        Console.Error.WriteLine($"SUITE FAIL: {name}");
+        Console.Error.WriteLine(ex);
+    }
+}
+
+RunSuite(nameof(AcceptanceTests),AcceptanceTests.Run);
+RunSuite(nameof(FeatureHistoryTests),FeatureHistoryTests.Run);
+RunSuite(nameof(InteractionRegressionTests),InteractionRegressionTests.Run);
+RunSuite(nameof(SourceSketchEditTests),SourceSketchEditTests.Run);
+RunSuite(nameof(SketchFoundationTests),SketchFoundationTests.Run);
+RunSuite(nameof(PartFileTests),PartFileTests.Run);
+RunSuite(nameof(GeneralConstraintTests),GeneralConstraintTests.Run);
+RunSuite(nameof(ParallelDimensionTests),ParallelDimensionTests.Run);
+RunSuite(nameof(TrimInteractionTests),TrimInteractionTests.Run);
+RunSuite(nameof(WindowSelectionTests),WindowSelectionTests.Run);
+RunSuite(nameof(DimensionEditingTests),DimensionEditingTests.Run);
+RunSuite(nameof(DeletionHistoryTests),DeletionHistoryTests.Run);
+RunSuite(nameof(FeatureGraphTests),FeatureGraphTests.Run);
+RunSuite(nameof(ThreePointToolTests),ThreePointToolTests.Run);
+RunSuite(nameof(PerformanceSmokeTests),PerformanceSmokeTests.Run);
+RunSuite(nameof(AssemblyDocumentTests),AssemblyDocumentTests.Run);
+RunSuite(nameof(DrawingDocumentTests),DrawingDocumentTests.Run);
 
 #if NATIVE_ACCEPTANCE
-NativeAcceptanceBootstrap.Run();
+RunSuite(nameof(NativeAcceptanceBootstrap),NativeAcceptanceBootstrap.Run);
 #endif
+
+if(regressionFailures.Count>0)
+{
+    Console.Error.WriteLine();
+    Console.Error.WriteLine($"REGRESSION SUMMARY: {regressionFailures.Count} SUITE FAIL");
+    foreach(var failure in regressionFailures)Console.Error.WriteLine(" - "+failure);
+    Environment.ExitCode=1;
+}
