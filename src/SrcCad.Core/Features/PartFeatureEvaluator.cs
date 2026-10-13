@@ -22,6 +22,7 @@ public interface IPartGeometryKernel
     string Mirror(string baseBody,PlaneFrame plane,bool keepOriginal);
     string LinearPattern(string baseBody,Vector3d direction,double spacing,int count);
     string CircularPattern(string baseBody,Vector3d axisOrigin,Vector3d axisDirection,double angleDegrees,int count);
+    string EdgeFlange(string baseBody,IReadOnlyList<string> edgeReferences,double length,double angleDegrees,double thickness,double bendRadius,bool reverse);
 }
 // Strings are immutable; native cache is detached from the document/viewport.
 public sealed record PartFeatureOutput(string? SketchData, string? BRep);
@@ -74,6 +75,8 @@ public sealed class PartFeatureEvaluator(IPartGeometryKernel kernel) : IFeatureE
             ReferencePointFeatureParameters => new(null,null),
             SheetMetalBaseFeatureParameters s => new(null,kernel.Extrude(Sketch(s.SketchId),s.Reverse?-s.Thickness:s.Thickness)),
             SheetMetalCutFeatureParameters s => new(null,kernel.Cut(Base(s.BaseFeatureId),Sketch(s.SketchId),s.Reverse?-s.Depth:s.Depth,s.Termination)),
+            SheetMetalEdgeFlangeFeatureParameters s => new(null,kernel.EdgeFlange(Base(s.BaseFeatureId),EdgeReferences(s.BaseFeatureId),
+                s.Length,s.AngleDegrees,s.Thickness,s.BendRadius,s.Reverse)),
             _=>throw new NotSupportedException("Feature evaluator unavailable.")
         };
     }

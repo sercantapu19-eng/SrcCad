@@ -153,4 +153,6 @@ internal sealed class OcctPartGeometryKernel : IPartGeometryKernel
         => OcctFeatureKernel.LinearPattern(baseBody,new[]{direction.X,direction.Y,direction.Z},spacing,count);
     public string CircularPattern(string baseBody,SrcCad.Core.Geometry.Vector3d axisOrigin,SrcCad.Core.Geometry.Vector3d axisDirection,double angleDegrees,int count)
         => OcctFeatureKernel.CircularPattern(baseBody,new[]{axisOrigin.X,axisOrigin.Y,axisOrigin.Z,axisDirection.X,axisDirection.Y,axisDirection.Z},angleDegrees,count);
+    public string EdgeFlange(string baseBody,IReadOnlyList<string> edgeReferences,double length,double angleDegrees,double thickness,double bendRadius,bool reverse)
+        => OcctFeatureKernel.EdgeFlange(baseBody,edgeReferences.ToArray(),length,angleDegrees,thickness,bendRadius,reverse);
 }

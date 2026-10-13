@@ -38,6 +38,7 @@ internal static class FeatureGraphTests
                 ReferencePointFeatureParameters=>1,
                 SheetMetalBaseFeatureParameters p=>p.Thickness,
                 SheetMetalCutFeatureParameters p=>p.Depth,
+                SheetMetalEdgeFlangeFeatureParameters p=>p.Length,
                 _=>1
             };
             return new(own+dependencies.Values.Sum(x=>x.Value));
@@ -211,6 +212,14 @@ internal static class FeatureGraphTests
         Check(sheetCutClone.Node(sheetCutNode.Id).Kind==FeatureKind.SheetMetalCut&&
               ((SheetMetalCutFeatureParameters)sheetCutClone.Node(sheetCutNode.Id).Parameters).Termination==ExtrusionTermination.ThroughAll,
             "sheet metal cut parameters and dependency roundtrip");
+        var edgeFlangeNode=new FeatureNode(Guid.NewGuid(),"Kenar Flanşı1",
+            new SheetMetalEdgeFlangeFeatureParameters(sheetBaseNode.Id,25,90,2,2),
+            References:new[]{new FeatureReference(sheetBaseNode.Id,TopologyKind.Edge,"E;40;20;0;0")});
+        var edgeFlangeDoc=new FeatureDocument(Guid.NewGuid(),new[]{source,sheetBaseNode,edgeFlangeNode});
+        var edgeFlangeClone=FeatureDocumentFile.Clone(edgeFlangeDoc);
+        Check(edgeFlangeClone.Node(edgeFlangeNode.Id).Kind==FeatureKind.SheetMetalEdgeFlange&&
+              ((SheetMetalEdgeFlangeFeatureParameters)edgeFlangeClone.Node(edgeFlangeNode.Id).Parameters).AngleDegrees==90,
+            "sheet metal edge flange metadata and persistent edge reference roundtrip");
 
         var external=session.Document;((IDictionary<int,SketchPoint>)((SketchFeatureParameters)external.Node(source.Id).Parameters).Sketch.Points).Clear();
         Check(((SketchFeatureParameters)session.Document.Node(source.Id).Parameters).Sketch.Points.Count>0,"external snapshot cannot mutate committed document");
