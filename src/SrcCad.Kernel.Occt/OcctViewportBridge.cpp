@@ -634,9 +634,12 @@ namespace SrcCad::Kernel::Occt
         }
     }
 
-    void OcctViewportBridge::SetFrontView() { SetNormalView(0, 0, 1, 0, 1, 0); }
-    void OcctViewportBridge::SetTopView()   { SetNormalView(0, 1, 0, 0, 0, -1); }
-    void OcctViewportBridge::SetRightView() { SetNormalView(1, 0, 0, 0, 1, 0); }
+    void OcctViewportBridge::SetFrontView()  { SetNormalView(0, 0, 1, 0, 1, 0); }
+    void OcctViewportBridge::SetBackView()   { SetNormalView(0, 0,-1, 0, 1, 0); }
+    void OcctViewportBridge::SetTopView()    { SetNormalView(0, 1, 0, 0, 0,-1); }
+    void OcctViewportBridge::SetBottomView() { SetNormalView(0,-1, 0, 0, 0, 1); }
+    void OcctViewportBridge::SetRightView()  { SetNormalView(1, 0, 0, 0, 1, 0); }
+    void OcctViewportBridge::SetLeftView()   { SetNormalView(-1,0, 0, 0, 1, 0); }
 
     void OcctViewportBridge::SetIsoView()
     {
@@ -671,11 +674,45 @@ namespace SrcCad::Kernel::Occt
 
     void OcctViewportBridge::ZoomWheel(int delta)
     {
-        if (!IsInitialized() || delta == 0) return;
-        const double factor = delta > 0 ? 1.12 : (1.0 / 1.12);
-        const double current = myState->View->Scale();
-        myState->View->SetScale(std::max(1e-8, current * factor));
-        myState->View->Redraw();
+        if(!IsInitialized())return;
+        ZoomWheelAt(-1,-1,delta);
+    }
+
+    void OcctViewportBridge::ZoomWheelAt(int x,int y,int delta)
+    {
+        if(!IsInitialized()||delta==0)return;
+        try
+        {
+            const double factor=delta>0?1.12:(1.0/1.12);
+            const double current=myState->View->Scale();
+
+            double beforeX=0,beforeY=0,beforeZ=0;
+            const bool useCursor=x>=0&&y>=0;
+            if(useCursor)myState->View->Convert(x,y,beforeX,beforeY,beforeZ);
+
+            myState->View->SetScale(std::max(1e-8,current*factor));
+
+            if(useCursor)
+            {
+                double afterX=0,afterY=0,afterZ=0;
+                myState->View->Convert(x,y,afterX,afterY,afterZ);
+                gp_Vec shift(gp_Pnt(afterX,afterY,afterZ),gp_Pnt(beforeX,beforeY,beforeZ));
+                if(shift.SquareMagnitude()>1e-24)
+                {
+                    Handle(Graphic3d_Camera) camera=myState->View->Camera();
+                    camera->SetEye(camera->Eye().Translated(shift));
+                    camera->SetCenter(camera->Center().Translated(shift));
+                }
+            }
+            myState->View->Redraw();
+        }
+        catch(const Standard_Failure&)
+        {
+            // Preserve a usable centered zoom if a driver cannot convert the cursor point.
+            const double factor=delta>0?1.12:(1.0/1.12);
+            myState->View->SetScale(std::max(1e-8,myState->View->Scale()*factor));
+            myState->View->Redraw();
+        }
     }
 
     void OcctViewportBridge::MoveTo(int x, int y)
@@ -715,26 +752,31 @@ namespace SrcCad::Kernel::Occt
         if (!IsInitialized()) return;
         myState->SelectionMode = mode;
 
-        int selectionMode = 0;
-        switch (mode)
+        auto activateModes=[&](const Handle(AIS_InteractiveObject)& object)
         {
-            case CadSelectionMode::Vertex: selectionMode = AIS_Shape::SelectionMode(TopAbs_VERTEX); break;
-            case CadSelectionMode::Edge:   selectionMode = AIS_Shape::SelectionMode(TopAbs_EDGE);   break;
-            case CadSelectionMode::Face:   selectionMode = AIS_Shape::SelectionMode(TopAbs_FACE);   break;
-            default: selectionMode = 0; break;
-        }
+            if(object.IsNull())return;
+            myState->Context->Deactivate(object);
+            if(mode==CadSelectionMode::AnyTopology)
+            {
+                myState->Context->Activate(object,AIS_Shape::SelectionMode(TopAbs_VERTEX),true);
+                myState->Context->Activate(object,AIS_Shape::SelectionMode(TopAbs_EDGE),true);
+                myState->Context->Activate(object,AIS_Shape::SelectionMode(TopAbs_FACE),true);
+                return;
+            }
 
-        if (!myState->SolidPresentation.IsNull())
-        {
-            myState->Context->Deactivate(myState->SolidPresentation);
-            myState->Context->Activate(myState->SolidPresentation, selectionMode, true);
-        }
-        for(const auto& assemblyObject:myState->AssemblyObjects)
-        {
-            if(assemblyObject.IsNull())continue;
-            myState->Context->Deactivate(assemblyObject);
-            myState->Context->Activate(assemblyObject,selectionMode,true);
-        }
+            int selectionMode=0;
+            switch(mode)
+            {
+                case CadSelectionMode::Vertex: selectionMode=AIS_Shape::SelectionMode(TopAbs_VERTEX); break;
+                case CadSelectionMode::Edge: selectionMode=AIS_Shape::SelectionMode(TopAbs_EDGE); break;
+                case CadSelectionMode::Face: selectionMode=AIS_Shape::SelectionMode(TopAbs_FACE); break;
+                default: selectionMode=0; break;
+            }
+            myState->Context->Activate(object,selectionMode,true);
+        };
+
+        activateModes(myState->SolidPresentation);
+        for(const auto& assemblyObject:myState->AssemblyObjects)activateModes(assemblyObject);
         myState->Context->UpdateCurrentViewer();
     }
 
@@ -750,6 +792,7 @@ namespace SrcCad::Kernel::Occt
             case CadSelectionMode::Vertex: mode = "Köşe"; break;
             case CadSelectionMode::Edge: mode = "Kenar"; break;
             case CadSelectionMode::Face: mode = "Yüz"; break;
+            case CadSelectionMode::AnyTopology: mode = "Geometri"; break;
             default: break;
         }
         return String::Format("{0}: {1} seçili", mode, count);
@@ -869,6 +912,14 @@ namespace SrcCad::Kernel::Occt
             if(selected.ShapeType()==TopAbs_EDGE)
             {
                 BRepGProp::LinearProperties(selected,props);
+                TopoDS_Edge edge=TopoDS::Edge(selected);
+                BRepAdaptor_Curve curve(edge);
+                if(curve.GetType()==GeomAbs_Circle)
+                {
+                    gp_Circ circle=curve.Circle();
+                    return gcnew array<double>{3.0,props.Mass(),circle.Radius(),
+                        props.CentreOfMass().X(),props.CentreOfMass().Y(),props.CentreOfMass().Z()};
+                }
                 return gcnew array<double>{2.0,props.Mass(),props.CentreOfMass().X(),props.CentreOfMass().Y(),props.CentreOfMass().Z()};
             }
             if(selected.ShapeType()==TopAbs_FACE)
