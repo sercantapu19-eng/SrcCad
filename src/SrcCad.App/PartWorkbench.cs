@@ -17,6 +17,7 @@ public partial class MainWindow
     private FeatureNode? _graphSketchEdit;
     private FeatureNode? _graphFeatureEdit;
     private bool _loadingGraphParameters;
+    private readonly List<Vector3d> _spatialSketchPoints=new();
 
     private static string? LastBody(FeatureDocument document,Func<Guid,PartFeatureOutput?> output)
         => System.Linq.Enumerable.Reverse(document.Ordered()).Select(n=>output(n.Id)?.BRep).FirstOrDefault(s=>s is not null);
@@ -687,6 +688,94 @@ public partial class MainWindow
         if(combo.SelectedItem is null&&combo.Items.Count>0)combo.SelectedIndex=0;
     }
 
+    private void SpatialSketch_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession())return;
+        BeginSpatialSketchFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("3B Çizim"),
+            new SpatialSketchFeatureParameters(Array.Empty<Vector3d>())));
+    }
+
+    private void BeginSpatialSketchFeature(FeatureNode node)
+    {
+        if(node.Parameters is not SpatialSketchFeatureParameters spatial)throw new InvalidOperationException("Unsupported 3D sketch.");
+        _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;
+        _spatialSketchPoints.Clear();_spatialSketchPoints.AddRange(spatial.Points);
+        SpatialClosed.IsChecked=spatial.Closed;
+        SpatialPointX.Text="0";SpatialPointY.Text="0";SpatialPointZ.Text="0";
+        SpatialSketchPanel.Visibility=Visibility.Visible;
+        PropertyTitle.Text=node.Name;
+        PropertyInfo.Text="Parametrik dünya-koordinatlı 3B yol • Sweep ve Yapısal Eleman girdisi • save/open/history destekli";
+        ManagerTabs.SelectedItem=PropertyManagerTab;
+        _loadingGraphParameters=false;
+        RefreshSpatialSketchPreview();RefreshCommandState();
+    }
+
+    private void RefreshSpatialSketchPreview()
+    {
+        SpatialPointList.Text=_spatialSketchPoints.Count==0?"Henüz nokta yok.":string.Join("\n",
+            _spatialSketchPoints.Select((p,i)=>$"{i+1}: X={p.X:0.###} Y={p.Y:0.###} Z={p.Z:0.###}"));
+        SpatialSketchError.Text=_spatialSketchPoints.Count<2?"En az iki 3B nokta gerekiyor.":"";
+        _viewer.ClearSketch();
+        for(var i=0;i+1<_spatialSketchPoints.Count;i++)
+        {
+            var a=_spatialSketchPoints[i];var b=_spatialSketchPoints[i+1];
+            _viewer.AddStyledSketchLine(a.X,a.Y,a.Z,b.X,b.Y,b.Z,0);
+        }
+        if(SpatialClosed.IsChecked==true&&_spatialSketchPoints.Count>=3)
+        {
+            var a=_spatialSketchPoints[^1];var b=_spatialSketchPoints[0];
+            _viewer.AddStyledSketchLine(a.X,a.Y,a.Z,b.X,b.Y,b.Z,0);
+        }
+        foreach(var p in _spatialSketchPoints)_viewer.AddSketchPoint(p.X,p.Y,p.Z,2.0,2);
+        _viewer.FitAll();
+    }
+
+    private void SpatialPointAdd_Click(object sender,RoutedEventArgs e)
+    {
+        if(!TryReferenceScalar(SpatialPointX.Text,out var x)||!TryReferenceScalar(SpatialPointY.Text,out var y)||
+           !TryReferenceScalar(SpatialPointZ.Text,out var z))
+        {SpatialSketchError.Text="X/Y/Z değerleri sonlu sayı olmalı.";return;}
+        var point=new Vector3d(x,y,z);
+        if(_spatialSketchPoints.Count>0&&(point-_spatialSketchPoints[^1]).Length<=1e-9)
+        {SpatialSketchError.Text="Ardışık noktalar aynı olamaz.";return;}
+        _spatialSketchPoints.Add(point);RefreshSpatialSketchPreview();
+    }
+
+    private void SpatialPointRemove_Click(object sender,RoutedEventArgs e)
+    {
+        if(_spatialSketchPoints.Count>0)_spatialSketchPoints.RemoveAt(_spatialSketchPoints.Count-1);
+        RefreshSpatialSketchPreview();
+    }
+
+    private void SpatialSketchChanged(object sender,RoutedEventArgs e)
+    {
+        if(!_loadingGraphParameters)RefreshSpatialSketchPreview();
+    }
+
+    private FeatureDocument? SpatialSketchCandidate()
+    {
+        if(_partSession is null||_graphFeatureEdit is null||_spatialSketchPoints.Count<2||
+           (SpatialClosed.IsChecked==true&&_spatialSketchPoints.Count<3))return null;
+        return ReplaceGraphNode(_graphFeatureEdit with
+        {
+            Parameters=new SpatialSketchFeatureParameters(_spatialSketchPoints.ToArray(),SpatialClosed.IsChecked==true)
+        });
+    }
+
+    private void SpatialSketchOk_Click(object sender,RoutedEventArgs e)
+    {
+        var candidate=SpatialSketchCandidate();
+        if(candidate is null||_partSession is null){SpatialSketchError.Text="Geçerli 3B yol gerekiyor.";return;}
+        if(!_partSession.TryCommit(candidate)){SpatialSketchError.Text=GraphError();return;}
+        var id=_graphFeatureEdit!.Id;
+        _viewer.ClearSketch();EndGraphFeature();RefreshPartTree(id);Status("Parametrik 3B Çizim oluşturuldu.");
+    }
+
+    private void SpatialSketchCancel_Click(object sender,RoutedEventArgs e)
+    {
+        _viewer.ClearSketch();EndGraphFeature();
+    }
+
     private FeatureNode[] ClosedProfileSketches()
         => _partSession?.Document.Features.Where(n=>n.Kind==FeatureKind.Sketch).Where(n=>
         {
@@ -699,8 +788,9 @@ public partial class MainWindow
         }).ToArray()??Array.Empty<FeatureNode>();
 
     private FeatureNode[] PathSketches()
-        => _partSession?.Document.Features.Where(n=>n.Kind==FeatureKind.Sketch&&
-            ((SketchFeatureParameters)n.Parameters).Sketch.Entities.OfType<SketchLine>().Any(l=>!l.Construction)).ToArray()
+        => _partSession?.Document.Features.Where(n=>
+            n.Kind==FeatureKind.SpatialSketch ||
+            (n.Kind==FeatureKind.Sketch&&((SketchFeatureParameters)n.Parameters).Sketch.Entities.OfType<SketchLine>().Any(l=>!l.Construction))).ToArray()
             ??Array.Empty<FeatureNode>();
 
     private static double PolygonArea(IReadOnlyList<Point2d> points)
@@ -2124,7 +2214,9 @@ public partial class MainWindow
         if(_inSketch||_extrudeCommandActive||_partSession is null)return;
         var node=_partSession.Document.Node(id);
         if(node.Suppressed){Status("Düzenlemeden önce baskılamayı kaldırın.");return;}
-        if(node.Kind==FeatureKind.Sketch)BeginGraphSketch(node);else BeginGraphFeature(node);
+        if(node.Kind==FeatureKind.Sketch)BeginGraphSketch(node);
+        else if(node.Kind==FeatureKind.SpatialSketch)BeginSpatialSketchFeature(node);
+        else BeginGraphFeature(node);
     }
     private void BeginGraphFeature(FeatureNode node)
     {
