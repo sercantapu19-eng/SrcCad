@@ -1607,9 +1607,13 @@ namespace SrcCad::Kernel::Occt
         {
             TopoDS_Shape result=decodeFeature(baseBody);
             const double initialVolume=featureVolume(result);
-            auto edges=resolveEdgeReferences(result,edgeReferences);
-            for(const auto& selected:edges)
+            if(edgeReferences==nullptr||edgeReferences->Length==0)throw gcnew ArgumentException("At least one flange edge is required.");
+            for each(String^ reference in edgeReferences)
             {
+                auto single=gcnew array<String^>{reference};
+                auto resolved=resolveEdgeReferences(result,single);
+                if(resolved.empty())throw gcnew InvalidOperationException("Flange edge could not be resolved.");
+                const TopoDS_Edge selected=resolved.front();
                 TopoDS_Vertex va,vb;TopExp::Vertices(selected,va,vb);
                 if(va.IsNull()||vb.IsNull())throw gcnew InvalidOperationException("Edge flange requires bounded linear edges.");
                 gp_Pnt a=BRep_Tool::Pnt(va),b=BRep_Tool::Pnt(vb);
