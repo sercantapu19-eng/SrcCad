@@ -1101,6 +1101,7 @@ public partial class MainWindow
         }
         Add("Dikdörtgen Profil",()=>CreateLibraryProfile(false));
         Add("Kutu Profil",CreateBoxLibraryProfile);
+        Add("L Profil",CreateAngleLibraryProfile);
         Add("Dairesel Profil",()=>CreateLibraryProfile(true));
         menu.PlacementTarget=sender as UIElement;menu.Placement=System.Windows.Controls.Primitives.PlacementMode.Bottom;menu.IsOpen=true;
     }
@@ -1176,6 +1177,53 @@ public partial class MainWindow
         }
 
         var node=new FeatureNode(Guid.NewGuid(),NextGraphName("Profil Kutu"),
+            new SketchFeatureParameters(sketch.Plane,sketch.CaptureSnapshot()));
+        if(!_partSession.TryCommit(ReplaceGraphNode(node))){Status(GraphError());return;}
+        RefreshPartTree(node.Id);
+        Status($"{node.Name} oluşturuldu • {width:0.###} × {height:0.###} × {thickness:0.###} mm");
+    }
+
+    private void CreateAngleLibraryProfile()
+    {
+        if(_partSession is null)return;
+        double width=50,height=50,thickness=5;
+        bool Prompt(string title,double initial,Action<double> assign)
+        {
+            var value=initial;
+            var dialog=new DimensionEditDialog(title,initial,"mm",text=>
+            {
+                if(!DimensionNumbers.TryParseScalar(text,out var parsed)||parsed<=1e-9)return "Pozitif ölçü girin.";
+                value=parsed;return null;
+            }){Owner=this};
+            if(dialog.ShowDialog()!=true)return false;
+            assign(value);return true;
+        }
+        if(!Prompt("L Profil Genişliği",width,v=>width=v)||
+           !Prompt("L Profil Yüksekliği",height,v=>height=v)||
+           !Prompt("Et Kalınlığı",thickness,v=>thickness=v))return;
+        if(thickness>=Math.Min(width,height))
+        {
+            Status("Et kalınlığı profil genişlik/yüksekliğinden küçük olmalı.");return;
+        }
+
+        var sketch=new SketchModel(_selectedPlane);
+        var pts=new[]
+        {
+            new Point2d(-width*0.5,-height*0.5),
+            new Point2d(width*0.5,-height*0.5),
+            new Point2d(width*0.5,-height*0.5+thickness),
+            new Point2d(-width*0.5+thickness,-height*0.5+thickness),
+            new Point2d(-width*0.5+thickness,height*0.5),
+            new Point2d(-width*0.5,height*0.5)
+        };
+        var ids=pts.Select(sketch.CreatePointExact).ToArray();
+        for(var i=0;i<ids.Length;i++)sketch.AddLine(ids[i],ids[(i+1)%ids.Length]);
+        if(!sketch.TryGetExtrusionProfile(out _,out _,out _))
+        {
+            Status("L profil kesiti oluşturulamadı.");return;
+        }
+
+        var node=new FeatureNode(Guid.NewGuid(),NextGraphName("Profil L"),
             new SketchFeatureParameters(sketch.Plane,sketch.CaptureSnapshot()));
         if(!_partSession.TryCommit(ReplaceGraphNode(node))){Status(GraphError());return;}
         RefreshPartTree(node.Id);
