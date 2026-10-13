@@ -411,13 +411,13 @@ internal static class FeatureGraphTests
         var memberPath=new SketchModel(StandardPlanes.Top);
         var mp0=memberPath.CreatePointExact(new(0,0));var mp1=memberPath.CreatePointExact(new(100,0));memberPath.AddLine(mp0,mp1);
         var profileNode=new FeatureNode(Guid.NewGuid(),"Profil1",new SketchFeatureParameters(memberProfile.Plane,memberProfile.CaptureSnapshot()));
-        var pathNode=new FeatureNode(Guid.NewGuid(),"Yol1",new SketchFeatureParameters(memberPath.Plane,memberPath.CaptureSnapshot()));
-        var memberNode=new FeatureNode(Guid.NewGuid(),"Yapısal Eleman1",new StructuralMemberFeatureParameters(profileNode.Id,pathNode.Id));
-        var memberDoc=new FeatureDocument(Guid.NewGuid(),new[]{profileNode,pathNode,memberNode});
+        var memberPathNode=new FeatureNode(Guid.NewGuid(),"Yol1",new SketchFeatureParameters(memberPath.Plane,memberPath.CaptureSnapshot()));
+        var memberNode=new FeatureNode(Guid.NewGuid(),"Yapısal Eleman1",new StructuralMemberFeatureParameters(profileNode.Id,memberPathNode.Id));
+        var memberDoc=new FeatureDocument(Guid.NewGuid(),new[]{profileNode,memberPathNode,memberNode});
         var memberClone=FeatureDocumentFile.Clone(memberDoc);
         Check(memberClone.Node(memberNode.Id).Kind==FeatureKind.StructuralMember,
             "structural member profile/path dependency roundtrip");
-        Check(memberClone.Descendants(profileNode.Id).Contains(memberNode.Id)&&memberClone.Descendants(pathNode.Id).Contains(memberNode.Id),
+        Check(memberClone.Descendants(profileNode.Id).Contains(memberNode.Id)&&memberClone.Descendants(memberPathNode.Id).Contains(memberNode.Id),
             "structural member depends on profile and path sketches");
         var endCapNode=new FeatureNode(Guid.NewGuid(),"Uç Kapağı1",new EndCapFeatureParameters(boss.Id,3),
             References:new[]{new FeatureReference(boss.Id,TopologyKind.Face,"F;1200;20;15;20;0;0;1")});
