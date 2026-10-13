@@ -1741,6 +1741,20 @@ public partial class MainWindow : Window
         if (_sketch is not null) ActivateSketchCommand(new CircleSketchCommand(_sketch));
     }
 
+    private void Polygon_Click(object sender,RoutedEventArgs e)
+    {
+        if(_sketch is null)return;
+        var sides=6;
+        var dialog=new DimensionEditDialog("Çokgen Kenar Sayısı",sides,"kenar",text=>
+        {
+            if(!int.TryParse(text,NumberStyles.Integer,CultureInfo.CurrentCulture,out var parsed)||parsed<3||parsed>100)
+                return "Kenar sayısı 3 ile 100 arasında tam sayı olmalı.";
+            sides=parsed;return null;
+        }){Owner=this};
+        if(dialog.ShowDialog()!=true)return;
+        ActivateSketchCommand(new PolygonSketchCommand(_sketch,sides));
+    }
+
     private bool RebuildExtrusion(double depth)
     {
         if (_sketch is null || !double.IsFinite(depth) || Math.Abs(depth) < 1e-9) return false;
