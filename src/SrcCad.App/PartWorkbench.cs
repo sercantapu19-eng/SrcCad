@@ -931,7 +931,7 @@ public partial class MainWindow
         RibFeaturePanel.Visibility=Visibility.Collapsed;ReferenceGeometryPanel.Visibility=Visibility.Collapsed;MirrorFeaturePanel.Visibility=Visibility.Collapsed;
         PatternFeaturePanel.Visibility=Visibility.Collapsed;SheetMetalBasePanel.Visibility=Visibility.Collapsed;SheetMetalConvertPanel.Visibility=Visibility.Collapsed;
         EdgeFlangePanel.Visibility=Visibility.Collapsed;EndCapPanel.Visibility=Visibility.Collapsed;
-        SpatialSketchPanel.Visibility=Visibility.Collapsed;StructuralTrimPanel.Visibility=Visibility.Collapsed;SheetBendPanel.Visibility=Visibility.Collapsed;
+        SpatialSketchPanel.Visibility=Visibility.Collapsed;StructuralTrimPanel.Visibility=Visibility.Collapsed;SheetBendPanel.Visibility=Visibility.Collapsed;SheetFlattenPanel.Visibility=Visibility.Collapsed;
         BodyBooleanPanel.Visibility=Visibility.Collapsed;MoveCopyBodyPanel.Visibility=Visibility.Collapsed;DomePanel.Visibility=Visibility.Collapsed;HoleWizardPanel.Visibility=Visibility.Collapsed;
         PropertyTitle.Text=node.Name;PropertyInfo.Text="Gerçek OCCT yarım-uzay kırpma • parametrik düzlem • canlı B-Rep önizleme";
         ManagerTabs.SelectedItem=PropertyManagerTab;_loadingGraphParameters=false;
@@ -994,7 +994,7 @@ public partial class MainWindow
         EndCapSelectionText.Text=(node.References?.Length??0)==1?"Uç yüzü seçili":"Düzlemsel uç yüzü seçin.";
         EndCapError.Text=(node.References?.Length??0)==1?"":"Yüz seçimi gerekiyor.";
         EndCapPanel.Visibility=Visibility.Visible;
-        GraphFeaturePanel.Visibility=Visibility.Collapsed;SpatialSketchPanel.Visibility=Visibility.Collapsed;StructuralTrimPanel.Visibility=Visibility.Collapsed;SheetBendPanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;SpatialSketchPanel.Visibility=Visibility.Collapsed;StructuralTrimPanel.Visibility=Visibility.Collapsed;SheetBendPanel.Visibility=Visibility.Collapsed;SheetFlattenPanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;
         RevolveFeaturePanel.Visibility=Visibility.Collapsed;MultiSketchFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;
         DraftFeaturePanel.Visibility=Visibility.Collapsed;RibFeaturePanel.Visibility=Visibility.Collapsed;ReferenceGeometryPanel.Visibility=Visibility.Collapsed;
         MirrorFeaturePanel.Visibility=Visibility.Collapsed;PatternFeaturePanel.Visibility=Visibility.Collapsed;SheetMetalBasePanel.Visibility=Visibility.Collapsed;
@@ -2626,28 +2626,90 @@ public partial class MainWindow
             new SheetMetalBendFeatureParameters(baseNode.Id,sketch.Id,90,false)));
     }
 
+    private SheetMetalBendStep[] ActiveSheetBendSteps()
+    {
+        if(_partSession is null)return Array.Empty<SheetMetalBendStep>();
+        var latestFlatten=_partSession.Document.Ordered().LastOrDefault(n=>n.Parameters is SheetMetalFlattenFeatureParameters);
+        if(latestFlatten?.Parameters is SheetMetalFlattenFeatureParameters flatten)
+            return flatten.Refold?flatten.Steps:Array.Empty<SheetMetalBendStep>();
+
+        return _partSession.Document.Ordered()
+            .Where(n=>n.Parameters is SheetMetalBendFeatureParameters)
+            .Select(n=>(SheetMetalBendFeatureParameters)n.Parameters)
+            .GroupBy(b=>(b.SketchId,b.Reverse))
+            .Select(g=>new SheetMetalBendStep(g.Key.SketchId,g.Sum(x=>x.AngleDegrees),g.Key.Reverse))
+            .Where(step=>Math.Abs(step.AngleDegrees)>1e-6)
+            .ToArray();
+    }
+
     private void Unfold_Click(object sender,RoutedEventArgs e)
     {
         if(_inSketch||_extrudeCommandActive||!EnsurePartSession()||_partSession is null)return;
-        var source=_partSession.Document.Ordered().LastOrDefault(n=>n.Parameters is SheetMetalBendFeatureParameters b&&b.AngleDegrees>0);
-        if(source?.Parameters is not SheetMetalBendFeatureParameters bend)
-        {Status("Açınım için önce Çizilmiş Büküm oluşturun.");return;}
-        var baseNode=CurrentSolidFeature();
-        if(baseNode is null)return;
-        BeginSheetBendFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Açınım"),
-            new SheetMetalBendFeatureParameters(baseNode.Id,bend.SketchId,-Math.Abs(bend.AngleDegrees),bend.Reverse)));
+        var baseNode=CurrentSolidFeature();if(baseNode is null)return;
+        var steps=ActiveSheetBendSteps();
+        if(steps.Length==0){Status("Sac zaten düz veya açılacak aktif büküm bulunamadı.");return;}
+        BeginSheetFlattenFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Açınım"),
+            new SheetMetalFlattenFeatureParameters(baseNode.Id,steps,false)));
     }
 
     private void Fold_Click(object sender,RoutedEventArgs e)
     {
         if(_inSketch||_extrudeCommandActive||!EnsurePartSession()||_partSession is null)return;
-        var source=_partSession.Document.Ordered().LastOrDefault(n=>n.Parameters is SheetMetalBendFeatureParameters b&&b.AngleDegrees<0);
-        if(source?.Parameters is not SheetMetalBendFeatureParameters unfold)
-        {Status("Katla için önce Açınım işlemi gerekiyor.");return;}
+        var flat=_partSession.Document.Ordered().LastOrDefault(n=>n.Parameters is SheetMetalFlattenFeatureParameters f&&!f.Refold);
+        if(flat?.Parameters is not SheetMetalFlattenFeatureParameters flatten)
+        {Status("Katla için önce çoklu Açınım işlemi gerekiyor.");return;}
+        var latest=_partSession.Document.Ordered().LastOrDefault(n=>n.Parameters is SheetMetalFlattenFeatureParameters);
+        if(latest?.Parameters is SheetMetalFlattenFeatureParameters current&&current.Refold)
+        {Status("Sac zaten katlanmış durumda.");return;}
         var baseNode=CurrentSolidFeature();if(baseNode is null)return;
-        BeginSheetBendFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Katla"),
-            new SheetMetalBendFeatureParameters(baseNode.Id,unfold.SketchId,Math.Abs(unfold.AngleDegrees),unfold.Reverse)));
+        BeginSheetFlattenFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Katla"),
+            new SheetMetalFlattenFeatureParameters(baseNode.Id,flatten.Steps,true)));
     }
+
+    private void BeginSheetFlattenFeature(FeatureNode node)
+    {
+        if(node.Parameters is not SheetMetalFlattenFeatureParameters flatten)throw new InvalidOperationException("Unsupported sheet flatten.");
+        _graphFeatureEdit=node;_extrudeCommandActive=true;
+        SheetFlattenTitle.Text=flatten.Refold?"Katla":"Açınım";
+        SheetFlattenSummary.Text=string.Join("\n",flatten.Steps.Select((step,i)=>
+            $"{i+1}. {_partSession?.Document.Node(step.SketchId).Name??"Çizim"} • {step.AngleDegrees:0.###}°{(step.Reverse?" • ters":"")}"));
+        SheetFlattenError.Text="";
+        SheetFlattenPanel.Visibility=Visibility.Visible;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;SpatialSketchPanel.Visibility=Visibility.Collapsed;StructuralTrimPanel.Visibility=Visibility.Collapsed;SheetBendPanel.Visibility=Visibility.Collapsed;
+        EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;RevolveFeaturePanel.Visibility=Visibility.Collapsed;
+        MultiSketchFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;DraftFeaturePanel.Visibility=Visibility.Collapsed;
+        RibFeaturePanel.Visibility=Visibility.Collapsed;ReferenceGeometryPanel.Visibility=Visibility.Collapsed;MirrorFeaturePanel.Visibility=Visibility.Collapsed;
+        PatternFeaturePanel.Visibility=Visibility.Collapsed;SheetMetalBasePanel.Visibility=Visibility.Collapsed;SheetMetalConvertPanel.Visibility=Visibility.Collapsed;
+        EdgeFlangePanel.Visibility=Visibility.Collapsed;EndCapPanel.Visibility=Visibility.Collapsed;
+        PropertyTitle.Text=node.Name;
+        PropertyInfo.Text="Tüm aktif bükümler tek parametrik feature içinde ters sırada açılır; Katla aynı büküm setini yeniden uygular.";
+        ManagerTabs.SelectedItem=PropertyManagerTab;
+        UpdateSheetFlattenPreview();RefreshCommandState();
+    }
+
+    private void UpdateSheetFlattenPreview()
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not SheetMetalFlattenFeatureParameters)return;
+        var candidate=ReplaceGraphNode(_graphFeatureEdit);
+        var preview=_partSession.Preview(candidate);
+        var body=preview.Success?LastBody(candidate,id=>preview.Outputs.GetValueOrDefault(id)):null;
+        if(body is not null&&_viewer.PreviewFeatureBody(body))
+        {
+            _viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.72);SheetFlattenError.Text="";return;
+        }
+        _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.0);
+        SheetFlattenError.Text=preview.Report.Nodes.LastOrDefault(n=>n.State==RebuildState.Failed)?.Error??preview.Report.Error??"Açınım/Katla önizlemesi oluşturulamadı.";
+    }
+
+    private void SheetFlattenOk_Click(object sender,RoutedEventArgs e)
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not SheetMetalFlattenFeatureParameters)return;
+        var candidate=ReplaceGraphNode(_graphFeatureEdit);
+        if(!_partSession.TryCommit(candidate)){SheetFlattenError.Text=GraphError();return;}
+        var id=_graphFeatureEdit.Id;EndGraphFeature();RefreshPartTree(id);Status("Sac "+candidate.Node(id).Name+" işlemi onaylandı.");
+    }
+
+    private void SheetFlattenCancel_Click(object sender,RoutedEventArgs e)=>EndGraphFeature();
 
     private void BeginSheetBendFeature(FeatureNode node)
     {
@@ -2800,6 +2862,7 @@ public partial class MainWindow
         if(node.Parameters is SheetMetalBaseFeatureParameters){BeginSheetMetalBaseFeature(node);return;}
         if(node.Parameters is SheetMetalConvertFeatureParameters){BeginSheetMetalConvertFeature(node);return;}
         if(node.Parameters is SheetMetalBendFeatureParameters){BeginSheetBendFeature(node);return;}
+        if(node.Parameters is SheetMetalFlattenFeatureParameters){BeginSheetFlattenFeature(node);return;}
         if(node.Parameters is SheetMetalEdgeFlangeFeatureParameters or SheetMetalMiterFlangeFeatureParameters or SheetMetalJogFeatureParameters){BeginEdgeFlangeFeature(node);return;}
         _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;_depthWheel.Reset();
         var cut=node.Parameters as CutFeatureParameters;
