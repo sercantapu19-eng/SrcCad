@@ -175,10 +175,10 @@
                     <Button Style="{StaticResource CadCommandButton}" Content="Taşı / Döndür" Click="AssemblyMove_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Patlatılmış Görünüm" Click="AssemblyExplode_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Normal Görünüm" Click="AssemblyResetView_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Doğrusal Dizilim" Click="CadCommandPlaceholder_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Dairesel Dizilim" Click="CadCommandPlaceholder_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Bileşen Aynala" Click="CadCommandPlaceholder_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Çakışma Kontrolü" Click="CadCommandPlaceholder_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Doğrusal Dizilim" Click="AssemblyLinearPattern_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Dairesel Dizilim" Click="AssemblyCircularPattern_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Bileşen Aynala" Click="AssemblyMirror_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Çakışma Kontrolü" Click="AssemblyInterference_Click"/>
                 </WrapPanel>
             </TabItem>
             <TabItem Header="TEKNİK RESİM">
@@ -300,6 +300,19 @@
                                 <StackPanel Orientation="Horizontal">
                                     <Button Content="✓" Width="52" Height="34" Click="AssemblyMateOk_Click"/>
                                     <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="AssemblyMateCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="AssemblyPatternPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock x:Name="AssemblyPatternTitle" Text="Bileşen Dizilimi" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <TextBlock Text="Adet"/>
+                                <TextBox x:Name="AssemblyPatternCount" Margin="0,4,0,8"/>
+                                <TextBlock x:Name="AssemblyPatternValueLabel" Text="Aralık (mm)"/>
+                                <TextBox x:Name="AssemblyPatternValue" Margin="0,4,0,8"/>
+                                <CheckBox x:Name="AssemblyPatternCircular" Content="Dairesel" IsHitTestVisible="False" Margin="0,0,0,8"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="✓" Width="52" Height="34" Click="AssemblyPatternOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="AssemblyPatternCancel_Click"/>
                                 </StackPanel>
                             </StackPanel>
 
