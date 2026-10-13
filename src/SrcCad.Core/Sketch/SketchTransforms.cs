@@ -32,6 +32,27 @@ public sealed partial class SketchModel
                     result.Add(AddCircle(centerId,radius,circle.Construction).Id);
                     break;
                 }
+                case SketchArc arc:
+                {
+                    var center=Point(arc.CenterPointId).Position;
+                    var start=Point(arc.StartPointId).Position;var end=Point(arc.EndPointId).Position;
+                    var radius=Point2d.Distance(center,start)+distance;
+                    if(radius<=1e-9)throw new InvalidOperationException("Ofset yay yarıçapını sıfır/negatif yapıyor.");
+                    Point2d Radial(Point2d p)
+                    {
+                        var dx=p.X-center.X;var dy=p.Y-center.Y;var length=Math.Sqrt(dx*dx+dy*dy);
+                        return new Point2d(center.X+dx/length*radius,center.Y+dy/length*radius);
+                    }
+                    var c=CreatePointExact(center);var a=CreatePointExact(Radial(start));var b=CreatePointExact(Radial(end));
+                    result.Add(AddArc(c,a,b,arc.Clockwise,arc.Construction).Id);break;
+                }
+                case SketchEllipse ellipse:
+                {
+                    var rx=ellipse.RadiusX+distance;var ry=ellipse.RadiusY+distance;
+                    if(rx<=1e-9||ry<=1e-9)throw new InvalidOperationException("Ofset elips yarı eksenini sıfır/negatif yapıyor.");
+                    result.Add(AddEllipse(CreatePointExact(Point(ellipse.CenterPointId).Position),rx,ry,ellipse.RotationRadians,ellipse.Construction).Id);
+                    break;
+                }
             }
         }
         if(result.Count==0)throw new InvalidOperationException("Ofset için çizgi veya daire seçin.");
@@ -67,6 +88,23 @@ public sealed partial class SketchModel
                     var center=CreatePointExact(MirrorPoint(Point(circle.CenterPointId).Position,a,b));
                     result.Add(AddCircle(center,circle.Radius,circle.Construction).Id);break;
                 }
+                case SketchArc arc:
+                {
+                    var center=CreatePointExact(MirrorPoint(Point(arc.CenterPointId).Position,a,b));
+                    var start=CreatePointExact(MirrorPoint(Point(arc.StartPointId).Position,a,b));
+                    var end=CreatePointExact(MirrorPoint(Point(arc.EndPointId).Position,a,b));
+                    result.Add(AddArc(center,start,end,!arc.Clockwise,arc.Construction).Id);break;
+                }
+                case SketchEllipse ellipse:
+                {
+                    var originalCenter=Point(ellipse.CenterPointId).Position;
+                    var centerPoint=MirrorPoint(originalCenter,a,b);
+                    var major=new Point2d(originalCenter.X+Math.Cos(ellipse.RotationRadians)*ellipse.RadiusX,
+                                          originalCenter.Y+Math.Sin(ellipse.RotationRadians)*ellipse.RadiusX);
+                    var mirroredMajor=MirrorPoint(major,a,b);
+                    var angle=Math.Atan2(mirroredMajor.Y-centerPoint.Y,mirroredMajor.X-centerPoint.X);
+                    result.Add(AddEllipse(CreatePointExact(centerPoint),ellipse.RadiusX,ellipse.RadiusY,angle,ellipse.Construction).Id);break;
+                }
             }
         }
         if(result.Count==0)throw new InvalidOperationException("Aynalanacak çizgi/daire seçin.");
@@ -84,6 +122,14 @@ public sealed partial class SketchModel
             SketchCircle circle=>AddCircle(
                 CreatePointExact(new Point2d(Point(circle.CenterPointId).Position.X+dx,Point(circle.CenterPointId).Position.Y+dy)),
                 circle.Radius,circle.Construction).Id,
+            SketchArc arc=>AddArc(
+                CreatePointExact(new Point2d(Point(arc.CenterPointId).Position.X+dx,Point(arc.CenterPointId).Position.Y+dy)),
+                CreatePointExact(new Point2d(Point(arc.StartPointId).Position.X+dx,Point(arc.StartPointId).Position.Y+dy)),
+                CreatePointExact(new Point2d(Point(arc.EndPointId).Position.X+dx,Point(arc.EndPointId).Position.Y+dy)),
+                arc.Clockwise,arc.Construction).Id,
+            SketchEllipse ellipse=>AddEllipse(
+                CreatePointExact(new Point2d(Point(ellipse.CenterPointId).Position.X+dx,Point(ellipse.CenterPointId).Position.Y+dy)),
+                ellipse.RadiusX,ellipse.RadiusY,ellipse.RotationRadians,ellipse.Construction).Id,
             _=>throw new NotSupportedException("Bu çizim öğesi henüz dizilim kopyasına uygun değil.")
         };
     }
@@ -94,7 +140,7 @@ public sealed partial class SketchModel
         var length=Math.Sqrt(directionX*directionX+directionY*directionY);
         if(!double.IsFinite(length)||length<=1e-12)throw new ArgumentException("Dizilim yönü sıfır olamaz.");
         var ux=directionX/length;var uy=directionY/length;
-        var source=entityIds.Distinct().Select(Entity).Where(e=>e is SketchLine or SketchCircle).Cast<SketchEntity>().ToArray();
+        var source=entityIds.Distinct().Select(Entity).Where(e=>e is SketchLine or SketchCircle or SketchArc or SketchEllipse).Cast<SketchEntity>().ToArray();
         if(source.Length==0)throw new InvalidOperationException("Dizilim için çizgi/daire seçin.");
         var result=new List<int>();
         for(var i=1;i<count;i++)
@@ -116,6 +162,14 @@ public sealed partial class SketchModel
                 CreatePointExact(Rotate(Point(line.EndPointId).Position)),
                 line.Construction).Id,
             SketchCircle circle=>AddCircle(CreatePointExact(Rotate(Point(circle.CenterPointId).Position)),circle.Radius,circle.Construction).Id,
+            SketchArc arc=>AddArc(
+                CreatePointExact(Rotate(Point(arc.CenterPointId).Position)),
+                CreatePointExact(Rotate(Point(arc.StartPointId).Position)),
+                CreatePointExact(Rotate(Point(arc.EndPointId).Position)),
+                arc.Clockwise,arc.Construction).Id,
+            SketchEllipse ellipse=>AddEllipse(
+                CreatePointExact(Rotate(Point(ellipse.CenterPointId).Position)),ellipse.RadiusX,ellipse.RadiusY,
+                ellipse.RotationRadians+radians,ellipse.Construction).Id,
             _=>throw new NotSupportedException("Bu çizim öğesi henüz dairesel dizilime uygun değil.")
         };
     }
@@ -190,7 +244,7 @@ public sealed partial class SketchModel
     {
         if(!double.IsFinite(angleDegrees)||angleDegrees<=1e-9||angleDegrees>360||count<2||count>500)
             throw new ArgumentException("Geçersiz dairesel dizilim.");
-        var source=entityIds.Distinct().Select(Entity).Where(e=>e is SketchLine or SketchCircle).Cast<SketchEntity>().ToArray();
+        var source=entityIds.Distinct().Select(Entity).Where(e=>e is SketchLine or SketchCircle or SketchArc or SketchEllipse).Cast<SketchEntity>().ToArray();
         if(source.Length==0)throw new InvalidOperationException("Dizilim için çizgi/daire seçin.");
         var total=angleDegrees*Math.PI/180.0;
         var step=Math.Abs(angleDegrees-360)<1e-9?total/count:total/(count-1);
