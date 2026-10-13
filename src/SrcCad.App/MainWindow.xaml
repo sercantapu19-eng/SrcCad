@@ -191,7 +191,7 @@
                     <Button Style="{StaticResource CadCommandButton}" Content="İzdüşüm" Click="DrawingProjectedView_Click" ToolTip="Seçili görünüşten bağlı Üst/Sağ görünüş üretir."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Kesit" Click="DrawingSectionView_Click" ToolTip="Seçili görünüşten model merkezinden geçen gerçek OCCT kesit eğrileri üretir."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Detay" Click="DrawingDetailView_Click" ToolTip="Seçili görünüşten 2× detay görünüşü oluşturur."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Kopuk Görünüm" Click="CadCommandPlaceholder_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Kopuk Görünüm" Click="DrawingBrokenView_Click" ToolTip="Seçili görünüşün orta bölgesini kaldırıp kalıcı kopuk görünüm oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadDimensionIcon}" Content="Akıllı Ölçü" Click="DrawingSmartDimension_Click" ToolTip="Seçili görünüşün gerçek izdüşüm sınırlarından genel X×Y ölçüsü üretir."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Delik Çağrısı" Click="DrawingHoleCallout_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Merkez İşareti" Click="DrawingCenterMark_Click"/>
