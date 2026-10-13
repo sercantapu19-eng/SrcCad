@@ -128,6 +128,14 @@ public partial class MainWindow : Window
         _viewer.Dispose();
     }
 
+    private void FeatureTree_PreviewMouseRightButtonDown(object sender,MouseButtonEventArgs e)
+    {
+        if(e.OriginalSource is not DependencyObject source)return;
+        if(ItemsControl.ContainerFromElement(FeatureTree,source) is not TreeViewItem item)return;
+        item.IsSelected=true;
+        item.Focus();
+    }
+
     private void ViewportPanel_HandleCreated(object? sender, EventArgs e)
     {
         if (_viewer.IsInitialized()) return;
