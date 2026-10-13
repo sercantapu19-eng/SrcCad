@@ -2696,11 +2696,20 @@ namespace SrcCad::Kernel::Occt
     {
         if(!IsInitialized())return;
         eraseList(myState,myState->AssemblyObjects);
+        myState->AssemblyIds.clear();
+        myState->AssemblyTransforms.clear();
         myState->Context->ClearSelected(false);
         myState->Context->UpdateCurrentViewer();
     }
 
     bool OcctViewportBridge::AddAssemblyBody(String^ body,
+                                              double tx,double ty,double tz,
+                                              double rxDegrees,double ryDegrees,double rzDegrees)
+    {
+        return AddAssemblyBody(body,nullptr,tx,ty,tz,rxDegrees,ryDegrees,rzDegrees);
+    }
+
+    bool OcctViewportBridge::AddAssemblyBody(String^ body,String^ componentId,
                                               double tx,double ty,double tz,
                                               double rxDegrees,double ryDegrees,double rzDegrees)
     {
@@ -2725,6 +2734,8 @@ namespace SrcCad::Kernel::Occt
             if(shape.IsNull()||!BRepCheck_Analyzer(shape).IsValid())return false;
             auto ais=displayShape(myState,shape,rgb(0.60,0.66,0.72),AIS_Shaded,true);
             myState->AssemblyObjects.push_back(ais);
+            myState->AssemblyIds.push_back(componentId==nullptr?std::string():msclr::interop::marshal_as<std::string>(componentId));
+            myState->AssemblyTransforms.push_back({tx,ty,tz,rxDegrees,ryDegrees,rzDegrees});
             myState->Context->UpdateCurrentViewer();
             return true;
         }
