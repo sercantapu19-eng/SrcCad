@@ -157,4 +157,6 @@ internal sealed class OcctPartGeometryKernel : IPartGeometryKernel
         => OcctFeatureKernel.EdgeFlange(baseBody,edgeReferences.ToArray(),length,angleDegrees,thickness,bendRadius,reverse);
     public string EndCap(string baseBody,string faceReference,double thickness,bool reverse)
         => OcctFeatureKernel.EndCap(baseBody,faceReference,thickness,reverse);
+    public string WeldBead(string baseBody,IReadOnlyList<string> edgeReferences,double radius)
+        => OcctFeatureKernel.WeldBead(baseBody,edgeReferences.ToArray(),radius);
 }
