@@ -350,16 +350,18 @@ namespace SrcCad::Kernel::Occt
         {
             TopoDS_Face face=TopoDS::Face(faces(i));
             FaceSemanticSignature current;
-            if(!faceSemanticSignature(face,current))continue;
+            if(!faceSemanticSignature(face,current)||current.Type!=wanted.Type)continue;
             const double areaScore=std::abs(std::log(current.Area/wanted.Area));
             gp_Pnt a(current.X,current.Y,current.Z),b(wanted.X,wanted.Y,wanted.Z);
             const double centerScore=a.Distance(b)/std::max(1.0,std::sqrt(wanted.Area));
             gp_Dir currentNormal(current.NX,current.NY,current.NZ);
-            const double normalScore=(1.0-currentNormal.Dot(wantedNormal))*4.0;
-            const double score=areaScore+centerScore+normalScore;
+            const double directionDot=currentNormal.Dot(wantedNormal);
+            const double normalScore=(wanted.Type==1?1.0-std::abs(directionDot):1.0-directionDot)*4.0;
+            const double radiusScore=wanted.Type==1?std::abs(std::log(current.Radius/wanted.Radius))*2.0:0.0;
+            const double score=areaScore+centerScore+normalScore+radiusScore;
             if(score<bestScore){bestScore=score;bestIndex=i;}
         }
-        if(bestIndex==0)throw gcnew InvalidOperationException("Referenced planar face can no longer be resolved.");
+        if(bestIndex==0)throw gcnew InvalidOperationException("Referenced face can no longer be resolved.");
         return TopoDS::Face(faces(bestIndex));
     }
 
