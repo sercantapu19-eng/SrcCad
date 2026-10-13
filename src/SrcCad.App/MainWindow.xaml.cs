@@ -182,8 +182,16 @@ public partial class MainWindow : Window
 
         if (control && key is Key.S or Key.O)
         {
-            if (key == Key.S) SavePart_Click(this,new RoutedEventArgs());
-            else OpenPart_Click(this,new RoutedEventArgs());
+            if(InAssemblyMode)
+            {
+                if(key==Key.S)SaveAssembly_Click(this,new RoutedEventArgs());
+                else OpenAssembly_Click(this,new RoutedEventArgs());
+            }
+            else
+            {
+                if (key == Key.S) SavePart_Click(this,new RoutedEventArgs());
+                else OpenPart_Click(this,new RoutedEventArgs());
+            }
             return true;
         }
 
@@ -2209,6 +2217,7 @@ public partial class MainWindow : Window
 
     private void NewPart_Click(object sender, RoutedEventArgs e)
     {
+        ExitAssemblyMode();
         ResetPartWorkbench();
         _commandManager.Cancel();
         _sketchCommand = null;
