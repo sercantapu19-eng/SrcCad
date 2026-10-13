@@ -336,10 +336,14 @@
                             <StackPanel x:Name="AssemblyMatePanel" Visibility="Collapsed" Margin="0,16,0,0">
                                 <TextBlock Text="Bileşen A" FontWeight="Bold"/>
                                 <ComboBox x:Name="AssemblyMateA" Margin="0,4,0,4"/>
-                                <ComboBox x:Name="AssemblyMateAReference" Margin="0,0,0,8" ToolTip="Orijin, standart düzlem veya eksen referansı"/>
+                                <ComboBox x:Name="AssemblyMateAReference" Margin="0,0,0,4" ToolTip="Orijin, standart düzlem veya eksen referansı" SelectionChanged="AssemblyMateReferenceChanged"/>
+                                <Button Content="Seçili Yüzü A Referansı Yap" Click="AssemblyCaptureMateA_Click" Margin="0,0,0,4"/>
+                                <TextBlock x:Name="AssemblyMateAReferenceText" Text="Standart referans" TextWrapping="Wrap" Foreground="#5F6B76" Margin="0,0,0,8"/>
                                 <TextBlock Text="Bileşen B" FontWeight="Bold"/>
                                 <ComboBox x:Name="AssemblyMateB" Margin="0,4,0,4"/>
-                                <ComboBox x:Name="AssemblyMateBReference" Margin="0,0,0,8" ToolTip="Orijin, standart düzlem veya eksen referansı"/>
+                                <ComboBox x:Name="AssemblyMateBReference" Margin="0,0,0,4" ToolTip="Orijin, standart düzlem veya eksen referansı" SelectionChanged="AssemblyMateReferenceChanged"/>
+                                <Button Content="Seçili Yüzü B Referansı Yap" Click="AssemblyCaptureMateB_Click" Margin="0,0,0,4"/>
+                                <TextBlock x:Name="AssemblyMateBReferenceText" Text="Standart referans" TextWrapping="Wrap" Foreground="#5F6B76" Margin="0,0,0,8"/>
                                 <TextBlock Text="İlişki Tipi" FontWeight="Bold"/>
                                 <ComboBox x:Name="AssemblyMateType" Margin="0,4,0,8"/>
                                 <TextBlock Text="Mesafe / Açı Değeri" FontWeight="Bold"/>
