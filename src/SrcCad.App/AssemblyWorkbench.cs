@@ -46,9 +46,11 @@ public partial class MainWindow
     private void RebuildAssemblyMates(bool reportErrors=true)
     {
         if(_assemblyDocument is null||_assemblyDocument.Mates.All(m=>m.Suppressed))return;
-        var current=_assemblyDocument;
+        var stable=AssemblyDocumentFile.Clone(_assemblyDocument);
+        var current=stable;
         var errors=new List<string>();
         const int maxPasses=8;
+        var converged=false;
         for(var pass=0;pass<maxPasses;pass++)
         {
             var before=current.Components.ToDictionary(c=>c.Id,c=>c.Transform);
@@ -58,12 +60,19 @@ public partial class MainWindow
                 try{current=SolveAssemblyMate(current,mate);}
                 catch(Exception ex){errors.Add(mate.Name+": "+ex.Message);}
             }
+            if(errors.Count>0)break;
             var delta=current.Components.Sum(c=>before.TryGetValue(c.Id,out var old)?AssemblyTransformDelta(old,c.Transform):0);
-            if(delta<1e-7)break;
+            if(delta<1e-7){converged=true;break;}
         }
-        SetAssemblyDocument(current,false);
+
+        if(errors.Count==0&&!converged)
+            errors.Add("Montaj ilişkileri "+maxPasses+" geçişte yakınsamadı.");
+
+        if(errors.Count==0)SetAssemblyDocument(current,false);
+        else _assemblyDocument=stable;
+
         if(reportErrors&&errors.Count>0)
-            Status("Montaj rebuild uyarısı: "+string.Join(" | ",errors.Take(3)));
+            Status("Montaj rebuild uyarısı; son sağlam durum korundu: "+string.Join(" | ",errors.Take(3)));
     }
 
     private void RestoreAssemblyDocument(AssemblyDocument document)
