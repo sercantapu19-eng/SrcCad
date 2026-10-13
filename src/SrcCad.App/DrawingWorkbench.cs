@@ -118,14 +118,54 @@ public partial class MainWindow
             foreach(var view in _drawingDocument.Views.Where(v=>v.SheetId==sheet.Id))
             {
                 var item=new TreeViewItem{Header=$"{view.Name} [{view.Type}] 1:{1.0/view.Scale:0.###}",Tag=view.Id};
+                var menu=new ContextMenu();
+                var del=new MenuItem{Header="Görünüşü Sil"};del.Click+=(_,_)=>DeleteDrawingView(view.Id);menu.Items.Add(del);
+                item.ContextMenu=menu;
                 sheetNode.Items.Add(item);
                 if(selected==view.Id)item.IsSelected=true;
             }
             foreach(var note in _drawingDocument.Annotations.Where(a=>a.SheetId==sheet.Id))
-                sheetNode.Items.Add(new TreeViewItem{Header="Not: "+note.Text,Tag=note.Id});
+            {
+                var item=new TreeViewItem{Header="Not: "+note.Text,Tag=note.Id};
+                var menu=new ContextMenu();
+                var del=new MenuItem{Header="Notu Sil"};del.Click+=(_,_)=>DeleteDrawingAnnotation(note.Id);menu.Items.Add(del);
+                item.ContextMenu=menu;
+                sheetNode.Items.Add(item);
+                if(selected==note.Id)item.IsSelected=true;
+            }
             _drawingRoot.Items.Add(sheetNode);
         }
         FeatureTree.Items.Add(_drawingRoot);ManagerTabs.SelectedItem=FeatureManagerTab;
+    }
+
+    private void DeleteDrawingView(Guid id)
+    {
+        if(_drawingDocument is null)return;
+        var descendants=new HashSet<Guid>{id};
+        bool changed;
+        do
+        {
+            changed=false;
+            foreach(var view in _drawingDocument.Views)
+                if(view.ParentViewId is Guid parent&&descendants.Contains(parent)&&descendants.Add(view.Id))changed=true;
+        }while(changed);
+
+        var next=_drawingDocument with
+        {
+            Views=_drawingDocument.Views.Where(v=>!descendants.Contains(v.Id)).ToArray(),
+            Annotations=_drawingDocument.Annotations.Where(a=>a.ViewId is not Guid viewId||!descendants.Contains(viewId)).ToArray()
+        };
+        SetDrawingDocument(next);
+        RefreshDrawingTree();RenderDrawing();
+        Status(descendants.Count==1?"Görünüş silindi.":$"{descendants.Count} bağlı görünüş silindi.");
+    }
+
+    private void DeleteDrawingAnnotation(Guid id)
+    {
+        if(_drawingDocument is null)return;
+        var next=_drawingDocument with{Annotations=_drawingDocument.Annotations.Where(a=>a.Id!=id).ToArray()};
+        if(next.Annotations.Length==_drawingDocument.Annotations.Length)return;
+        SetDrawingDocument(next);RefreshDrawingTree();RenderDrawing();Status("Teknik resim notu/ölçüsü silindi.");
     }
 
     private void RenderDrawing()
