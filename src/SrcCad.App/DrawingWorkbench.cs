@@ -14,13 +14,55 @@ public partial class MainWindow
     private string? _drawingPath;
     private readonly Dictionary<string,string> _drawingBodies=new(StringComparer.OrdinalIgnoreCase);
     private TreeViewItem? _drawingRoot;
+    private readonly Stack<DrawingDocument> _drawingUndo=new();
+    private readonly Stack<DrawingDocument> _drawingRedo=new();
 
     private bool InDrawingMode=>_drawingDocument is not null;
+
+    private void SetDrawingDocument(DrawingDocument next,bool record=true)
+    {
+        var safe=DrawingDocumentFile.Clone(next);
+        if(record&&_drawingDocument is not null)
+        {
+            _drawingUndo.Push(DrawingDocumentFile.Clone(_drawingDocument));
+            _drawingRedo.Clear();
+        }
+        _drawingDocument=safe;
+    }
+
+    private void ResetDrawingHistory()
+    {
+        _drawingUndo.Clear();_drawingRedo.Clear();
+    }
+
+    private void RestoreDrawingDocument(DrawingDocument document)
+    {
+        _drawingDocument=DrawingDocumentFile.Clone(document);
+        _drawingBodies.Clear();
+        RefreshDrawingTree();
+        RenderDrawing();
+    }
+
+    internal void UndoDrawing()
+    {
+        if(_drawingDocument is null||_drawingUndo.Count==0){Status("Teknik resimde geri alınacak işlem yok.");return;}
+        _drawingRedo.Push(DrawingDocumentFile.Clone(_drawingDocument));
+        RestoreDrawingDocument(_drawingUndo.Pop());
+        Status("Teknik resim işlemi geri alındı.");
+    }
+
+    internal void RedoDrawing()
+    {
+        if(_drawingDocument is null||_drawingRedo.Count==0){Status("Teknik resimde yinelenecek işlem yok.");return;}
+        _drawingUndo.Push(DrawingDocumentFile.Clone(_drawingDocument));
+        RestoreDrawingDocument(_drawingRedo.Pop());
+        Status("Teknik resim işlemi yinelendi.");
+    }
 
     private void ExitDrawingMode()
     {
         if(_drawingRoot is not null)FeatureTree.Items.Remove(_drawingRoot);
-        _drawingRoot=null;_drawingDocument=null;_drawingPath=null;_drawingBodies.Clear();
+        _drawingRoot=null;_drawingDocument=null;_drawingPath=null;_drawingBodies.Clear();ResetDrawingHistory();
         PartNode.Visibility=Visibility.Visible;
     }
 
@@ -170,6 +212,7 @@ public partial class MainWindow
         NewPart_Click(sender,e);
         var sheet=new DrawingSheet(Guid.NewGuid(),"A3",420,297,DrawingProjectionStandard.FirstAngle);
         _drawingDocument=new DrawingDocument(Guid.NewGuid(),new[]{sheet},Array.Empty<DrawingView>(),Array.Empty<DrawingAnnotation>());
+        ResetDrawingHistory();
         _drawingPath=null;PartNode.Visibility=Visibility.Collapsed;
         RefreshDrawingTree();RenderDrawing();CommandTabs.SelectedIndex=5;
         Status("Yeni Teknik Resim • Model Görünümü ile .scpart seçin.");
@@ -187,7 +230,7 @@ public partial class MainWindow
             var sheet=_drawingDocument.Sheets[0];
             var view=new DrawingView(Guid.NewGuid(),"Ön Görünüş",Path.GetFullPath(dialog.FileName),
                 DrawingViewType.Front,sheet.Id,new Point2d(sheet.Width*0.35,sheet.Height*0.55),1.0);
-            _drawingDocument=_drawingDocument with{Views=_drawingDocument.Views.Append(view).ToArray()};
+            SetDrawingDocument(_drawingDocument with{Views=_drawingDocument.Views.Append(view).ToArray()});
             RefreshDrawingTree(view.Id);RenderDrawing();Status("Gerçek B-Rep ön görünüşü teknik resme eklendi.");
         }
         catch(Exception ex){MessageBox.Show(this,ex.Message,"Model görünümü",MessageBoxButton.OK,MessageBoxImage.Error);}
@@ -213,7 +256,7 @@ public partial class MainWindow
         var offset=next==DrawingViewType.Top?new Point2d(0,-90):new Point2d(120,0);
         var view=new DrawingView(Guid.NewGuid(),next==DrawingViewType.Top?"Üst Görünüş":"Sağ Görünüş",
             parent.ModelPath,next,parent.SheetId,new Point2d(parent.Position.X+offset.X,parent.Position.Y+offset.Y),parent.Scale,parent.Id);
-        _drawingDocument=_drawingDocument with{Views=_drawingDocument.Views.Append(view).ToArray()};
+        SetDrawingDocument(_drawingDocument with{Views=_drawingDocument.Views.Append(view).ToArray()});
         RefreshDrawingTree(view.Id);RenderDrawing();Status(view.Name+" oluşturuldu.");
     }
 
@@ -238,7 +281,7 @@ public partial class MainWindow
             var right=Vector3d.Cross(up.Normalized(),direction.Normalized()).Normalized();
             var section=new DrawingView(Guid.NewGuid(),"KESİT A-A",parent.ModelPath,DrawingViewType.Section,parent.SheetId,
                 new Point2d(parent.Position.X+125,parent.Position.Y),parent.Scale,parent.Id,null,center,right);
-            _drawingDocument=_drawingDocument with{Views=_drawingDocument.Views.Append(section).ToArray()};
+            SetDrawingDocument(_drawingDocument with{Views=_drawingDocument.Views.Append(section).ToArray()});
             RefreshDrawingTree(section.Id);RenderDrawing();Status("Gerçek OCCT kesit eğrileriyle KESİT A-A oluşturuldu.");
         }
         catch(Exception ex){Status("Kesit oluşturulamadı: "+ex.Message);}
@@ -259,7 +302,7 @@ public partial class MainWindow
             var broken=new DrawingView(Guid.NewGuid(),"KOPUK "+parent.Name,parent.ModelPath,DrawingViewType.Broken,parent.SheetId,
                 new Point2d(parent.Position.X+125,parent.Position.Y-80),parent.Scale,parent.Id,
                 BreakStart:min+width*0.40,BreakEnd:min+width*0.60);
-            _drawingDocument=_drawingDocument with{Views=_drawingDocument.Views.Append(broken).ToArray()};
+            SetDrawingDocument(_drawingDocument with{Views=_drawingDocument.Views.Append(broken).ToArray()});
             RefreshDrawingTree(broken.Id);RenderDrawing();Status("Kopuk görünüm oluşturuldu; orta %20 bölge kaldırıldı.");
         }
         catch(Exception ex){Status("Kopuk görünüm oluşturulamadı: "+ex.Message);}
@@ -272,7 +315,7 @@ public partial class MainWindow
         if(parent is null){Status("Detay için ana görünüşü FeatureManager'dan seçin.");return;}
         var detail=new DrawingView(Guid.NewGuid(),"DETAY A",parent.ModelPath,DrawingViewType.Detail,parent.SheetId,
             new Point2d(parent.Position.X+125,parent.Position.Y-85),parent.Scale*2,parent.Id);
-        _drawingDocument=_drawingDocument with{Views=_drawingDocument.Views.Append(detail).ToArray()};
+        SetDrawingDocument(_drawingDocument with{Views=_drawingDocument.Views.Append(detail).ToArray()});
         RefreshDrawingTree(detail.Id);RenderDrawing();Status("DETAY A görünüşü 2× ölçekle oluşturuldu.");
     }
 
@@ -329,7 +372,7 @@ public partial class MainWindow
             var y=(circles[1]-data.Cy)*view.Scale+view.Position.Y;
             var text=$"Ø{circles[2]*2:0.###}";
             var note=new DrawingAnnotation(Guid.NewGuid(),view.SheetId,view.Id,new Point2d(x+20,y+20),text);
-            _drawingDocument=_drawingDocument with{Annotations=_drawingDocument.Annotations.Append(note).ToArray()};
+            SetDrawingDocument(_drawingDocument with{Annotations=_drawingDocument.Annotations.Append(note).ToArray()});
             RefreshDrawingTree(note.Id);RenderDrawing();Status("Delik çağrısı eklendi: "+text);
         }
         catch(Exception ex){Status("Delik çağrısı oluşturulamadı: "+ex.Message);}
@@ -352,7 +395,7 @@ public partial class MainWindow
             var width=(xs.Max()-xs.Min());var height=(ys.Max()-ys.Min());
             var note=new DrawingAnnotation(Guid.NewGuid(),view.SheetId,view.Id,
                 new Point2d(view.Position.X,view.Position.Y+65),$"GENEL: {width:0.###} × {height:0.###} mm");
-            _drawingDocument=_drawingDocument with{Annotations=_drawingDocument.Annotations.Append(note).ToArray()};
+            SetDrawingDocument(_drawingDocument with{Annotations=_drawingDocument.Annotations.Append(note).ToArray()});
             RefreshDrawingTree(note.Id);RenderDrawing();Status("Model izdüşümünden genel ölçüler eklendi.");
         }
         catch(Exception ex){Status("Ölçü oluşturulamadı: "+ex.Message);}
@@ -363,7 +406,7 @@ public partial class MainWindow
         if(_drawingDocument is null)return;
         var sheet=_drawingDocument.Sheets[0];
         var note=new DrawingAnnotation(Guid.NewGuid(),sheet.Id,SelectedDrawingView()?.Id,new Point2d(20,20),"NOT");
-        _drawingDocument=_drawingDocument with{Annotations=_drawingDocument.Annotations.Append(note).ToArray()};
+        SetDrawingDocument(_drawingDocument with{Annotations=_drawingDocument.Annotations.Append(note).ToArray()});
         RefreshDrawingTree(note.Id);RenderDrawing();Status("Teknik resim notu eklendi.");
     }
 
@@ -386,7 +429,7 @@ public partial class MainWindow
             var sheet=_drawingDocument.Sheets[0];
             var text="BOM\n"+string.Join("\n",lines);
             var note=new DrawingAnnotation(Guid.NewGuid(),sheet.Id,view.Id,new Point2d(sheet.Width-120,30),text);
-            _drawingDocument=_drawingDocument with{Annotations=_drawingDocument.Annotations.Append(note).ToArray()};
+            SetDrawingDocument(_drawingDocument with{Annotations=_drawingDocument.Annotations.Append(note).ToArray()});
             RefreshDrawingTree(note.Id);RenderDrawing();
         }
         Status($"{groups.Length} kalem BOM oluşturuldu.");
@@ -401,7 +444,7 @@ public partial class MainWindow
         var number=_drawingDocument.Annotations.Count(a=>a.Text.StartsWith("BALON ",StringComparison.Ordinal))+1;
         var note=new DrawingAnnotation(Guid.NewGuid(),sheet.Id,view.Id,
             new Point2d(view.Position.X+35,view.Position.Y+35),"BALON "+number);
-        _drawingDocument=_drawingDocument with{Annotations=_drawingDocument.Annotations.Append(note).ToArray()};
+        SetDrawingDocument(_drawingDocument with{Annotations=_drawingDocument.Annotations.Append(note).ToArray()});
         RefreshDrawingTree(note.Id);RenderDrawing();Status("Balon "+number+" eklendi.");
     }
 
@@ -426,7 +469,7 @@ public partial class MainWindow
         try
         {
             NewDrawing_Click(sender,e);
-            _drawingDocument=DrawingDocumentFile.Load(dialog.FileName);_drawingPath=dialog.FileName;
+            _drawingDocument=DrawingDocumentFile.Load(dialog.FileName);ResetDrawingHistory();_drawingPath=dialog.FileName;
             _drawingBodies.Clear();RefreshDrawingTree();RenderDrawing();
             Status("Teknik resim açıldı: "+Path.GetFileName(dialog.FileName));
         }
