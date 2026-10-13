@@ -2546,6 +2546,9 @@ public partial class MainWindow : Window
         _hasSolid = false;
         _editingExtrude = false;
         _featureHistory.Clear();
+        _inspectMeasureMode=false;
+        MeasureStatusText.Text="";
+        StatusUnitText.Text="mm";
         _extrudeCommandActive = false;
         ExtrudePanel.Visibility = Visibility.Collapsed;
         SketchTab.IsEnabled = false;
@@ -2572,6 +2575,12 @@ public partial class MainWindow : Window
 
     private void RefreshCommandState()
     {
+        if(_inspectMeasureMode&&(_inSketch||_extrudeCommandActive||InAssemblyMode||InDrawingMode))
+        {
+            _inspectMeasureMode=false;
+            MeasureStatusText.Text="";
+            StatusUnitText.Text="mm";
+        }
         StartSketchButton.IsEnabled = !_inSketch && !_extrudeCommandActive;
         StartSketchButton.Content = "Çizim";
         CancelSourceSketchEditButton.Visibility = _sourceSketchEditBefore is null && _graphSketchEdit is null ? Visibility.Collapsed : Visibility.Visible;
