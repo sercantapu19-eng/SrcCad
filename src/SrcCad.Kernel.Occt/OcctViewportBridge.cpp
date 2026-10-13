@@ -35,6 +35,8 @@
 #include <BRepBuilderAPI_Transform.hxx>
 #include <BRepPrimAPI_MakePrism.hxx>
 #include <BRepPrimAPI_MakeCylinder.hxx>
+#include <BRepPrimAPI_MakeSphere.hxx>
+#include <BRepPrimAPI_MakeCone.hxx>
 #include <BRepPrimAPI_MakeRevol.hxx>
 #include <BRepCheck_Analyzer.hxx>
 #include <BRepGProp.hxx>
@@ -2032,6 +2034,195 @@ namespace SrcCad::Kernel::Occt
             const double after=featureVolume(result);
             if(after-before<=std::max(1e-8,before*1e-10))
                 throw gcnew InvalidOperationException("End cap adds no material; reverse the direction or select an outer end face.");
+            return encodeFeature(result);
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
+    static String^ encodeCompound(const std::vector<TopoDS_Shape>& shapes)
+    {
+        TopoDS_Compound compound;BRep_Builder builder;builder.MakeCompound(compound);
+        for(const auto& shape:shapes)if(!shape.IsNull())builder.Add(compound,shape);
+        if(shapes.empty())throw gcnew InvalidOperationException("Compound requires at least one shape.");
+        return encodeFeature(compound);
+    }
+
+    String^ OcctFeatureKernel::Boolean(String^ bodyA,String^ bodyB,int operation)
+    {
+        if(operation<0||operation>2)throw gcnew ArgumentException("Invalid body boolean operation.");
+        try
+        {
+            TopoDS_Shape a=decodeFeature(bodyA),b=decodeFeature(bodyB),result;
+            if(operation==0)
+            {
+                BRepAlgoAPI_Fuse op(a,b);op.Build();if(!op.IsDone())throw gcnew InvalidOperationException("OCCT boolean add failed.");result=op.Shape();
+            }
+            else if(operation==1)
+            {
+                BRepAlgoAPI_Cut op(a,b);op.Build();if(!op.IsDone())throw gcnew InvalidOperationException("OCCT boolean subtract failed.");result=op.Shape();
+            }
+            else
+            {
+                BRepAlgoAPI_Common op(a,b);op.Build();if(!op.IsDone())throw gcnew InvalidOperationException("OCCT boolean common failed.");result=op.Shape();
+            }
+            if(result.IsNull())throw gcnew InvalidOperationException("Boolean result is empty.");
+            if(operation!=2)featureVolume(result);
+            else
+            {
+                GProp_GProps props;BRepGProp::VolumeProperties(result,props);
+                if(props.Mass()<=1e-9)throw gcnew InvalidOperationException("Boolean common has no shared volume.");
+            }
+            return encodeFeature(result);
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
+    String^ OcctFeatureKernel::MoveCopy(String^ baseBody,array<double>^ transform6,bool keepOriginal)
+    {
+        try
+        {
+            TopoDS_Shape original=decodeFeature(baseBody);
+            TopoDS_Shape moved=transformedFeatureBody(baseBody,transform6);
+            if(!keepOriginal)return encodeFeature(moved);
+            return encodeCompound({original,moved});
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
+    String^ OcctFeatureKernel::PatternOffsets(String^ baseBody,array<double>^ offsets)
+    {
+        if(offsets==nullptr||offsets->Length<3||(offsets->Length%3)!=0)
+            throw gcnew ArgumentException("Pattern offsets require XYZ triplets.");
+        try
+        {
+            TopoDS_Shape seed=decodeFeature(baseBody);
+            std::vector<TopoDS_Shape> shapes{seed};
+            for(int i=0;i<offsets->Length;i+=3)
+            {
+                if(!std::isfinite(offsets[i])||!std::isfinite(offsets[i+1])||!std::isfinite(offsets[i+2]))
+                    throw gcnew ArgumentException("Invalid pattern offset.");
+                gp_Trsf tr;tr.SetTranslation(gp_Vec(offsets[i],offsets[i+1],offsets[i+2]));
+                shapes.push_back(BRepBuilderAPI_Transform(seed,tr,true).Shape());
+            }
+            return encodeCompound(shapes);
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
+    String^ OcctFeatureKernel::SplitToPlane(String^ baseBody,array<double>^ planeFrame)
+    {
+        try
+        {
+            String^ positive=TrimToPlane(baseBody,planeFrame,true);
+            String^ negative=TrimToPlane(baseBody,planeFrame,false);
+            return encodeCompound({decodeFeature(positive),decodeFeature(negative)});
+        }
+        catch(System::Exception^ ex){throw gcnew InvalidOperationException("Split body failed: "+ex->Message,ex);}
+    }
+
+    String^ OcctFeatureKernel::Dome(String^ baseBody,String^ faceReference,double height)
+    {
+        if(!std::isfinite(height)||std::abs(height)<=1e-9)throw gcnew ArgumentException("Dome height must be non-zero.");
+        try
+        {
+            TopoDS_Shape baseShape=decodeFeature(baseBody);
+            const double before=featureVolume(baseShape);
+            TopoDS_Face support=resolveFaceReference(baseShape,faceReference);
+            gp_Pnt origin;gp_Dir u,v,normal;
+            if(!planarFaceFrame(support,origin,u,v,normal))throw gcnew InvalidOperationException("Dome requires a planar face.");
+            GProp_GProps props;BRepGProp::SurfaceProperties(support,props);
+            gp_Pnt center=props.CentreOfMass();
+            double rimRadius=0.0;
+            for(TopExp_Explorer ex(support,TopAbs_VERTEX);ex.More();ex.Next())
+                rimRadius=std::max(rimRadius,center.Distance(BRep_Tool::Pnt(TopoDS::Vertex(ex.Current()))));
+            if(rimRadius<=1e-9)throw gcnew InvalidOperationException("Dome face has no usable boundary radius.");
+
+            const double h=std::abs(height);
+            const double sphereRadius=(rimRadius*rimRadius+h*h)/(2.0*h);
+            gp_Vec n(normal.X(),normal.Y(),normal.Z());
+            if(height<0)n.Reverse();
+            gp_Pnt sphereCenter=center.Translated(n.Multiplied(-(sphereRadius-h)));
+            BRepPrimAPI_MakeSphere sphere(sphereCenter,sphereRadius);
+            TopoDS_Shape sphereShape=sphere.Shape();
+
+            Bnd_Box bounds;BRepBndLib::Add(baseShape,bounds);
+            double xmin,ymin,zmin,xmax,ymax,zmax;bounds.Get(xmin,ymin,zmin,xmax,ymax,zmax);
+            const double extent=std::max(100.0,gp_Pnt(xmin,ymin,zmin).Distance(gp_Pnt(xmax,ymax,zmax))*4.0+10.0);
+
+            gp_Pnt p0=center.Translated(gp_Vec(u.X(),u.Y(),u.Z()).Multiplied(-extent)).Translated(gp_Vec(v.X(),v.Y(),v.Z()).Multiplied(-extent));
+            gp_Pnt p1=center.Translated(gp_Vec(u.X(),u.Y(),u.Z()).Multiplied(extent)).Translated(gp_Vec(v.X(),v.Y(),v.Z()).Multiplied(-extent));
+            gp_Pnt p2=center.Translated(gp_Vec(u.X(),u.Y(),u.Z()).Multiplied(extent)).Translated(gp_Vec(v.X(),v.Y(),v.Z()).Multiplied(extent));
+            gp_Pnt p3=center.Translated(gp_Vec(u.X(),u.Y(),u.Z()).Multiplied(-extent)).Translated(gp_Vec(v.X(),v.Y(),v.Z()).Multiplied(extent));
+            BRepBuilderAPI_MakePolygon poly;poly.Add(p0);poly.Add(p1);poly.Add(p2);poly.Add(p3);poly.Close();
+            BRepBuilderAPI_MakeFace planeFace(poly.Wire(),true);
+            BRepPrimAPI_MakePrism halfPrism(planeFace.Face(),n.Multiplied(extent*2.0),true,true);
+            BRepAlgoAPI_Common capOp(sphereShape,halfPrism.Shape());capOp.Build();
+            if(!capOp.IsDone())throw gcnew InvalidOperationException("Dome cap intersection failed.");
+            TopoDS_Shape cap=capOp.Shape();
+
+            if(height>0)
+            {
+                BRepAlgoAPI_Fuse fuse(baseShape,cap);fuse.Build();
+                if(!fuse.IsDone())throw gcnew InvalidOperationException("OCCT dome fuse failed.");
+                TopoDS_Shape result=fuse.Shape();
+                if(featureVolume(result)<=before+std::max(1e-8,before*1e-10))throw gcnew InvalidOperationException("Dome adds no material.");
+                return encodeFeature(result);
+            }
+            else
+            {
+                BRepAlgoAPI_Cut cut(baseShape,cap);cut.Build();
+                if(!cut.IsDone())throw gcnew InvalidOperationException("OCCT inward dome cut failed.");
+                TopoDS_Shape result=cut.Shape();
+                if(featureVolume(result)>=before-std::max(1e-8,before*1e-10))throw gcnew InvalidOperationException("Inward dome removes no material.");
+                return encodeFeature(result);
+            }
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
+    String^ OcctFeatureKernel::HoleWizard(String^ baseBody,String^ faceReference,
+        double centerX,double centerY,double centerZ,double diameter,double depth,int type,
+        double counterDiameter,double counterDepth,bool reverse)
+    {
+        if(type<0||type>2)throw gcnew ArgumentException("Invalid hole wizard type.");
+        if(type==0)return Hole(baseBody,faceReference,centerX,centerY,centerZ,diameter,depth,false,reverse);
+        if(!std::isfinite(counterDiameter)||counterDiameter<=diameter||!std::isfinite(counterDepth)||counterDepth<=1e-9)
+            throw gcnew ArgumentException("Invalid counterbore/countersink dimensions.");
+        try
+        {
+            TopoDS_Shape baseShape=decodeFeature(baseBody);
+            const double before=featureVolume(baseShape);
+            TopoDS_Face support=resolveFaceReference(baseShape,faceReference);
+            gp_Pnt origin;gp_Dir u,v,normal;
+            if(!planarFaceFrame(support,origin,u,v,normal))throw gcnew InvalidOperationException("Hole Wizard requires a planar face.");
+            gp_Pnt requested(centerX,centerY,centerZ);
+            gp_Vec normalVec(normal.X(),normal.Y(),normal.Z());
+            const double offset=gp_Vec(origin,requested).Dot(normalVec);
+            gp_Pnt center=requested.Translated(normalVec.Multiplied(-offset));
+            gp_Dir direction=normal;if(reverse)direction.Reverse();
+            const double epsilon=std::max(1e-6,depth*1e-7);
+            gp_Vec d(direction.X(),direction.Y(),direction.Z());
+            gp_Pnt start=center.Translated(d.Multiplied(-epsilon));
+
+            BRepPrimAPI_MakeCylinder mainCylinder(gp_Ax2(start,direction),diameter*0.5,depth+epsilon);
+            TopoDS_Shape tool=mainCylinder.Shape();
+            TopoDS_Shape counter;
+            if(type==1)
+            {
+                BRepPrimAPI_MakeCylinder cb(gp_Ax2(start,direction),counterDiameter*0.5,counterDepth+epsilon);
+                counter=cb.Shape();
+            }
+            else
+            {
+                BRepPrimAPI_MakeCone cs(gp_Ax2(start,direction),counterDiameter*0.5,diameter*0.5,counterDepth+epsilon);
+                counter=cs.Shape();
+            }
+            BRepAlgoAPI_Fuse fuseTools(tool,counter);fuseTools.Build();
+            if(!fuseTools.IsDone())throw gcnew InvalidOperationException("Hole Wizard tool fuse failed.");
+            BRepAlgoAPI_Cut cut(baseShape,fuseTools.Shape());cut.Build();
+            if(!cut.IsDone())throw gcnew InvalidOperationException("OCCT Hole Wizard cut failed.");
+            TopoDS_Shape result=cut.Shape();
+            if(before-featureVolume(result)<=std::max(1e-8,before*1e-10))throw gcnew InvalidOperationException("Hole Wizard removes no material.");
             return encodeFeature(result);
         }
         catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
