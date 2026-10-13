@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using Microsoft.Win32;
 using SrcCad.Core.Features;
 using SrcCad.Core.Geometry;
 using SrcCad.Core.Sketch;
@@ -29,6 +30,67 @@ public partial class MainWindow
         int number=1;while(names.Contains(prefix+number))number++;
         return prefix+number;
     }
+    private void ImportCad_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive)return;
+        var dialog=new OpenFileDialog
+        {
+            Title="STEP / IGES İçe Aktar",
+            Filter="CAD Değişim (*.step;*.stp;*.iges;*.igs)|*.step;*.stp;*.iges;*.igs|STEP (*.step;*.stp)|*.step;*.stp|IGES (*.iges;*.igs)|*.iges;*.igs"
+        };
+        if(dialog.ShowDialog(this)!=true)return;
+        try
+        {
+            var extension=Path.GetExtension(dialog.FileName).ToLowerInvariant();
+            var format=extension is ".step" or ".stp"?"STEP":"IGES";
+            var body=format=="STEP"
+                ?SrcCad.Kernel.Occt.OcctFeatureKernel.ImportStep(dialog.FileName)
+                :SrcCad.Kernel.Occt.OcctFeatureKernel.ImportIges(dialog.FileName);
+            _=SrcCad.Kernel.Occt.OcctFeatureKernel.Inspect(body);
+
+            NewPart_Click(sender,e);
+            var node=new FeatureNode(Guid.NewGuid(),"İçe Aktarılan "+format,new ImportedBodyFeatureParameters(format,body));
+            var document=new FeatureDocument(Guid.NewGuid(),new[]{node});
+            _partSession=new FeatureSession<PartFeatureOutput>(
+                document,new PartFeatureEvaluator(new OcctPartGeometryKernel()),PublishGraph);
+            RefreshPartTree(node.Id);
+            _viewer.FitAll();
+            Status($"{format} içe aktarıldı • gerçek OCCT B-Rep • .scpart içine gömülü ve kaynak dosyadan bağımsız.");
+        }
+        catch(Exception ex)
+        {
+            MessageBox.Show(this,ex.Message,"CAD içe aktarımı başarısız",MessageBoxButton.OK,MessageBoxImage.Error);
+        }
+    }
+
+    private void ExportStep_Click(object sender,RoutedEventArgs e)=>ExportCadExchange(true);
+    private void ExportIges_Click(object sender,RoutedEventArgs e)=>ExportCadExchange(false);
+
+    private void ExportCadExchange(bool step)
+    {
+        var body=CurrentBodyBRep();
+        if(body is null){Status("Dışa aktarılacak katı gövde yok.");return;}
+        var dialog=new SaveFileDialog
+        {
+            Title=step?"STEP Olarak Dışa Aktar":"IGES Olarak Dışa Aktar",
+            Filter=step?"STEP (*.step)|*.step":"IGES (*.iges)|*.iges",
+            DefaultExt=step?".step":".iges",
+            AddExtension=true,
+            FileName=step?"SrcCad_Model.step":"SrcCad_Model.iges"
+        };
+        if(dialog.ShowDialog(this)!=true)return;
+        try
+        {
+            if(step)SrcCad.Kernel.Occt.OcctFeatureKernel.ExportStep(body,dialog.FileName);
+            else SrcCad.Kernel.Occt.OcctFeatureKernel.ExportIges(body,dialog.FileName);
+            Status((step?"STEP":"IGES")+" oluşturuldu: "+Path.GetFileName(dialog.FileName));
+        }
+        catch(Exception ex)
+        {
+            MessageBox.Show(this,ex.Message,"CAD dışa aktarımı başarısız",MessageBoxButton.OK,MessageBoxImage.Error);
+        }
+    }
+
     private bool EnsurePartSession()
     {
         if(_partSession is not null)return true;
@@ -2937,6 +2999,11 @@ public partial class MainWindow
         if(_inSketch||_extrudeCommandActive||_partSession is null)return;
         var node=_partSession.Document.Node(id);
         if(node.Suppressed){Status("Düzenlemeden önce baskılamayı kaldırın.");return;}
+        if(node.Kind==FeatureKind.ImportedBody)
+        {
+            Status("İçe aktarılan gövde kaynak feature'dır; Taşı/Kopyala, Split, Boolean ve diğer UNSURLAR bunun üzerine uygulanabilir.");
+            return;
+        }
         if(node.Kind==FeatureKind.Sketch)BeginGraphSketch(node);
         else if(node.Kind==FeatureKind.SpatialSketch)BeginSpatialSketchFeature(node);
         else BeginGraphFeature(node);
