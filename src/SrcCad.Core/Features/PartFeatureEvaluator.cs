@@ -23,6 +23,10 @@ public interface IPartGeometryKernel
     string LinearPattern(string baseBody,Vector3d direction,double spacing,int count);
     string CircularPattern(string baseBody,Vector3d axisOrigin,Vector3d axisDirection,double angleDegrees,int count);
     string EdgeFlange(string baseBody,IReadOnlyList<string> edgeReferences,double length,double angleDegrees,double thickness,double bendRadius,bool reverse);
+    string Hem(string baseBody,IReadOnlyList<string> edgeReferences,double width,double thickness,double bendRadius,bool reverse);
+    string Jog(string baseBody,IReadOnlyList<string> edgeReferences,double height,double offset,double thickness,bool reverse);
+    string Rip(string baseBody,IReadOnlyList<string> edgeReferences,double gap);
+    string CornerRelief(string baseBody,IReadOnlyList<string> edgeReferences,double radius);
     string EndCap(string baseBody,string faceReference,double thickness,bool reverse);
     string WeldBead(string baseBody,IReadOnlyList<string> edgeReferences,double radius);
 }
@@ -82,6 +86,10 @@ public sealed class PartFeatureEvaluator(IPartGeometryKernel kernel) : IFeatureE
             SheetMetalMiterFlangeFeatureParameters s => new(null,kernel.EdgeFlange(Base(s.BaseFeatureId),EdgeReferences(s.BaseFeatureId),
                 s.Length,s.AngleDegrees,s.Thickness,s.BendRadius,s.Reverse)),
             SheetMetalConvertFeatureParameters s => new(null,Base(s.BaseFeatureId)),
+            SheetMetalHemFeatureParameters s => new(null,kernel.Hem(Base(s.BaseFeatureId),EdgeReferences(s.BaseFeatureId),s.Width,s.Thickness,s.BendRadius,s.Reverse)),
+            SheetMetalJogFeatureParameters s => new(null,kernel.Jog(Base(s.BaseFeatureId),EdgeReferences(s.BaseFeatureId),s.Height,s.Offset,s.Thickness,s.Reverse)),
+            SheetMetalRipFeatureParameters s => new(null,kernel.Rip(Base(s.BaseFeatureId),EdgeReferences(s.BaseFeatureId),s.Gap)),
+            SheetMetalCornerReliefFeatureParameters s => new(null,kernel.CornerRelief(Base(s.BaseFeatureId),EdgeReferences(s.BaseFeatureId),s.Radius)),
             StructuralMemberFeatureParameters s => new(null,kernel.Sweep(null,Sketch(s.ProfileSketchId),Sketch(s.PathSketchId))),
             EndCapFeatureParameters e => new(null,kernel.EndCap(Base(e.BaseFeatureId),
                 (node.References??Array.Empty<FeatureReference>()).Single(r=>r.Kind==TopologyKind.Face&&r.ProducerId==e.BaseFeatureId).SemanticName,
