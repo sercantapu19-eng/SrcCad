@@ -118,6 +118,25 @@ public partial class MainWindow
     private void DrawingPreviousSheet_Click(object sender,RoutedEventArgs e)=>ChangeDrawingSheet(-1);
     private void DrawingNextSheet_Click(object sender,RoutedEventArgs e)=>ChangeDrawingSheet(1);
 
+    private void DrawingDeleteSheet_Click(object sender,RoutedEventArgs e)
+    {
+        if(_drawingDocument is null)return;
+        var active=ActiveDrawingSheet();
+        try
+        {
+            var index=Array.FindIndex(_drawingDocument.Sheets,s=>s.Id==active.Id);
+            var nextId=index>0?_drawingDocument.Sheets[index-1].Id:_drawingDocument.Sheets[index+1].Id;
+            SetDrawingDocument(_drawingDocument.RemoveSheet(active.Id));
+            _activeDrawingSheetId=nextId;
+            RefreshDrawingTree();RenderDrawing();
+            Status(active.Name+" silindi; bağlı görünüş ve notlar kaldırıldı.");
+        }
+        catch(InvalidOperationException ex)
+        {
+            Status(ex.Message);
+        }
+    }
+
     private static (Vector3d Direction,Vector3d Up) DrawingOrientation(DrawingViewType type)
         => type switch
         {
@@ -738,7 +757,9 @@ public partial class MainWindow
     private DrawingView? SelectedDrawingView()
     {
         if(_drawingDocument is null||(FeatureTree.SelectedItem as TreeViewItem)?.Tag is not Guid id)return null;
-        return _drawingDocument.Views.FirstOrDefault(v=>v.Id==id);
+        var view=_drawingDocument.Views.FirstOrDefault(v=>v.Id==id);
+        if(view is not null)_activeDrawingSheetId=view.SheetId;
+        return view;
     }
 
     private void DrawingProjectedView_Click(object sender,RoutedEventArgs e)
