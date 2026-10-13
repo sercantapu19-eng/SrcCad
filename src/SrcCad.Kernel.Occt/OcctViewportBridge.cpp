@@ -143,6 +143,51 @@ namespace SrcCad::Kernel::Occt
                       oz + uz * u + vz * v);
     }
 
+    static TopoDS_Shape rotateShapeDegrees(const TopoDS_Shape& input,const gp_Ax1& axis,double degrees)
+    {
+        if(std::abs(degrees)<=1e-12)return input;
+        gp_Trsf tr;
+        tr.SetRotation(axis,degrees*3.14159265358979323846/180.0);
+        return BRepBuilderAPI_Transform(input,tr,true).Shape();
+    }
+
+    static TopoDS_Shape makeStripPrism(const gp_Pnt& p0,const gp_Pnt& p1,const gp_Pnt& p2,const gp_Pnt& p3,
+                                       const gp_Vec& extrusion)
+    {
+        BRepBuilderAPI_MakePolygon poly;
+        poly.Add(p0);poly.Add(p1);poly.Add(p2);poly.Add(p3);poly.Close();
+        if(!poly.IsDone())throw gcnew InvalidOperationException("Strip profile failed.");
+        BRepBuilderAPI_MakeFace face(poly.Wire(),true);
+        if(!face.IsDone())throw gcnew InvalidOperationException("Strip face failed.");
+        BRepPrimAPI_MakePrism prism(face.Face(),extrusion,true,true);
+        TopoDS_Shape shape=prism.Shape();
+        if(shape.IsNull()||!BRepCheck_Analyzer(shape).IsValid())
+            throw gcnew InvalidOperationException("Strip prism failed.");
+        return shape;
+    }
+
+    static TopoDS_Shape intersectBendHalf(const TopoDS_Shape& baseShape,const gp_Pnt& a,
+                                          const gp_Vec& tangent,const gp_Vec& normal,const gp_Vec& split,
+                                          double extent,gp_Vec direction,double planeShift)
+    {
+        gp_Pnt origin=a.Translated(split.Multiplied(planeShift));
+        gp_Pnt p0=origin.Translated(tangent.Multiplied(-extent)).Translated(normal.Multiplied(-extent));
+        gp_Pnt p1=origin.Translated(tangent.Multiplied(extent)).Translated(normal.Multiplied(-extent));
+        gp_Pnt p2=origin.Translated(tangent.Multiplied(extent)).Translated(normal.Multiplied(extent));
+        gp_Pnt p3=origin.Translated(tangent.Multiplied(-extent)).Translated(normal.Multiplied(extent));
+        BRepBuilderAPI_MakePolygon polygon;
+        polygon.Add(p0);polygon.Add(p1);polygon.Add(p2);polygon.Add(p3);polygon.Close();
+        if(!polygon.IsDone())throw gcnew InvalidOperationException("Bend split profile failed.");
+        BRepBuilderAPI_MakeFace face(polygon.Wire(),true);
+        if(!face.IsDone())throw gcnew InvalidOperationException("Bend split face failed.");
+        direction.Normalize();
+        BRepPrimAPI_MakePrism prism(face.Face(),direction.Multiplied(extent*2.0),true,true);
+        BRepAlgoAPI_Common common(baseShape,prism.Shape());
+        common.Build();
+        if(!common.IsDone())throw gcnew InvalidOperationException("Bend split failed.");
+        return common.Shape();
+    }
+
     struct EdgeSemanticSignature
     {
         double Length=0.0;
@@ -311,9 +356,9 @@ namespace SrcCad::Kernel::Occt
         std::replace(payload.begin(),payload.end(),';',' ');
         std::istringstream stream(payload);
         signature.Type=cylindrical?1:0;
-        const bool common=(stream>>signature.Area>>signature.X>>signature.Y>>signature.Z>>
-                           signature.NX>>signature.NY>>signature.NZ);
-        if(!common)return false;
+        stream>>signature.Area>>signature.X>>signature.Y>>signature.Z>>
+               signature.NX>>signature.NY>>signature.NZ;
+        if(stream.fail())return false;
         if(cylindrical&&!(stream>>signature.Radius))return false;
         return std::isfinite(signature.Area)&&signature.Area>1e-12&&
                std::isfinite(signature.X)&&std::isfinite(signature.Y)&&std::isfinite(signature.Z)&&
@@ -749,15 +794,9 @@ namespace SrcCad::Kernel::Occt
                 gp_Trsf tr;tr.SetTranslation(gp_Vec(-t[0],-t[1],-t[2]));
                 local=BRepBuilderAPI_Transform(local,tr,true).Shape();
             }
-            auto rotateBack=[&](const gp_Dir& axis,double degrees)
-            {
-                if(std::abs(degrees)<=1e-12)return;
-                gp_Trsf tr;tr.SetRotation(gp_Ax1(gp_Pnt(0,0,0),axis),-degrees*3.14159265358979323846/180.0);
-                local=BRepBuilderAPI_Transform(local,tr,true).Shape();
-            };
-            rotateBack(gp_Dir(0,0,1),t[5]);
-            rotateBack(gp_Dir(0,1,0),t[4]);
-            rotateBack(gp_Dir(1,0,0),t[3]);
+            local=rotateShapeDegrees(local,gp_Ax1(gp_Pnt(0,0,0),gp_Dir(0,0,1)),-t[5]);
+            local=rotateShapeDegrees(local,gp_Ax1(gp_Pnt(0,0,0),gp_Dir(0,1,0)),-t[4]);
+            local=rotateShapeDegrees(local,gp_Ax1(gp_Pnt(0,0,0),gp_Dir(1,0,0)),-t[3]);
 
             auto value=encodeFaceReference(TopoDS::Face(local));
             return value.empty()?nullptr:gcnew String(value.c_str());
@@ -1329,6 +1368,8 @@ namespace SrcCad::Kernel::Occt
         if(!polygon.IsDone())throw gcnew InvalidOperationException("Profile wire failed.");
         return polygon.Wire();
     }
+
+    static double featureVolume(const TopoDS_Shape& shape);
 
     static TopoDS_Wire sweepPathWire(array<double>^ points)
     {
@@ -1961,28 +2002,18 @@ namespace SrcCad::Kernel::Occt
                 side.Normalize();
                 gp_Vec vertical(n.X(),n.Y(),n.Z());if(reverse)vertical.Reverse();
 
-                auto makeStrip=[&](const gp_Pnt& p0,const gp_Pnt& p1,const gp_Pnt& p2,const gp_Pnt& p3,const gp_Vec& extrusion)
-                {
-                    BRepBuilderAPI_MakePolygon poly;poly.Add(p0);poly.Add(p1);poly.Add(p2);poly.Add(p3);poly.Close();
-                    if(!poly.IsDone())throw gcnew InvalidOperationException("Jog strip profile failed.");
-                    BRepBuilderAPI_MakeFace face(poly.Wire(),true);
-                    if(!face.IsDone())throw gcnew InvalidOperationException("Jog strip face failed.");
-                    BRepPrimAPI_MakePrism prism(face.Face(),extrusion,true,true);
-                    TopoDS_Shape shape=prism.Shape();featureVolume(shape);return shape;
-                };
-
                 const double overlap=std::max(1e-5,std::min(thickness*0.05,0.05));
                 gp_Pnt wa=a.Translated(side.Multiplied(-thickness*0.5)).Translated(vertical.Multiplied(-overlap));
                 gp_Pnt wb=b.Translated(side.Multiplied(-thickness*0.5)).Translated(vertical.Multiplied(-overlap));
                 gp_Pnt wc=wb.Translated(vertical.Multiplied(height+overlap));
                 gp_Pnt wd=wa.Translated(vertical.Multiplied(height+overlap));
-                TopoDS_Shape web=makeStrip(wa,wb,wc,wd,side.Multiplied(thickness));
+                TopoDS_Shape web=makeStripPrism(wa,wb,wc,wd,side.Multiplied(thickness));featureVolume(web);
 
                 gp_Pnt ta=a.Translated(vertical.Multiplied(height-thickness*0.5));
                 gp_Pnt tb=b.Translated(vertical.Multiplied(height-thickness*0.5));
                 gp_Pnt tc=tb.Translated(side.Multiplied(offset+overlap));
                 gp_Pnt td=ta.Translated(side.Multiplied(offset+overlap));
-                TopoDS_Shape shelf=makeStrip(ta,tb,tc,td,vertical.Multiplied(thickness));
+                TopoDS_Shape shelf=makeStripPrism(ta,tb,tc,td,vertical.Multiplied(thickness));featureVolume(shelf);
 
                 BRepAlgoAPI_Fuse fuseWeb(result,web);fuseWeb.Build();
                 if(!fuseWeb.IsDone())throw gcnew InvalidOperationException("Jog web fuse failed.");
@@ -2149,26 +2180,8 @@ namespace SrcCad::Kernel::Occt
             const double extent=std::max(100.0,diagonal*4.0+10.0);
             const double overlap=std::max(1e-5,diagonal*1e-6);
 
-            auto half=[&](gp_Vec direction,double planeShift)
-            {
-                gp_Pnt origin=a.Translated(split.Multiplied(planeShift));
-                gp_Pnt p0=origin.Translated(tangent.Multiplied(-extent)).Translated(normal.Multiplied(-extent));
-                gp_Pnt p1=origin.Translated(tangent.Multiplied(extent)).Translated(normal.Multiplied(-extent));
-                gp_Pnt p2=origin.Translated(tangent.Multiplied(extent)).Translated(normal.Multiplied(extent));
-                gp_Pnt p3=origin.Translated(tangent.Multiplied(-extent)).Translated(normal.Multiplied(extent));
-                BRepBuilderAPI_MakePolygon polygon;polygon.Add(p0);polygon.Add(p1);polygon.Add(p2);polygon.Add(p3);polygon.Close();
-                if(!polygon.IsDone())throw gcnew InvalidOperationException("Bend split profile failed.");
-                BRepBuilderAPI_MakeFace face(polygon.Wire(),true);
-                if(!face.IsDone())throw gcnew InvalidOperationException("Bend split face failed.");
-                direction.Normalize();
-                BRepPrimAPI_MakePrism prism(face.Face(),direction.Multiplied(extent*2.0),true,true);
-                BRepAlgoAPI_Common common(baseShape,prism.Shape());common.Build();
-                if(!common.IsDone())throw gcnew InvalidOperationException("Bend split failed.");
-                return common.Shape();
-            };
-
-            TopoDS_Shape moving=half(split,-overlap);
-            TopoDS_Shape fixed=half(split.Reversed(),overlap);
+            TopoDS_Shape moving=intersectBendHalf(baseShape,a,tangent,normal,split,extent,split,-overlap);
+            TopoDS_Shape fixed=intersectBendHalf(baseShape,a,tangent,normal,split,extent,split.Reversed(),overlap);
             if(moving.IsNull()||fixed.IsNull())throw gcnew InvalidOperationException("Bend line does not split the sheet body.");
 
             const double signedAngle=(reverse?-angleDegrees:angleDegrees)*3.14159265358979323846/180.0;
@@ -2292,6 +2305,8 @@ namespace SrcCad::Kernel::Occt
         }
         catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
     }
+
+    static TopoDS_Shape transformedFeatureBody(String^ body,array<double>^ transform6);
 
     String^ OcctFeatureKernel::MoveCopy(String^ baseBody,array<double>^ transform6,bool keepOriginal)
     {
@@ -2449,15 +2464,9 @@ namespace SrcCad::Kernel::Occt
         if(transform6==nullptr||transform6->Length!=6)throw gcnew ArgumentException("Transform requires X/Y/Z and Rx/Ry/Rz.");
         for each(double value in transform6)if(!std::isfinite(value))throw gcnew ArgumentException("Invalid transform value.");
         TopoDS_Shape shape=decodeFeature(body);
-        auto rotate=[&](double degrees,const gp_Dir& axis)
-        {
-            if(std::abs(degrees)<=1e-12)return;
-            gp_Trsf tr;tr.SetRotation(gp_Ax1(gp_Pnt(0,0,0),axis),degrees*3.14159265358979323846/180.0);
-            shape=BRepBuilderAPI_Transform(shape,tr,true).Shape();
-        };
-        rotate(transform6[3],gp_Dir(1,0,0));
-        rotate(transform6[4],gp_Dir(0,1,0));
-        rotate(transform6[5],gp_Dir(0,0,1));
+        shape=rotateShapeDegrees(shape,gp_Ax1(gp_Pnt(0,0,0),gp_Dir(1,0,0)),transform6[3]);
+        shape=rotateShapeDegrees(shape,gp_Ax1(gp_Pnt(0,0,0),gp_Dir(0,1,0)),transform6[4]);
+        shape=rotateShapeDegrees(shape,gp_Ax1(gp_Pnt(0,0,0),gp_Dir(0,0,1)),transform6[5]);
         if(std::abs(transform6[0])>1e-12||std::abs(transform6[1])>1e-12||std::abs(transform6[2])>1e-12)
         {
             gp_Trsf tr;tr.SetTranslation(gp_Vec(transform6[0],transform6[1],transform6[2]));
@@ -3016,15 +3025,9 @@ namespace SrcCad::Kernel::Occt
         try
         {
             TopoDS_Shape shape=decodeFeature(body);
-            auto rotate=[&](const gp_Ax1& axis,double degrees)
-            {
-                if(std::abs(degrees)<=1e-12)return;
-                gp_Trsf tr;tr.SetRotation(axis,degrees*3.14159265358979323846/180.0);
-                shape=BRepBuilderAPI_Transform(shape,tr,true).Shape();
-            };
-            rotate(gp_Ax1(gp_Pnt(0,0,0),gp_Dir(1,0,0)),rxDegrees);
-            rotate(gp_Ax1(gp_Pnt(0,0,0),gp_Dir(0,1,0)),ryDegrees);
-            rotate(gp_Ax1(gp_Pnt(0,0,0),gp_Dir(0,0,1)),rzDegrees);
+            shape=rotateShapeDegrees(shape,gp_Ax1(gp_Pnt(0,0,0),gp_Dir(1,0,0)),rxDegrees);
+            shape=rotateShapeDegrees(shape,gp_Ax1(gp_Pnt(0,0,0),gp_Dir(0,1,0)),ryDegrees);
+            shape=rotateShapeDegrees(shape,gp_Ax1(gp_Pnt(0,0,0),gp_Dir(0,0,1)),rzDegrees);
             if(std::abs(tx)>1e-12||std::abs(ty)>1e-12||std::abs(tz)>1e-12)
             {
                 gp_Trsf tr;tr.SetTranslation(gp_Vec(tx,ty,tz));
