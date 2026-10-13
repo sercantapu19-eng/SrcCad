@@ -17,6 +17,8 @@ public partial class MainWindow
     private TreeViewItem? _assemblyRoot;
     private Guid? _assemblyEditingComponentId;
     private Guid? _assemblyEditingMateId;
+    private AssemblyReference? _assemblyPickedMateA;
+    private AssemblyReference? _assemblyPickedMateB;
     private readonly Stack<AssemblyDocument> _assemblyUndo=new();
     private readonly Stack<AssemblyDocument> _assemblyRedo=new();
 
@@ -76,6 +78,7 @@ public partial class MainWindow
         ResetAssemblyHistory();
         _assemblyEditingComponentId=null;
         _assemblyEditingMateId=null;
+        _assemblyPickedMateA=null;_assemblyPickedMateB=null;
         PartNode.Visibility=Visibility.Visible;
         AssemblyMovePanel.Visibility=Visibility.Collapsed;
         AssemblyMatePanel.Visibility=Visibility.Collapsed;
