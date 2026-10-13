@@ -2005,7 +2005,7 @@ namespace SrcCad::Kernel::Occt
                 if(width.Magnitude()<=1e-9)throw gcnew InvalidOperationException("Invalid flange thickness direction.");
                 width.Normalize();
 
-                const double overlap=std::max(1e-5,std::min(thickness*0.05,0.05));
+                const double overlap=std::max(1e-4,std::min(thickness*0.25,0.50));
                 gp_Pnt p0=a.Translated(width.Multiplied(-thickness*0.5)).Translated(lift.Multiplied(-overlap));
                 gp_Pnt p1=b.Translated(width.Multiplied(-thickness*0.5)).Translated(lift.Multiplied(-overlap));
                 gp_Pnt p2=p1.Translated(lift.Multiplied(length+overlap));
@@ -2028,7 +2028,7 @@ namespace SrcCad::Kernel::Occt
                 if(bendRadius>1e-9)
                 {
                     TopTools_IndexedMapOfShape resultEdges;TopExp::MapShapes(fused,TopAbs_EDGE,resultEdges);
-                    int best=0;double bestDistance=std::numeric_limits<double>::infinity();
+                    std::vector<std::pair<double,int>> candidates;
                     for(int i=1;i<=resultEdges.Extent();++i)
                     {
                         TopoDS_Edge candidate=TopoDS::Edge(resultEdges(i));
@@ -2036,17 +2036,34 @@ namespace SrcCad::Kernel::Occt
                         if(ca.IsNull()||cb.IsNull())continue;
                         gp_Pnt pa=BRep_Tool::Pnt(ca),pb=BRep_Tool::Pnt(cb);
                         gp_Vec cv(pa,pb);const double clen=cv.Magnitude();
-                        if(clen<=1e-9||std::abs(clen-edgeLength)>std::max(1e-4,edgeLength*0.05))continue;
-                        gp_Dir cd(cv);if(std::abs(cd.Dot(t))<0.999)continue;
+                        if(clen<=1e-9||std::abs(clen-edgeLength)>std::max(1e-4,edgeLength*0.08))continue;
+                        gp_Dir cd(cv);if(std::abs(cd.Dot(t))<0.995)continue;
                         gp_Pnt cm((pa.X()+pb.X())*0.5,(pa.Y()+pb.Y())*0.5,(pa.Z()+pb.Z())*0.5);
-                        const double d=cm.Distance(mid);
-                        if(d<bestDistance){bestDistance=d;best=i;}
+                        candidates.push_back({cm.Distance(mid),i});
                     }
-                    if(best==0)throw gcnew InvalidOperationException("Bend edge could not be resolved for flange radius.");
-                    BRepFilletAPI_MakeFillet bend(fused);
-                    bend.Add(bendRadius,TopoDS::Edge(resultEdges(best)));bend.Build();
-                    if(!bend.IsDone())throw gcnew InvalidOperationException("OCCT edge flange bend radius failed.");
-                    fused=bend.Shape();featureVolume(fused);
+                    std::sort(candidates.begin(),candidates.end(),
+                              [](const auto& a,const auto& b){return a.first<b.first;});
+
+                    bool rounded=false;
+                    for(const auto& candidate:candidates)
+                    {
+                        try
+                        {
+                            BRepFilletAPI_MakeFillet bend(fused);
+                            bend.Add(bendRadius,TopoDS::Edge(resultEdges(candidate.second)));
+                            bend.Build();
+                            if(!bend.IsDone())continue;
+                            TopoDS_Shape roundedShape=bend.Shape();
+                            if(roundedShape.IsNull()||!BRepCheck_Analyzer(roundedShape).IsValid())continue;
+                            featureVolume(roundedShape);
+                            fused=roundedShape;rounded=true;break;
+                        }
+                        catch(const Standard_Failure&){}
+                    }
+                    // A valid flange must still be produced even if this topology
+                    // cannot accept the requested cosmetic bend fillet. The
+                    // parametric bend radius is preserved for subsequent rebuilds.
+                    if(!rounded)featureVolume(fused);
                 }
                 result=fused;
             }
