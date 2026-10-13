@@ -360,6 +360,25 @@
                                 </StackPanel>
                             </StackPanel>
 
+                            <StackPanel x:Name="DrawingViewPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Teknik Resim Görünüşü" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <TextBlock Text="Ad"/>
+                                <TextBox x:Name="DrawingViewName" Margin="0,4,0,8"/>
+                                <TextBlock Text="Sayfa Konumu X / Y (mm)"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,8">
+                                    <TextBox x:Name="DrawingViewX" Width="90"/>
+                                    <TextBox x:Name="DrawingViewY" Width="90" Margin="4,0,0,0"/>
+                                </StackPanel>
+                                <TextBlock Text="Ölçek"/>
+                                <TextBox x:Name="DrawingViewScale" Margin="0,4,0,8"/>
+                                <TextBlock x:Name="DrawingViewInfo" TextWrapping="Wrap" Foreground="#5F6B76" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="DrawingViewError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="DrawingViewOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="DrawingViewCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
                             <StackPanel x:Name="SheetBendPanel" Visibility="Collapsed" Margin="0,16,0,0">
                                 <TextBlock Text="Çizilmiş Büküm" FontWeight="Bold" Margin="0,0,0,8"/>
                                 <TextBlock Text="Büküm Açısı (°)"/>
