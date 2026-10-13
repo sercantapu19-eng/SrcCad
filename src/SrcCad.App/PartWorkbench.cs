@@ -2359,22 +2359,59 @@ public partial class MainWindow
 
     private void InspectMeasure_Click(object sender,RoutedEventArgs e)
     {
-        var measure=_viewer.SelectedTopologyMeasure();
+        _inspectMeasureMode=true;
+        _viewer.ClearSelection();
+        _viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.AnyTopology);
         PropertyTitle.Text="Ölç";
-        if(measure.Length<5)
+        PropertyInfo.Text="Kenar, dairesel kenar, yüz veya köşe seçin. Sonuç her seçimde canlı güncellenir.";
+        MeasureStatusText.Text="ÖLÇ: seçim bekleniyor";
+        ManagerTabs.SelectedItem=PropertyManagerTab;
+        Status("Ölç aktif • geometriye tıklayın • Esc veya Yüz/Kenar/Köşe seçimiyle çıkın.");
+    }
+
+    private string? FormatTopologyMeasure(double[] measure,out string compact)
+    {
+        compact="";
+        if(measure.Length<5)return null;
+        switch((int)measure[0])
         {
-            PropertyInfo.Text="Tek bir kenar, yüz veya köşe seçin. Kenarda uzunluk, yüzde alan, köşede koordinat ölçülür.";
-            ManagerTabs.SelectedItem=PropertyManagerTab;Status("Ölçüm için tek topolojik öğe seçin.");return;
+            case 2:
+                compact=$"L = {measure[1]:0.###} mm";
+                return $"Kenar Uzunluğu: {measure[1]:0.###} mm\nMerkez: X={measure[2]:0.###}, Y={measure[3]:0.###}, Z={measure[4]:0.###}";
+            case 3 when measure.Length>=6:
+                compact=$"L = {measure[1]:0.###} mm   R = {measure[2]:0.###} mm   Ø = {measure[2]*2.0:0.###} mm";
+                return $"Dairesel Kenar\nUzunluk: {measure[1]:0.###} mm\nYarıçap: {measure[2]:0.###} mm\nÇap: {measure[2]*2.0:0.###} mm\nMerkez: X={measure[3]:0.###}, Y={measure[4]:0.###}, Z={measure[5]:0.###}";
+            case 4:
+                compact=$"A = {measure[1]:0.###} mm²";
+                return $"Yüz Alanı: {measure[1]:0.###} mm²\nAğırlık Merkezi: X={measure[2]:0.###}, Y={measure[3]:0.###}, Z={measure[4]:0.###}";
+            case 1:
+                compact=$"X {measure[2]:0.###}   Y {measure[3]:0.###}   Z {measure[4]:0.###} mm";
+                return $"Köşe Koordinatı: X={measure[2]:0.###}, Y={measure[3]:0.###}, Z={measure[4]:0.###}";
+            case 6:
+                compact=$"V = {measure[1]:0.###} mm³";
+                return $"Gövde Hacmi: {measure[1]:0.###} mm³\nAğırlık Merkezi: X={measure[2]:0.###}, Y={measure[3]:0.###}, Z={measure[4]:0.###}";
+            default:return null;
         }
-        var details=measure[0] switch
+    }
+
+    private void UpdateInspectMeasureFromSelection()
+    {
+        if(!_inspectMeasureMode)return;
+        var measure=_viewer.SelectedTopologyMeasure();
+        var details=FormatTopologyMeasure(measure,out var compact);
+        PropertyTitle.Text="Ölç";
+        if(details is null)
         {
-            2=>$"Kenar Uzunluğu: {measure[1]:0.###} mm\nMerkez: X={measure[2]:0.###}, Y={measure[3]:0.###}, Z={measure[4]:0.###}",
-            4=>$"Yüz Alanı: {measure[1]:0.###} mm²\nAğırlık Merkezi: X={measure[2]:0.###}, Y={measure[3]:0.###}, Z={measure[4]:0.###}",
-            1=>$"Köşe Koordinatı: X={measure[2]:0.###}, Y={measure[3]:0.###}, Z={measure[4]:0.###}",
-            6=>$"Gövde Hacmi: {measure[1]:0.###} mm³\nAğırlık Merkezi: X={measure[2]:0.###}, Y={measure[3]:0.###}, Z={measure[4]:0.###}",
-            _=>"Bu seçim türü için geometrik ölçü üretilemedi."
-        };
-        PropertyInfo.Text=details;ManagerTabs.SelectedItem=PropertyManagerTab;Status("Seçili geometri ölçüldü.");
+            PropertyInfo.Text="Tek bir kenar, dairesel kenar, yüz veya köşe seçin.";
+            MeasureStatusText.Text="ÖLÇ: seçim bekleniyor";
+            Status("Ölç aktif • tek geometri seçin.");
+            return;
+        }
+
+        PropertyInfo.Text=details;
+        MeasureStatusText.Text=compact;
+        ManagerTabs.SelectedItem=PropertyManagerTab;
+        Status(compact);
     }
 
     private void InspectMassProperties_Click(object sender,RoutedEventArgs e)
