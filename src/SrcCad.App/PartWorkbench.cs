@@ -906,6 +906,72 @@ public partial class MainWindow
         Status($"{members.Length} yapısal eleman için gerçek kesim listesi hesaplandı.");
     }
 
+    private void StructuralTrim_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession())return;
+        var baseNode=CurrentSolidFeature();
+        if(baseNode is null){Status("Kırp / Uzat için mevcut profil/katı gerekiyor.");return;}
+        PlaneFrame plane;
+        if(!TryResolveMirrorPlane(out plane))plane=_selectedPlane;
+        BeginStructuralTrimFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Kırp"),
+            new StructuralTrimFeatureParameters(baseNode.Id,plane,true)));
+    }
+
+    private void BeginStructuralTrimFeature(FeatureNode node)
+    {
+        if(node.Parameters is not StructuralTrimFeatureParameters trim)throw new InvalidOperationException("Unsupported structural trim.");
+        _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;
+        StructuralTrimPlaneText.Text=trim.Plane.Name;
+        StructuralTrimKeepPositive.IsChecked=trim.KeepPositive;
+        StructuralTrimError.Text="";
+        StructuralTrimPanel.Visibility=Visibility.Visible;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;SpatialSketchPanel.Visibility=Visibility.Collapsed;
+        EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;RevolveFeaturePanel.Visibility=Visibility.Collapsed;
+        MultiSketchFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;DraftFeaturePanel.Visibility=Visibility.Collapsed;
+        RibFeaturePanel.Visibility=Visibility.Collapsed;ReferenceGeometryPanel.Visibility=Visibility.Collapsed;MirrorFeaturePanel.Visibility=Visibility.Collapsed;
+        PatternFeaturePanel.Visibility=Visibility.Collapsed;SheetMetalBasePanel.Visibility=Visibility.Collapsed;SheetMetalConvertPanel.Visibility=Visibility.Collapsed;
+        EdgeFlangePanel.Visibility=Visibility.Collapsed;EndCapPanel.Visibility=Visibility.Collapsed;
+        PropertyTitle.Text=node.Name;PropertyInfo.Text="Gerçek OCCT yarım-uzay kırpma • parametrik düzlem • canlı B-Rep önizleme";
+        ManagerTabs.SelectedItem=PropertyManagerTab;_loadingGraphParameters=false;
+        UpdateStructuralTrimPreview();RefreshCommandState();
+    }
+
+    private FeatureDocument? StructuralTrimCandidate()
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not StructuralTrimFeatureParameters trim)return null;
+        return ReplaceGraphNode(_graphFeatureEdit with{Parameters=trim with{KeepPositive=StructuralTrimKeepPositive.IsChecked==true}});
+    }
+
+    private void StructuralTrimParameterChanged(object sender,RoutedEventArgs e)
+    {
+        if(!_loadingGraphParameters)UpdateStructuralTrimPreview();
+    }
+
+    private void UpdateStructuralTrimPreview()
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not StructuralTrimFeatureParameters)return;
+        var candidate=StructuralTrimCandidate();
+        if(candidate is null)return;
+        var preview=_partSession.Preview(candidate);
+        var body=preview.Success?LastBody(candidate,id=>preview.Outputs.GetValueOrDefault(id)):null;
+        if(body is not null&&_viewer.PreviewFeatureBody(body))
+        {
+            _viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.72);StructuralTrimError.Text="";return;
+        }
+        _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.0);
+        StructuralTrimError.Text=preview.Report.Nodes.LastOrDefault(n=>n.State==RebuildState.Failed)?.Error??preview.Report.Error??"Kırpma önizlemesi oluşturulamadı; korunacak tarafı değiştirin.";
+    }
+
+    private void StructuralTrimOk_Click(object sender,RoutedEventArgs e)
+    {
+        var candidate=StructuralTrimCandidate();
+        if(candidate is null||_partSession is null)return;
+        if(!_partSession.TryCommit(candidate)){StructuralTrimError.Text=GraphError();return;}
+        var id=_graphFeatureEdit!.Id;EndGraphFeature();RefreshPartTree(id);Status("Profil kırpma feature'ı onaylandı.");
+    }
+
+    private void StructuralTrimCancel_Click(object sender,RoutedEventArgs e)=>EndGraphFeature();
+
     private void EndCap_Click(object sender,RoutedEventArgs e)
     {
         if(_inSketch||_extrudeCommandActive||!EnsurePartSession())return;
@@ -926,7 +992,7 @@ public partial class MainWindow
         EndCapSelectionText.Text=(node.References?.Length??0)==1?"Uç yüzü seçili":"Düzlemsel uç yüzü seçin.";
         EndCapError.Text=(node.References?.Length??0)==1?"":"Yüz seçimi gerekiyor.";
         EndCapPanel.Visibility=Visibility.Visible;
-        GraphFeaturePanel.Visibility=Visibility.Collapsed;SpatialSketchPanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;SpatialSketchPanel.Visibility=Visibility.Collapsed;StructuralTrimPanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;
         RevolveFeaturePanel.Visibility=Visibility.Collapsed;MultiSketchFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;
         DraftFeaturePanel.Visibility=Visibility.Collapsed;RibFeaturePanel.Visibility=Visibility.Collapsed;ReferenceGeometryPanel.Visibility=Visibility.Collapsed;
         MirrorFeaturePanel.Visibility=Visibility.Collapsed;PatternFeaturePanel.Visibility=Visibility.Collapsed;SheetMetalBasePanel.Visibility=Visibility.Collapsed;
@@ -2225,6 +2291,7 @@ public partial class MainWindow
         if(node.Parameters is HoleFeatureParameters){BeginHoleFeature(node);return;}
         if(node.Parameters is RevolveFeatureParameters or RevolveCutFeatureParameters){BeginRevolveFeature(node);return;}
         if(node.Parameters is SweepFeatureParameters or SweepCutFeatureParameters or LoftFeatureParameters or LoftCutFeatureParameters or StructuralMemberFeatureParameters){BeginMultiSketchFeature(node);return;}
+        if(node.Parameters is StructuralTrimFeatureParameters){BeginStructuralTrimFeature(node);return;}
         if(node.Parameters is EndCapFeatureParameters){BeginEndCapFeature(node);return;}
         if(node.Parameters is ShellFeatureParameters){BeginShellFeature(node);return;}
         if(node.Parameters is DraftFeatureParameters){BeginDraftFeature(node);return;}
