@@ -12,6 +12,10 @@ public interface IPartGeometryKernel
     string Hole(string baseBody,string faceReference,Vector3d center,double diameter,double depth,ExtrusionTermination termination,bool reverse);
     string Revolve(string? baseBody,SketchModel source,int axisEntityId,double angleDegrees,bool reverse);
     string RevolveCut(string baseBody,SketchModel source,int axisEntityId,double angleDegrees,bool reverse);
+    string Sweep(string? baseBody,SketchModel profile,SketchModel path);
+    string SweepCut(string baseBody,SketchModel profile,SketchModel path);
+    string Loft(string? baseBody,IReadOnlyList<SketchModel> profiles);
+    string LoftCut(string baseBody,IReadOnlyList<SketchModel> profiles);
     string Shell(string baseBody,IReadOnlyList<string> faceReferences,double thickness,bool outward);
     string Draft(string baseBody,IReadOnlyList<string> faceReferences,PlaneFrame neutralPlane,double angleDegrees,bool reverse);
     string Rib(string baseBody,SketchModel source,double thickness,double depth,bool reverse);
@@ -51,6 +55,10 @@ public sealed class PartFeatureEvaluator(IPartGeometryKernel kernel) : IFeatureE
                 h.Center,h.Diameter,h.Depth,h.Termination,h.Reverse)),
             RevolveFeatureParameters r => new(null,kernel.Revolve(r.BaseFeatureId is Guid rb?Base(rb):null,Sketch(r.SketchId),r.AxisEntityId,r.AngleDegrees,r.Reverse)),
             RevolveCutFeatureParameters r => new(null,kernel.RevolveCut(Base(r.BaseFeatureId),Sketch(r.SketchId),r.AxisEntityId,r.AngleDegrees,r.Reverse)),
+            SweepFeatureParameters s => new(null,kernel.Sweep(s.BaseFeatureId is Guid sb?Base(sb):null,Sketch(s.ProfileSketchId),Sketch(s.PathSketchId))),
+            SweepCutFeatureParameters s => new(null,kernel.SweepCut(Base(s.BaseFeatureId),Sketch(s.ProfileSketchId),Sketch(s.PathSketchId))),
+            LoftFeatureParameters l => new(null,kernel.Loft(l.BaseFeatureId is Guid lb?Base(lb):null,l.ProfileSketchIds.Select(Sketch).ToArray())),
+            LoftCutFeatureParameters l => new(null,kernel.LoftCut(Base(l.BaseFeatureId),l.ProfileSketchIds.Select(Sketch).ToArray())),
             ShellFeatureParameters s => new(null,kernel.Shell(Base(s.BaseFeatureId),
                 (node.References??Array.Empty<FeatureReference>()).Where(r=>r.Kind==TopologyKind.Face&&r.ProducerId==s.BaseFeatureId).Select(r=>r.SemanticName).ToArray(),
                 s.Thickness,s.Outward)),

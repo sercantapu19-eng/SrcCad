@@ -23,6 +23,10 @@ internal static class FeatureGraphTests
                 HoleFeatureParameters p=>p.Depth,
                 RevolveFeatureParameters p=>p.AngleDegrees,
                 RevolveCutFeatureParameters p=>p.AngleDegrees,
+                SweepFeatureParameters=>1,
+                SweepCutFeatureParameters=>1,
+                LoftFeatureParameters p=>p.ProfileSketchIds.Length,
+                LoftCutFeatureParameters p=>p.ProfileSketchIds.Length,
                 ShellFeatureParameters p=>p.Thickness,
                 DraftFeatureParameters p=>p.AngleDegrees,
                 RibFeatureParameters p=>p.Depth,
@@ -123,6 +127,20 @@ internal static class FeatureGraphTests
         var revolveCutDoc=initial with{Features=initial.Features.Concat(new[]{revolveSketchNode,revolvedCutNode}).ToArray()};
         Check(FeatureDocumentFile.Clone(revolveCutDoc).Node(revolvedCutNode.Id).Kind==FeatureKind.RevolvedCut,
             "revolved cut dependencies and axis roundtrip");
+
+        var pathSketch=new SketchModel(StandardPlanes.Right);
+        var pathStart=pathSketch.CreatePointExact(new(0,0));var pathEnd=pathSketch.CreatePointExact(new(-20,0));pathSketch.AddLine(pathStart,pathEnd);
+        var pathNode=new FeatureNode(Guid.NewGuid(),"Yol1",new SketchFeatureParameters(StandardPlanes.Right,pathSketch.CaptureSnapshot()));
+        var sweepNode=new FeatureNode(Guid.NewGuid(),"Süpürme1",new SweepFeatureParameters(source.Id,pathNode.Id));
+        var sweepDoc=new FeatureDocument(Guid.NewGuid(),new[]{source,pathNode,sweepNode});
+        Check(FeatureDocumentFile.Clone(sweepDoc).Node(sweepNode.Id).Kind==FeatureKind.Sweep,"sweep profile/path dependencies roundtrip");
+
+        var loftSketch2=new SketchModel(StandardPlanes.Front with{Origin=Vector3d.UnitZ*20,Name="Loft2"});
+        loftSketch2.AddCornerRectangle(new(5,5),new(35,25),.001);
+        var loft2=new FeatureNode(Guid.NewGuid(),"LoftProfil2",new SketchFeatureParameters(loftSketch2.Plane,loftSketch2.CaptureSnapshot()));
+        var loftNode=new FeatureNode(Guid.NewGuid(),"Loft1",new LoftFeatureParameters(new[]{source.Id,loft2.Id}));
+        var loftDoc=new FeatureDocument(Guid.NewGuid(),new[]{source,loft2,loftNode});
+        Check(FeatureDocumentFile.Clone(loftDoc).Node(loftNode.Id).Kind==FeatureKind.Loft,"loft profile list roundtrip");
 
         var shellNode=new FeatureNode(Guid.NewGuid(),"Kabuk1",new ShellFeatureParameters(boss.Id,2),
             References:new[]{new FeatureReference(boss.Id,TopologyKind.Face,"F;1200;20;15;20;0;0;1")});

@@ -7,7 +7,7 @@ using SrcCad.Core.Persistence;
 
 namespace SrcCad.Core.Features;
 
-public enum FeatureKind { Sketch, Extrude, ExtrudedCut, Fillet, Chamfer, Hole, Revolve, RevolvedCut, Shell, Draft, Rib, Mirror, LinearPattern, CircularPattern, ReferencePlane, ReferenceAxis, ReferencePoint }
+public enum FeatureKind { Sketch, Extrude, ExtrudedCut, Fillet, Chamfer, Hole, Revolve, RevolvedCut, Sweep, SweptCut, Loft, LoftedCut, Shell, Draft, Rib, Mirror, LinearPattern, CircularPattern, ReferencePlane, ReferenceAxis, ReferencePoint }
 public enum RebuildState { Clean, Dirty, Suppressed, Blocked, Failed }
 public enum ExtrusionTermination { Blind, ThroughAll }
 public enum TopologyKind { Body, Face, Edge, Vertex }
@@ -23,6 +23,10 @@ public sealed record FeatureReference(Guid ProducerId, TopologyKind Kind, string
 [JsonDerivedType(typeof(HoleFeatureParameters), "hole")]
 [JsonDerivedType(typeof(RevolveFeatureParameters), "revolve")]
 [JsonDerivedType(typeof(RevolveCutFeatureParameters), "revolved-cut")]
+[JsonDerivedType(typeof(SweepFeatureParameters), "sweep")]
+[JsonDerivedType(typeof(SweepCutFeatureParameters), "swept-cut")]
+[JsonDerivedType(typeof(LoftFeatureParameters), "loft")]
+[JsonDerivedType(typeof(LoftCutFeatureParameters), "lofted-cut")]
 [JsonDerivedType(typeof(ShellFeatureParameters), "shell")]
 [JsonDerivedType(typeof(DraftFeatureParameters), "draft")]
 [JsonDerivedType(typeof(RibFeatureParameters), "rib")]
@@ -43,6 +47,10 @@ public sealed record HoleFeatureParameters(Guid BaseFeatureId, Vector3d Center, 
     ExtrusionTermination Termination = ExtrusionTermination.Blind, bool Reverse = true) : FeatureParameters;
 public sealed record RevolveFeatureParameters(Guid SketchId, int AxisEntityId, double AngleDegrees = 360, bool Reverse = false, Guid? BaseFeatureId = null) : FeatureParameters;
 public sealed record RevolveCutFeatureParameters(Guid BaseFeatureId, Guid SketchId, int AxisEntityId, double AngleDegrees = 360, bool Reverse = false) : FeatureParameters;
+public sealed record SweepFeatureParameters(Guid ProfileSketchId, Guid PathSketchId, Guid? BaseFeatureId = null) : FeatureParameters;
+public sealed record SweepCutFeatureParameters(Guid BaseFeatureId, Guid ProfileSketchId, Guid PathSketchId) : FeatureParameters;
+public sealed record LoftFeatureParameters(Guid[] ProfileSketchIds, Guid? BaseFeatureId = null) : FeatureParameters;
+public sealed record LoftCutFeatureParameters(Guid BaseFeatureId, Guid[] ProfileSketchIds) : FeatureParameters;
 public sealed record ShellFeatureParameters(Guid BaseFeatureId, double Thickness, bool Outward = false) : FeatureParameters;
 public sealed record DraftFeatureParameters(Guid BaseFeatureId, PlaneFrame NeutralPlane, double AngleDegrees, bool Reverse = false) : FeatureParameters;
 public sealed record RibFeatureParameters(Guid BaseFeatureId, Guid SketchId, double Thickness, double Depth, bool Reverse = false) : FeatureParameters;
@@ -60,6 +68,8 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
       CutFeatureParameters => FeatureKind.ExtrudedCut, FilletFeatureParameters => FeatureKind.Fillet,
       ChamferFeatureParameters => FeatureKind.Chamfer, HoleFeatureParameters => FeatureKind.Hole,
       RevolveFeatureParameters => FeatureKind.Revolve, RevolveCutFeatureParameters => FeatureKind.RevolvedCut,
+      SweepFeatureParameters => FeatureKind.Sweep, SweepCutFeatureParameters => FeatureKind.SweptCut,
+      LoftFeatureParameters => FeatureKind.Loft, LoftCutFeatureParameters => FeatureKind.LoftedCut,
       ShellFeatureParameters => FeatureKind.Shell, DraftFeatureParameters => FeatureKind.Draft,
       RibFeatureParameters => FeatureKind.Rib, MirrorFeatureParameters => FeatureKind.Mirror,
       LinearPatternFeatureParameters => FeatureKind.LinearPattern, CircularPatternFeatureParameters => FeatureKind.CircularPattern,
@@ -74,6 +84,10 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
         HoleFeatureParameters h => new[] { h.BaseFeatureId },
         RevolveFeatureParameters r => r.BaseFeatureId is Guid rb ? new[] { rb,r.SketchId } : new[] { r.SketchId },
         RevolveCutFeatureParameters r => new[] { r.BaseFeatureId,r.SketchId },
+        SweepFeatureParameters s => s.BaseFeatureId is Guid sb ? new[] { sb,s.ProfileSketchId,s.PathSketchId } : new[] { s.ProfileSketchId,s.PathSketchId },
+        SweepCutFeatureParameters s => new[] { s.BaseFeatureId,s.ProfileSketchId,s.PathSketchId },
+        LoftFeatureParameters l => (l.BaseFeatureId is Guid lb ? new[] { lb }.Concat(l.ProfileSketchIds) : l.ProfileSketchIds).ToArray(),
+        LoftCutFeatureParameters l => new[] { l.BaseFeatureId }.Concat(l.ProfileSketchIds).ToArray(),
         ShellFeatureParameters s => new[] { s.BaseFeatureId },
         DraftFeatureParameters d => new[] { d.BaseFeatureId },
         RibFeatureParameters r => new[] { r.BaseFeatureId,r.SketchId },
@@ -207,6 +221,27 @@ public static class FeatureDocumentFile
                        document.Node(r.SketchId).Parameters is not SketchFeatureParameters rcs||
                        !rcs.Sketch.Entities.OfType<SketchLine>().Any(l=>l.Id==r.AxisEntityId&&l.Construction))
                         throw new InvalidDataException("Invalid revolved cut.");
+                    break;
+                case SweepFeatureParameters s:
+                    if(document.Node(s.ProfileSketchId).Kind!=FeatureKind.Sketch||document.Node(s.PathSketchId).Kind!=FeatureKind.Sketch||
+                       s.ProfileSketchId==s.PathSketchId||(s.BaseFeatureId is Guid sb&&document.Node(sb).Kind==FeatureKind.Sketch))
+                        throw new InvalidDataException("Invalid sweep.");
+                    break;
+                case SweepCutFeatureParameters s:
+                    if(document.Node(s.BaseFeatureId).Kind==FeatureKind.Sketch||document.Node(s.ProfileSketchId).Kind!=FeatureKind.Sketch||
+                       document.Node(s.PathSketchId).Kind!=FeatureKind.Sketch||s.ProfileSketchId==s.PathSketchId)
+                        throw new InvalidDataException("Invalid swept cut.");
+                    break;
+                case LoftFeatureParameters l:
+                    if(l.ProfileSketchIds is null||l.ProfileSketchIds.Length<2||l.ProfileSketchIds.Distinct().Count()!=l.ProfileSketchIds.Length||
+                       l.ProfileSketchIds.Any(id=>document.Node(id).Kind!=FeatureKind.Sketch)||
+                       (l.BaseFeatureId is Guid lb&&document.Node(lb).Kind==FeatureKind.Sketch))
+                        throw new InvalidDataException("Invalid loft.");
+                    break;
+                case LoftCutFeatureParameters l:
+                    if(document.Node(l.BaseFeatureId).Kind==FeatureKind.Sketch||l.ProfileSketchIds is null||l.ProfileSketchIds.Length<2||
+                       l.ProfileSketchIds.Distinct().Count()!=l.ProfileSketchIds.Length||l.ProfileSketchIds.Any(id=>document.Node(id).Kind!=FeatureKind.Sketch))
+                        throw new InvalidDataException("Invalid lofted cut.");
                     break;
                 case ShellFeatureParameters s:
                     if(!double.IsFinite(s.Thickness)||s.Thickness<=1e-9||document.Node(s.BaseFeatureId).Kind==FeatureKind.Sketch||

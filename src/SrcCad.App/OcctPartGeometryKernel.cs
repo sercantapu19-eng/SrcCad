@@ -61,6 +61,65 @@ internal sealed class OcctPartGeometryKernel : IPartGeometryKernel
     {
         var p=Pack(source,1);return OcctFeatureKernel.RevolveCut(baseBody,p.Outer,p.Holes,p.CircleHoles,p.Circle,p.Frame,Axis(source,axisEntityId),angleDegrees,reverse);
     }
+    private static double[] PackSweepPath(SketchModel path)
+    {
+        var lines=path.Entities.OfType<SketchLine>().Where(l=>!l.Construction).ToArray();
+        if(lines.Length==0)throw new InvalidOperationException("Sweep path requires non-construction lines.");
+        var byPoint=lines.SelectMany(l=>new[]{(Point:l.StartPointId,Line:l),(Point:l.EndPointId,Line:l)})
+            .GroupBy(x=>x.Point).ToDictionary(g=>g.Key,g=>g.Select(x=>x.Line).Distinct().ToArray());
+        if(byPoint.Values.Any(x=>x.Length>2))throw new InvalidOperationException("Sweep path must be a single non-branching chain.");
+        var ends=byPoint.Where(x=>x.Value.Length==1).Select(x=>x.Key).ToArray();
+        if(ends.Length is not (0 or 2))throw new InvalidOperationException("Sweep path must be open or closed.");
+        var start=ends.Length==2?ends[0]:lines[0].StartPointId;
+        var ordered=new List<int>{start};var used=new HashSet<int>();var current=start;
+        while(used.Count<lines.Length)
+        {
+            var next=byPoint[current].FirstOrDefault(l=>!used.Contains(l.Id));
+            if(next is null)throw new InvalidOperationException("Sweep path contains disconnected segments.");
+            used.Add(next.Id);
+            current=next.StartPointId==current?next.EndPointId:next.StartPointId;
+            ordered.Add(current);
+        }
+        var values=new List<double>();
+        foreach(var id in ordered)
+        {
+            var uv=path.Point(id).Position;var w=path.Plane.SketchToWorld(uv.X,uv.Y);
+            values.AddRange(new[]{w.X,w.Y,w.Z});
+        }
+        return values.ToArray();
+    }
+
+    private static Profile SimpleProfile(SketchModel sketch)
+    {
+        var p=Pack(sketch,1);
+        if(p.Holes.Length>0||p.CircleHoles.Length>0)
+            throw new InvalidOperationException("Sweep/Loft currently requires a single outer profile without holes.");
+        return p;
+    }
+
+    public string Sweep(string? baseBody,SketchModel profile,SketchModel path)
+    {
+        var p=SimpleProfile(profile);
+        return OcctFeatureKernel.Sweep(baseBody,p.Outer,p.Circle,p.Frame,PackSweepPath(path));
+    }
+    public string SweepCut(string baseBody,SketchModel profile,SketchModel path)
+    {
+        var p=SimpleProfile(profile);
+        return OcctFeatureKernel.SweepCut(baseBody,p.Outer,p.Circle,p.Frame,PackSweepPath(path));
+    }
+    public string Loft(string? baseBody,IReadOnlyList<SketchModel> profiles)
+    {
+        if(profiles.Count<2)throw new InvalidOperationException("Loft requires at least two profiles.");
+        var packed=profiles.Select(SimpleProfile).ToArray();
+        return OcctFeatureKernel.Loft(baseBody,packed.Select(p=>p.Outer).ToArray(),packed.Select(p=>p.Circle).ToArray(),packed.Select(p=>p.Frame).ToArray());
+    }
+    public string LoftCut(string baseBody,IReadOnlyList<SketchModel> profiles)
+    {
+        if(profiles.Count<2)throw new InvalidOperationException("Loft cut requires at least two profiles.");
+        var packed=profiles.Select(SimpleProfile).ToArray();
+        return OcctFeatureKernel.LoftCut(baseBody,packed.Select(p=>p.Outer).ToArray(),packed.Select(p=>p.Circle).ToArray(),packed.Select(p=>p.Frame).ToArray());
+    }
+
     public string Shell(string baseBody,IReadOnlyList<string> faceReferences,double thickness,bool outward)
         => OcctFeatureKernel.Shell(baseBody,faceReferences.ToArray(),thickness,outward);
     public string Draft(string baseBody,IReadOnlyList<string> faceReferences,SrcCad.Core.Geometry.PlaneFrame neutralPlane,double angleDegrees,bool reverse)
