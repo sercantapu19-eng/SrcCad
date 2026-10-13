@@ -72,6 +72,7 @@ public sealed class PartFeatureEvaluator(IPartGeometryKernel kernel) : IFeatureE
             ReferencePlaneFeatureParameters => new(null,null),
             ReferenceAxisFeatureParameters => new(null,null),
             ReferencePointFeatureParameters => new(null,null),
+            SheetMetalBaseFeatureParameters s => new(null,kernel.Extrude(Sketch(s.SketchId),s.Reverse?-s.Thickness:s.Thickness)),
             _=>throw new NotSupportedException("Feature evaluator unavailable.")
         };
     }

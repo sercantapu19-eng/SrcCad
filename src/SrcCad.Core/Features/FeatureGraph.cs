@@ -7,7 +7,7 @@ using SrcCad.Core.Persistence;
 
 namespace SrcCad.Core.Features;
 
-public enum FeatureKind { Sketch, Extrude, ExtrudedCut, Fillet, Chamfer, Hole, Revolve, RevolvedCut, Sweep, SweptCut, Loft, LoftedCut, Shell, Draft, Rib, Mirror, LinearPattern, CircularPattern, ReferencePlane, ReferenceAxis, ReferencePoint }
+public enum FeatureKind { Sketch, Extrude, ExtrudedCut, Fillet, Chamfer, Hole, Revolve, RevolvedCut, Sweep, SweptCut, Loft, LoftedCut, Shell, Draft, Rib, Mirror, LinearPattern, CircularPattern, ReferencePlane, ReferenceAxis, ReferencePoint, SheetMetalBase }
 public enum RebuildState { Clean, Dirty, Suppressed, Blocked, Failed }
 public enum ExtrusionTermination { Blind, ThroughAll }
 public enum TopologyKind { Body, Face, Edge, Vertex }
@@ -36,6 +36,7 @@ public sealed record FeatureReference(Guid ProducerId, TopologyKind Kind, string
 [JsonDerivedType(typeof(ReferencePlaneFeatureParameters), "reference-plane")]
 [JsonDerivedType(typeof(ReferenceAxisFeatureParameters), "reference-axis")]
 [JsonDerivedType(typeof(ReferencePointFeatureParameters), "reference-point")]
+[JsonDerivedType(typeof(SheetMetalBaseFeatureParameters), "sheet-metal-base")]
 public abstract record FeatureParameters;
 public sealed record SketchFeatureParameters(PlaneFrame Plane, SketchSnapshot Sketch) : FeatureParameters;
 public sealed record ExtrudeFeatureParameters(Guid SketchId, double Depth) : FeatureParameters;
@@ -60,6 +61,7 @@ public sealed record CircularPatternFeatureParameters(Guid BaseFeatureId, Vector
 public sealed record ReferencePlaneFeatureParameters(PlaneFrame BasePlane, double Offset) : FeatureParameters;
 public sealed record ReferenceAxisFeatureParameters(Vector3d Origin, Vector3d Direction) : FeatureParameters;
 public sealed record ReferencePointFeatureParameters(Vector3d Position) : FeatureParameters;
+public sealed record SheetMetalBaseFeatureParameters(Guid SketchId, double Thickness, double BendRadius, double KFactor, bool Reverse = false) : FeatureParameters;
 public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Parameters,
     bool Suppressed = false, FeatureReference[]? References = null)
 {
@@ -74,7 +76,8 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
       RibFeatureParameters => FeatureKind.Rib, MirrorFeatureParameters => FeatureKind.Mirror,
       LinearPatternFeatureParameters => FeatureKind.LinearPattern, CircularPatternFeatureParameters => FeatureKind.CircularPattern,
       ReferencePlaneFeatureParameters => FeatureKind.ReferencePlane, ReferenceAxisFeatureParameters => FeatureKind.ReferenceAxis,
-      ReferencePointFeatureParameters => FeatureKind.ReferencePoint, _ => throw new InvalidDataException("Unsupported feature") };
+      ReferencePointFeatureParameters => FeatureKind.ReferencePoint, SheetMetalBaseFeatureParameters => FeatureKind.SheetMetalBase,
+      _ => throw new InvalidDataException("Unsupported feature") };
     [JsonIgnore] public Guid[] Dependencies => (Parameters switch
     {
         ExtrudeFeatureParameters e => new[] { e.SketchId },
@@ -97,6 +100,7 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
         ReferencePlaneFeatureParameters => Array.Empty<Guid>(),
         ReferenceAxisFeatureParameters => Array.Empty<Guid>(),
         ReferencePointFeatureParameters => Array.Empty<Guid>(),
+        SheetMetalBaseFeatureParameters s => new[] { s.SketchId },
         _ => Array.Empty<Guid>()
     }).Concat((References ?? Array.Empty<FeatureReference>()).Select(r=>r.ProducerId)).Distinct().ToArray();
 }
@@ -292,6 +296,13 @@ public static class FeatureDocumentFile
                 case ReferencePointFeatureParameters p:
                     if(!double.IsFinite(p.Position.X)||!double.IsFinite(p.Position.Y)||!double.IsFinite(p.Position.Z))
                         throw new InvalidDataException("Invalid reference point.");
+                    break;
+                case SheetMetalBaseFeatureParameters s:
+                    if(document.Node(s.SketchId).Kind!=FeatureKind.Sketch||
+                       !double.IsFinite(s.Thickness)||s.Thickness<=1e-9||
+                       !double.IsFinite(s.BendRadius)||s.BendRadius<0||
+                       !double.IsFinite(s.KFactor)||s.KFactor<0||s.KFactor>1)
+                        throw new InvalidDataException("Invalid sheet metal base flange.");
                     break;
                 default:throw new InvalidDataException("Unsupported feature parameters.");
             }
