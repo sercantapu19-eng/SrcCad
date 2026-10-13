@@ -165,7 +165,7 @@
                     <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadExtrudeIcon}" Content="Yapısal Eleman" Click="StructuralMember_Click" ToolTip="Kapalı profil çizimini yol çizimi boyunca gerçek OCCT katısı olarak oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadTrimIcon}" Content="Kırp / Uzat" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Köşebent" Click="CadCommandPlaceholder_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Uç Kapağı" Click="CadCommandPlaceholder_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Uç Kapağı" Click="EndCap_Click" x:Name="EndCapButton" ToolTip="Düzlemsel uç yüzünü seçin; gerçek OCCT B-Rep uç kapağı ekler."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Kaynak Dikişi" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Kesim Listesi" Click="StructuralCutList_Click" ToolTip="Yapısal Eleman feature'larından gerçek boy/kesit alanı/hacim listesi üretir."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Profil Kütüphanesi" Click="CadCommandPlaceholder_Click"/>
@@ -520,6 +520,19 @@
                                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                     <Button Content="✓" Width="52" Height="34" Click="EdgeFlangeOk_Click"/>
                                     <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="EdgeFlangeCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="EndCapPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Uç Kapağı Kalınlığı (mm)" FontWeight="Bold"/>
+                                <TextBox x:Name="EndCapThickness" TextChanged="EndCapParameterChanged" Margin="0,4,0,8"/>
+                                <CheckBox x:Name="EndCapReverse" Content="Yönü Ters Çevir" Checked="EndCapParameterChanged" Unchecked="EndCapParameterChanged" Margin="0,0,0,8"/>
+                                <TextBlock Text="Uç Yüzü" FontWeight="Bold"/>
+                                <TextBlock x:Name="EndCapSelectionText" Text="Düzlemsel uç yüzü seçin." TextWrapping="Wrap" Margin="0,4,0,8"/>
+                                <TextBlock x:Name="EndCapError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="EndCapOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="EndCapCancel_Click"/>
                                 </StackPanel>
                             </StackPanel>
 
