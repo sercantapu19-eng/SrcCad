@@ -214,10 +214,10 @@ public static class DrawingDocumentFile
                 throw new InvalidDataException("Invalid drawing view.");
             if(view.ParentViewId is Guid parentId)
             {
-                var parent=viewsById[parentId];
-                if(parent.SheetId!=view.SheetId)
+                var parentView=viewsById[parentId];
+                if(parentView.SheetId!=view.SheetId)
                     throw new InvalidDataException("Dependent drawing views must stay on the same sheet.");
-                if(!string.Equals(parent.ModelPath,view.ModelPath,StringComparison.OrdinalIgnoreCase))
+                if(!string.Equals(parentView.ModelPath,view.ModelPath,StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException("Dependent drawing views must reference the same model.");
             }
             if(view.Type is DrawingViewType.Projected or DrawingViewType.Section or DrawingViewType.Detail or DrawingViewType.Broken)
