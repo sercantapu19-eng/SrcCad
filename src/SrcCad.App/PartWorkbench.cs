@@ -1842,6 +1842,7 @@ public partial class MainWindow
         MirrorFeaturePanel.Visibility=Visibility.Collapsed;
         PatternFeaturePanel.Visibility=Visibility.Collapsed;
         SheetMetalBasePanel.Visibility=Visibility.Collapsed;
+        SheetMetalConvertPanel.Visibility=Visibility.Collapsed;
         EdgeFlangePanel.Visibility=Visibility.Collapsed;
     }
 }
