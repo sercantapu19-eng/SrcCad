@@ -62,6 +62,28 @@ internal static class NativeFeatureGraphTests
                 "sheet metal edge flange rebuilds through feature graph");
 
             var bossBody=session.Output(boss.Id)!.BRep!;
+            var stepPath=Path.Combine(Path.GetTempPath(),Guid.NewGuid().ToString("N")+".step");
+            var igesPath=Path.Combine(Path.GetTempPath(),Guid.NewGuid().ToString("N")+".iges");
+            try
+            {
+                OcctFeatureKernel.ExportStep(bossBody,stepPath);
+                var stepBody=OcctFeatureKernel.ImportStep(stepPath);
+                var stepInfo=OcctFeatureKernel.Inspect(stepBody);
+                Check(Math.Abs(stepInfo[0]-24000)<1e-2&&stepInfo[1]>=1,
+                    "STEP export/import preserves solid volume");
+
+                OcctFeatureKernel.ExportIges(bossBody,igesPath);
+                var igesBody=OcctFeatureKernel.ImportIges(igesPath);
+                var igesInfo=OcctFeatureKernel.Inspect(igesBody);
+                Check(Math.Abs(igesInfo[0]-24000)<1e-2&&igesInfo[1]>=1,
+                    "IGES export/import preserves solid volume");
+            }
+            finally
+            {
+                if(File.Exists(stepPath))File.Delete(stepPath);
+                if(File.Exists(igesPath))File.Delete(igesPath);
+            }
+
             var moved=OcctFeatureKernel.Transform(bossBody,new[]{100.0,0.0,0.0,0.0,0.0,0.0});
             var movedInfo=OcctFeatureKernel.Inspect(moved);
             Check(Math.Abs(movedInfo[0]-24000)<1e-5,"detached assembly transform preserves solid volume");
