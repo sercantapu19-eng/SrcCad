@@ -82,10 +82,47 @@ public partial class MainWindow
     }
 
     private string RebuildAssemblyComponent(string sourcePath)
+        => RebuildAssemblyComponent(sourcePath,new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+
+    private string RebuildAssemblyComponent(string sourcePath,HashSet<string> recursion)
     {
-        var document=FeatureDocumentFile.Load(sourcePath);
-        var session=new FeatureSession<PartFeatureOutput>(document,new PartFeatureEvaluator(new OcctPartGeometryKernel()));
-        return LastBody(document,session.Output)??throw new InvalidDataException("Parça katı B-Rep içermiyor.");
+        var full=Path.GetFullPath(sourcePath);
+        var extension=Path.GetExtension(full);
+        if(string.Equals(extension,".scpart",StringComparison.OrdinalIgnoreCase))
+        {
+            var document=FeatureDocumentFile.Load(full);
+            var session=new FeatureSession<PartFeatureOutput>(document,new PartFeatureEvaluator(new OcctPartGeometryKernel()));
+            return LastBody(document,session.Output)??throw new InvalidDataException("Parça katı B-Rep içermiyor.");
+        }
+
+        if(!string.Equals(extension,".scasm",StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("Montaj bileşeni .scpart veya .scasm olmalı.");
+        if(!recursion.Add(full))throw new InvalidDataException("Alt montaj döngüsü algılandı: "+Path.GetFileName(full));
+
+        try
+        {
+            var assembly=AssemblyDocumentFile.Load(full);
+            var directory=Path.GetDirectoryName(full)??Environment.CurrentDirectory;
+            var bodies=new List<string>();
+            foreach(var component in assembly.Components.Where(c=>!c.Suppressed))
+            {
+                var childPath=Path.IsPathRooted(component.SourcePath)
+                    ?component.SourcePath
+                    :Path.Combine(directory,component.SourcePath);
+                var body=RebuildAssemblyComponent(childPath,recursion);
+                var t=component.Transform;
+                body=SrcCad.Kernel.Occt.OcctFeatureKernel.Transform(body,
+                    new[]{t.Translation.X,t.Translation.Y,t.Translation.Z,t.RotationDegrees.X,t.RotationDegrees.Y,t.RotationDegrees.Z});
+                if(component.MirrorPlane is PlaneFrame mirror)
+                    body=SrcCad.Kernel.Occt.OcctFeatureKernel.Mirror(body,
+                        new[]{mirror.Origin.X,mirror.Origin.Y,mirror.Origin.Z,mirror.U.X,mirror.U.Y,mirror.U.Z,
+                              mirror.Normal.X,mirror.Normal.Y,mirror.Normal.Z},false);
+                bodies.Add(body);
+            }
+            if(bodies.Count==0)throw new InvalidDataException("Alt montaj görünür katı içermiyor.");
+            return bodies.Count==1?bodies[0]:SrcCad.Kernel.Occt.OcctFeatureKernel.Compound(bodies.ToArray());
+        }
+        finally{recursion.Remove(full);}
     }
 
     private void RefreshAssemblyTree(Guid? selected=null)
@@ -183,7 +220,7 @@ public partial class MainWindow
         var dialog=new OpenFileDialog
         {
             Title="SrcCad Parçası Ekle",
-            Filter="SrcCad Parça (*.scpart)|*.scpart|Tüm Dosyalar (*.*)|*.*",
+            Filter="SrcCad Parça / Montaj (*.scpart;*.scasm)|*.scpart;*.scasm|SrcCad Parça (*.scpart)|*.scpart|SrcCad Montaj (*.scasm)|*.scasm|Tüm Dosyalar (*.*)|*.*",
             Multiselect=true
         };
         if(dialog.ShowDialog(this)!=true)return;
