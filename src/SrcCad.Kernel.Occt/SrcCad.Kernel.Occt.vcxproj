@@ -45,7 +45,7 @@
     </ClCompile>
     <Link>
       <AdditionalLibraryDirectories>$(OcctRoot)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>TKernel.lib;TKMath.lib;TKG2d.lib;TKG3d.lib;TKGeomBase.lib;TKGeomAlgo.lib;TKBRep.lib;TKOffset.lib;TKTopAlgo.lib;TKFillet.lib;TKPrim.lib;TKBO.lib;TKBool.lib;TKService.lib;TKV3d.lib;TKOpenGl.lib;TKXSBase.lib;TKSTEPBase.lib;TKSTEPAttr.lib;TKSTEP209.lib;TKSTEP.lib;TKIGES.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>TKernel.lib;TKMath.lib;TKG2d.lib;TKG3d.lib;TKGeomBase.lib;TKGeomAlgo.lib;TKBRep.lib;TKOffset.lib;TKTopAlgo.lib;TKFillet.lib;TKPrim.lib;TKBO.lib;TKBool.lib;TKService.lib;TKV3d.lib;TKOpenGl.lib;TKXSBase.lib;TKDESTEP.lib;TKDEIGES.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -60,7 +60,7 @@
     </ClCompile>
     <Link>
       <AdditionalLibraryDirectories>$(OcctRoot)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>TKernel.lib;TKMath.lib;TKG2d.lib;TKG3d.lib;TKGeomBase.lib;TKGeomAlgo.lib;TKBRep.lib;TKOffset.lib;TKTopAlgo.lib;TKFillet.lib;TKPrim.lib;TKBO.lib;TKBool.lib;TKService.lib;TKV3d.lib;TKOpenGl.lib;TKXSBase.lib;TKSTEPBase.lib;TKSTEPAttr.lib;TKSTEP209.lib;TKSTEP.lib;TKIGES.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>TKernel.lib;TKMath.lib;TKG2d.lib;TKG3d.lib;TKGeomBase.lib;TKGeomAlgo.lib;TKBRep.lib;TKOffset.lib;TKTopAlgo.lib;TKFillet.lib;TKPrim.lib;TKBO.lib;TKBool.lib;TKService.lib;TKV3d.lib;TKOpenGl.lib;TKXSBase.lib;TKDESTEP.lib;TKDEIGES.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
