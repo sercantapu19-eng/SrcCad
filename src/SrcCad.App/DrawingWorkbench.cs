@@ -79,9 +79,14 @@ public partial class MainWindow
             _=>(new Vector3d(0,-1,0),new Vector3d(0,0,1))
         };
 
+    private string ResolveDrawingModelPath(string modelPath)
+        => string.IsNullOrWhiteSpace(_drawingPath)
+            ?Path.GetFullPath(modelPath)
+            :DrawingDocumentFile.ResolveModelPath(_drawingPath,modelPath);
+
     private string DrawingBody(string modelPath)
     {
-        var full=Path.GetFullPath(modelPath);
+        var full=ResolveDrawingModelPath(modelPath);
         if(_drawingBodies.TryGetValue(full,out var body))return body;
         body=RebuildAssemblyComponent(full);
         _drawingBodies[full]=body;
@@ -90,7 +95,7 @@ public partial class MainWindow
 
     private IEnumerable<string> DrawingBodies(string modelPath)
     {
-        var full=Path.GetFullPath(modelPath);
+        var full=ResolveDrawingModelPath(modelPath);
         if(!string.Equals(Path.GetExtension(full),".scasm",StringComparison.OrdinalIgnoreCase))
         {
             yield return DrawingBody(full);yield break;
