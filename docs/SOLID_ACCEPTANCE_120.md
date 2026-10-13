@@ -117,26 +117,26 @@ Kod: `NativeAcceptanceTests.cs`; üretimdeki aynı prism builder çağrılır. S
 | SM-089 | Ölçü düzenleme ve iptal | Ölçüye çift tık; önce Esc ile iptal, sonra değer değiştir; iptal kayıpsız, onay undo edilebilir olmalı. | BLOCKED |
 | SM-090 | Ölçü etiketi sürükleme undo | Etiketi taşı; Ctrl+Z yalnız etiket konumunu geri getirmeli. | BLOCKED |
 | SM-091 | Sabit nokta sürükleme | Sabit nokta taşınamamalı; merkeze göre dikdörtgen köşesinde de sabitle ihlal edilmemeli. | BLOCKED |
-| SM-092 | Gerçek solver DOF hesabı | Yinelenen/bağımlı ilişkiler serbestliği yanlış azaltmamalı; Jacobian rank veya eşdeğer doğrulanmış yöntem kullanılmalı. | FAIL-SOURCE |
-| SM-093 | Solver çakışma raporu | Çözülemeyen ilişki kümesi ilgili ilişkileri göstermeli; geometri ve önceki değerler atomik korunmalı. | FAIL-SOURCE |
-| SM-094 | İlişki zinciri çözümü | En az 20 ilişkili çizgi ve üç sürücü ölçü düzenlenince tüm kısıtlar tolerans içinde sağlanmalı. | FAIL-SOURCE |
-| SM-095 | Teğet ilişkisi | Daire-çizgi ve daire-daire teğetlik gerçek geometrik kısıt olarak çözülmeli. | FAIL-SOURCE |
-| SM-096 | Kontur adası | Dış profil, delik ve deliğin içindeki ada; malzeme derinlik paritesine göre üretilmeli. | FAIL-SOURCE |
-| SM-097 | Eşmerkezli halkadan katı | İki eşmerkezli daire ekstrüzyonu ortası boş boru üretmeli. | FAIL-SOURCE |
-| SM-098 | Birden fazla dış bölge | İki ayrık kapalı profil seçilince iki geçerli solid üretilmeli; bölgeler kaybolmamalı. | FAIL-SOURCE |
+| SM-092 | Gerçek solver DOF hesabı | Yinelenen/bağımlı ilişkiler serbestliği yanlış azaltmamalı; Jacobian rank veya eşdeğer doğrulanmış yöntem kullanılmalı. | BLOCKED |
+| SM-093 | Solver çakışma raporu | Çözülemeyen ilişki kümesi ilgili ilişkileri göstermeli; geometri ve önceki değerler atomik korunmalı. | BLOCKED |
+| SM-094 | İlişki zinciri çözümü | En az 20 ilişkili çizgi ve üç sürücü ölçü düzenlenince tüm kısıtlar tolerans içinde sağlanmalı. | BLOCKED |
+| SM-095 | Teğet ilişkisi | Daire-çizgi ve daire-daire teğetlik gerçek geometrik kısıt olarak çözülmeli. | BLOCKED |
+| SM-096 | Kontur adası | Dış profil, delik ve deliğin içindeki ada; malzeme derinlik paritesine göre üretilmeli. | BLOCKED |
+| SM-097 | Eşmerkezli halkadan katı | İki eşmerkezli daire ekstrüzyonu ortası boş boru üretmeli. | BLOCKED |
+| SM-098 | Birden fazla dış bölge | İki ayrık kapalı profil seçilince iki geçerli solid üretilmeli; bölgeler kaybolmamalı. | BLOCKED |
 | SM-099 | Concave kontur sınırı | İç poligonun köşeleri içeride fakat kenarı dışarıda olan profil reddedilmeli. | BLOCKED |
 | SM-100 | Native geçersiz katı reddi | Kendini kesen profil native katmana verilince başarısız sonuç alınmalı; geçersiz B-Rep commit edilmemeli. | BLOCKED |
 | SM-101 | Geçersiz derinlik stale preview | Geçerli preview sonrası 0, NaN, Infinity ve metin gir; onay eski preview katısını kaydetmemeli. | BLOCKED |
 | SM-102 | Feature düzenleme iptali | Ekstrüzyon1 20 mm iken 30 mm preview yapıp Esc; gerçek hacim 20 mm değerine dönmeli. | BLOCKED |
 | SM-103 | Feature derinlik undo/redo | 20 → 30 → 40 mm değiştir; iki undo ve iki redo sonrası gerçek hacimler sırasıyla doğrulanmalı. | BLOCKED |
 | SM-104 | Feature oluşturma undo | İlk ekstrüzyonu oluşturup Ctrl+Z; feature ve solid kaldırılmalı, Ctrl+Y geri getirmeli. | BLOCKED |
-| SM-105 | Sketch düzenle ve downstream rebuild | Ekstrüzyondan sonra sketch genişliğini değiştir; tüm bağımlı katılar yeniden üretilmeli. | FAIL-SOURCE |
-| SM-106 | FeatureManager bağımlılık ağacı | Birden fazla sketch ve feature ekle; düzenleme ve hata durumu doğru node ile ilişkilendirilmeli. | FAIL-SOURCE |
-| SM-107 | Feature silme ve undo | Feature silindiğinde bağımlı feature davranışı belirli olmalı; undo tüm bağımlılıkları geri getirmeli. | FAIL-SOURCE |
-| SM-108 | Parametrik kesme ekstrüzyonu | Katı üzerine sketch ile kes; hacim gerçek olarak azalmalı ve derinlik değişiminde rebuild olmalı. | FAIL-SOURCE |
-| SM-109 | Parametrik döndürme | Kapalı profili eksen etrafında döndür; açı düzenleme ve undo gerçek B-Rep değiştirmeli. | FAIL-SOURCE |
-| SM-110 | Parametrik fillet/chamfer | Seçilen kenarlara yarıçap/pah uygula; hatalı değer katıyı bozmamalı. | FAIL-SOURCE |
-| SM-111 | Dosya kaydet/aç | scpart kaydet, kapat ve aç; sketch, ölçü, ilişki ve feature parametreleri kayıpsız kalmalı. | FAIL-SOURCE |
+| SM-105 | Sketch düzenle ve downstream rebuild | Ekstrüzyondan sonra sketch genişliğini değiştir; tüm bağımlı katılar yeniden üretilmeli. | BLOCKED |
+| SM-106 | FeatureManager bağımlılık ağacı | Birden fazla sketch ve feature ekle; düzenleme ve hata durumu doğru node ile ilişkilendirilmeli. | BLOCKED |
+| SM-107 | Feature silme ve undo | Feature silindiğinde bağımlı feature davranışı belirli olmalı; undo tüm bağımlılıkları geri getirmeli. | BLOCKED |
+| SM-108 | Parametrik kesme ekstrüzyonu | Katı üzerine sketch ile kes; hacim gerçek olarak azalmalı ve derinlik değişiminde rebuild olmalı. | BLOCKED |
+| SM-109 | Parametrik döndürme | Kapalı profili eksen etrafında döndür; açı düzenleme ve undo gerçek B-Rep değiştirmeli. | BLOCKED |
+| SM-110 | Parametrik fillet/chamfer | Seçilen kenarlara yarıçap/pah uygula; hatalı değer katıyı bozmamalı. | BLOCKED |
+| SM-111 | Dosya kaydet/aç | scpart kaydet, kapat ve aç; sketch, ölçü, ilişki ve feature parametreleri kayıpsız kalmalı. | BLOCKED |
 | SM-112 | Belgeye göre history izolasyonu | Yeni Parça sonrası eski undo/redo ve seçim hedefleri kullanılmamalı. | BLOCKED |
 | SM-113 | Başarısız işlem history | Geçersiz ölçü veya rectangle işlemi redo zincirini silmemeli; boş history adımı oluşturmamalı. | BLOCKED |
 | SM-114 | Aktif araç sırasında undo | Çizgi zincirinde undo sonrası mouse hareketi/sonraki tık silinmiş nokta ID hatası üretmemeli. | BLOCKED |
@@ -190,6 +190,23 @@ SM-105 için tek mevcut Ekstrüzyon1'in kaynak çizimi artık Çizimi Düzenle d
 
 Windows'ta: 100×60×20 katı oluştur; Çizim1'i düzenleyip genişliği150 yap, çıkışta katı150×60×20 olmalı; Ctrl+Z/Y ile iki geometriye dön. Tek kenarı silip çıkmayı dene: başarısız rebuild sonrası düzeltme veya iptal mümkün olmalı. İptal eski100/150 genişliği korumalı ve redo geçmişini silmemeli. SM-105 ve tam SM-073–120 kabulü bu akış doğrulanana kadar açık.
 
+
+## 2026-10-13 kaynak tamamlama güncellemesi
+
+Aşağıdaki maddelerde önceki **FAIL-SOURCE** gerekçeleri artık geçerli değildir; kaynak ve otomatik test altyapısı eklenmiştir. Windows/WPF/C++/CLI/OCCT gerçek kullanım turu bu oturumda çalıştırılmadığı için durumları yalnızca **BLOCKED** olarak güncellendi, PASS verilmedi.
+
+- SM-092: Jacobian rank tabanlı DOF ve redundant denklem sayımı mevcut.
+- SM-093: çakışma durumunda sorunlu ilişki/ölçü kimlikleri raporlanır; başarısız çözüm snapshot'a atomik döner.
+- SM-094–095: karma ilişki zincirleri ve çizgi-daire / daire-daire teğetlik solver/test kapsamındadır.
+- SM-096–098: parity tabanlı çok-bölgeli sketch çözümü; delik içindeki ada, eşmerkezli halka ve ayrık dış bölgeler gerçek extrusion region olarak çözülür. Native evaluator ayrık bölgeleri compound solid olarak üretir.
+- SM-105–107: feature dependency graph, incremental downstream rebuild, suppress/block, cascade delete ve Undo/Redo transaction katmanı mevcuttur.
+- SM-108–110: parametrik Cut, Revolve/RevolveCut, Fillet ve Chamfer gerçek OCCT evaluator zincirindedir.
+- SM-111: schema-2 .scpart save/open feature kimliği, parametreler, suppression ve semantik topoloji referanslarıyla round-trip test edilir.
+- Kalıcı E/F/C topoloji imzaları artık Core save validation aşamasında doğrulanır; bozuk/tekrarlı referans dosyaya yazılmaz.
+- Teknik resim bağımlı görünüş/annotation pafta bütünlüğü ve L/D/R/A ilişkisel ölçü payload'ları save aşamasında doğrulanır.
+- Montaj F/C yüz referansları ve mate türü/referans uyumluluğu save ve UI seçim aşamasında doğrulanır.
+
+Yeni/yenilenen testler Windows native acceptance paketine bağlıdır; gerçek PASS için tools/Run-SolidAcceptance.ps1 ile Windows x64 OCCT turu gerekir.
 
 ## Issue #3 Faz A bağlantısı
 
