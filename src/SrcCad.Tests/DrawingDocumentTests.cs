@@ -32,7 +32,9 @@ internal static class DrawingDocumentTests
             DrawingAnnotationKind.AngularDimension,"A;0;0;40;0;0;0;20;20");
         var centerMark=new DrawingAnnotation(Guid.NewGuid(),sheet.Id,front.Id,new Point2d(20,15),"MERKEZ",
             DrawingAnnotationKind.CenterMark,"R;20;15;5");
-        var dimensions=DrawingDocumentFile.Clone(doc with{Annotations=new[]{linear,diameter,radius,angular,centerMark}});
+        var holeCallout=new DrawingAnnotation(Guid.NewGuid(),sheet.Id,front.Id,new Point2d(110,105),"Ø10",
+            DrawingAnnotationKind.HoleCallout,"D;20;15;5");
+        var dimensions=DrawingDocumentFile.Clone(doc with{Annotations=new[]{linear,diameter,radius,angular,centerMark,holeCallout}});
         Check(dimensions.Annotations.Any(a=>a.Kind==DrawingAnnotationKind.LinearDimension&&a.Data=="L;0;0;40;0"),
             "associative projected-edge dimension roundtrip");
         Check(dimensions.Annotations.Any(a=>a.Kind==DrawingAnnotationKind.DiameterDimension&&a.Data=="D;20;15;5"),
@@ -43,6 +45,10 @@ internal static class DrawingDocumentTests
             "associative angular dimension roundtrip");
         Check(dimensions.Annotations.Any(a=>a.Kind==DrawingAnnotationKind.CenterMark&&a.Data=="R;20;15;5"),
             "associative center mark roundtrip");
+        Check(dimensions.Annotations.Any(a=>a.Kind==DrawingAnnotationKind.HoleCallout&&a.Data=="D;20;15;5"),
+            "persistent hole callout circle signature roundtrip");
+        Check(DrawingDocumentFile.Clone(doc with{Annotations=new[]{holeCallout with{Data="0"}}}).Annotations.Single().Data=="0",
+            "legacy index-based hole callout remains readable");
 
         var removedView=clone.RemoveView(front.Id,true);
         Check(removedView.Views.Length==0&&removedView.Annotations.Length==0,
@@ -124,6 +130,14 @@ internal static class DrawingDocumentTests
             var zeroRadius=centerMark with{Data="R;20;15;0"};
             DrawingDocumentFile.Serialize(doc with{Annotations=new[]{zeroRadius}});
             throw new InvalidOperationException("drawing accepted zero-radius center mark payload");
+        }
+        catch(InvalidDataException){_checks++;}
+
+        try
+        {
+            var brokenHole=holeCallout with{Data="D;20;15;0"};
+            DrawingDocumentFile.Serialize(doc with{Annotations=new[]{brokenHole}});
+            throw new InvalidOperationException("drawing accepted invalid hole callout circle signature");
         }
         catch(InvalidDataException){_checks++;}
 
