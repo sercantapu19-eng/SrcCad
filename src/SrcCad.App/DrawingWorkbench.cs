@@ -1068,6 +1068,27 @@ public partial class MainWindow
             yield return(a.X,a.Y,b.X,b.Y);
             yield return(b.X,b.Y,note.Position.X,note.Position.Y);
         }
+        else if(note.Kind==DrawingAnnotationKind.RadiusDimension&&ResolveRadiusDimension(view,note.Data) is ProjectedCircle radiusCircle)
+        {
+            var center=DrawingToSheet(view,radiusCircle.X,radiusCircle.Y);
+            var radius=radiusCircle.Radius*view.Scale;
+            var dx=note.Position.X-center.X;var dy=note.Position.Y-center.Y;
+            var len=Math.Sqrt(dx*dx+dy*dy);var ux=len>1e-9?dx/len:1.0;var uy=len>1e-9?dy/len:0.0;
+            var rim=new Point2d(center.X+ux*radius,center.Y+uy*radius);
+            yield return(center.X,center.Y,rim.X,rim.Y);
+            yield return(rim.X,rim.Y,note.Position.X,note.Position.Y);
+        }
+        else if(note.Kind==DrawingAnnotationKind.AngularDimension&&ResolveAngularDimension(view,note.Data) is { } angular)
+        {
+            var a1=DrawingToSheet(view,angular.A.X1,angular.A.Y1);
+            var a2=DrawingToSheet(view,angular.A.X2,angular.A.Y2);
+            var b1=DrawingToSheet(view,angular.B.X1,angular.B.Y1);
+            var b2=DrawingToSheet(view,angular.B.X2,angular.B.Y2);
+            var am=new Point2d((a1.X+a2.X)*0.5,(a1.Y+a2.Y)*0.5);
+            var bm=new Point2d((b1.X+b2.X)*0.5,(b1.Y+b2.Y)*0.5);
+            yield return(am.X,am.Y,note.Position.X,note.Position.Y);
+            yield return(bm.X,bm.Y,note.Position.X,note.Position.Y);
+        }
     }
 
     private void DrawingExportDxf_Click(object sender,RoutedEventArgs e)
@@ -1128,7 +1149,8 @@ public partial class MainWindow
                 foreach(var dimensionLine in DrawingDimensionDxfLines(note))
                     Line(dimensionLine.X1,dimensionLine.Y1,dimensionLine.X2,dimensionLine.Y2,"DIMENSION");
                 Text(note.Position.X,note.Position.Y,ResolveDrawingAnnotationText(note),
-                    note.Kind is DrawingAnnotationKind.LinearDimension or DrawingAnnotationKind.DiameterDimension?"DIMENSION":"ANNOTATION");
+                    note.Kind is DrawingAnnotationKind.LinearDimension or DrawingAnnotationKind.DiameterDimension or DrawingAnnotationKind.RadiusDimension or DrawingAnnotationKind.AngularDimension
+                        ?"DIMENSION":"ANNOTATION");
             }
 
             Pair(0,"ENDSEC");Pair(0,"EOF");
