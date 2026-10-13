@@ -2909,6 +2909,8 @@ namespace SrcCad::Kernel::Occt
         ClearSketch();
         ClearPreview();
         eraseList(myState,myState->AssemblyObjects);
+        myState->AssemblyIds.clear();
+        myState->AssemblyTransforms.clear();
         myState->Context->ClearSelected(false);
         myState->Context->UpdateCurrentViewer();
     }
