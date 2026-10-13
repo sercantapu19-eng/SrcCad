@@ -726,7 +726,7 @@ public partial class MainWindow
             var a=_spatialSketchPoints[^1];var b=_spatialSketchPoints[0];
             _viewer.AddStyledSketchLine(a.X,a.Y,a.Z,b.X,b.Y,b.Z,0);
         }
-        foreach(var p in _spatialSketchPoints)_viewer.AddSketchPoint(p.X,p.Y,p.Z,2.0,2);
+        foreach(var p in _spatialSketchPoints)_viewer.AddSketchPoint(p.X,p.Y,p.Z,false);
         _viewer.FitAll();
     }
 
@@ -926,7 +926,7 @@ public partial class MainWindow
         EndCapSelectionText.Text=(node.References?.Length??0)==1?"Uç yüzü seçili":"Düzlemsel uç yüzü seçin.";
         EndCapError.Text=(node.References?.Length??0)==1?"":"Yüz seçimi gerekiyor.";
         EndCapPanel.Visibility=Visibility.Visible;
-        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;SpatialSketchPanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;
         RevolveFeaturePanel.Visibility=Visibility.Collapsed;MultiSketchFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;
         DraftFeaturePanel.Visibility=Visibility.Collapsed;RibFeaturePanel.Visibility=Visibility.Collapsed;ReferenceGeometryPanel.Visibility=Visibility.Collapsed;
         MirrorFeaturePanel.Visibility=Visibility.Collapsed;PatternFeaturePanel.Visibility=Visibility.Collapsed;SheetMetalBasePanel.Visibility=Visibility.Collapsed;
