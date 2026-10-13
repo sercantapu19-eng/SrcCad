@@ -992,7 +992,7 @@ public partial class MainWindow
         EndCapSelectionText.Text=(node.References?.Length??0)==1?"Uç yüzü seçili":"Düzlemsel uç yüzü seçin.";
         EndCapError.Text=(node.References?.Length??0)==1?"":"Yüz seçimi gerekiyor.";
         EndCapPanel.Visibility=Visibility.Visible;
-        GraphFeaturePanel.Visibility=Visibility.Collapsed;SpatialSketchPanel.Visibility=Visibility.Collapsed;StructuralTrimPanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;SpatialSketchPanel.Visibility=Visibility.Collapsed;StructuralTrimPanel.Visibility=Visibility.Collapsed;SheetBendPanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;
         RevolveFeaturePanel.Visibility=Visibility.Collapsed;MultiSketchFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;
         DraftFeaturePanel.Visibility=Visibility.Collapsed;RibFeaturePanel.Visibility=Visibility.Collapsed;ReferenceGeometryPanel.Visibility=Visibility.Collapsed;
         MirrorFeaturePanel.Visibility=Visibility.Collapsed;PatternFeaturePanel.Visibility=Visibility.Collapsed;SheetMetalBasePanel.Visibility=Visibility.Collapsed;
@@ -2216,6 +2216,109 @@ public partial class MainWindow
 
     private void SheetMetalBaseCancel_Click(object sender,RoutedEventArgs e)=>EndGraphFeature();
 
+    private FeatureNode? SheetBendSketchCandidate()
+    {
+        if(_partSession is null)return null;
+        bool Valid(FeatureNode node)=>node.Parameters is SketchFeatureParameters source&&
+            source.Sketch.Entities.OfType<SketchLine>().Count(line=>!line.Construction)==1;
+        if(SelectedGraphNode is {Kind:FeatureKind.Sketch} selected&&Valid(selected))return selected;
+        var ordered=_partSession.Document.Ordered();
+        var lastBody=-1;for(var i=0;i<ordered.Length;i++)if(_partSession.Output(ordered[i].Id)?.BRep is not null)lastBody=i;
+        return ordered.Skip(Math.Max(0,lastBody+1)).LastOrDefault(node=>node.Kind==FeatureKind.Sketch&&Valid(node))
+            ??ordered.LastOrDefault(node=>node.Kind==FeatureKind.Sketch&&Valid(node));
+    }
+
+    private void SketchedBend_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession())return;
+        var baseNode=CurrentSolidFeature();var sketch=SheetBendSketchCandidate();
+        if(baseNode is null){Status("Çizilmiş Büküm için sac gövdesi gerekiyor.");return;}
+        if(sketch is null){Status("Çizilmiş Büküm için tek normal çizgi içeren sketch seçin.");return;}
+        BeginSheetBendFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Çizilmiş Büküm"),
+            new SheetMetalBendFeatureParameters(baseNode.Id,sketch.Id,90,false)));
+    }
+
+    private void Unfold_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession()||_partSession is null)return;
+        var source=_partSession.Document.Ordered().LastOrDefault(n=>n.Parameters is SheetMetalBendFeatureParameters b&&b.AngleDegrees>0);
+        if(source?.Parameters is not SheetMetalBendFeatureParameters bend)
+        {Status("Açınım için önce Çizilmiş Büküm oluşturun.");return;}
+        var baseNode=CurrentSolidFeature();
+        if(baseNode is null)return;
+        BeginSheetBendFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Açınım"),
+            new SheetMetalBendFeatureParameters(baseNode.Id,bend.SketchId,-Math.Abs(bend.AngleDegrees),bend.Reverse)));
+    }
+
+    private void Fold_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession()||_partSession is null)return;
+        var source=_partSession.Document.Ordered().LastOrDefault(n=>n.Parameters is SheetMetalBendFeatureParameters b&&b.AngleDegrees<0);
+        if(source?.Parameters is not SheetMetalBendFeatureParameters unfold)
+        {Status("Katla için önce Açınım işlemi gerekiyor.");return;}
+        var baseNode=CurrentSolidFeature();if(baseNode is null)return;
+        BeginSheetBendFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Katla"),
+            new SheetMetalBendFeatureParameters(baseNode.Id,unfold.SketchId,Math.Abs(unfold.AngleDegrees),unfold.Reverse)));
+    }
+
+    private void BeginSheetBendFeature(FeatureNode node)
+    {
+        if(node.Parameters is not SheetMetalBendFeatureParameters bend)throw new InvalidOperationException("Unsupported sheet bend.");
+        _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;
+        SheetBendAngle.Text=bend.AngleDegrees.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        SheetBendReverse.IsChecked=bend.Reverse;
+        SheetBendSketchText.Text=_partSession?.Document.Node(bend.SketchId).Name??"Çizim";
+        SheetBendError.Text="";
+        SheetBendPanel.Visibility=Visibility.Visible;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;SpatialSketchPanel.Visibility=Visibility.Collapsed;StructuralTrimPanel.Visibility=Visibility.Collapsed;
+        EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;RevolveFeaturePanel.Visibility=Visibility.Collapsed;
+        MultiSketchFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;DraftFeaturePanel.Visibility=Visibility.Collapsed;
+        RibFeaturePanel.Visibility=Visibility.Collapsed;ReferenceGeometryPanel.Visibility=Visibility.Collapsed;MirrorFeaturePanel.Visibility=Visibility.Collapsed;
+        PatternFeaturePanel.Visibility=Visibility.Collapsed;SheetMetalBasePanel.Visibility=Visibility.Collapsed;SheetMetalConvertPanel.Visibility=Visibility.Collapsed;
+        EdgeFlangePanel.Visibility=Visibility.Collapsed;EndCapPanel.Visibility=Visibility.Collapsed;
+        PropertyTitle.Text=node.Name;PropertyInfo.Text="Gerçek OCCT split → rotate → fuse sac bükümü • canlı önizleme • history/rebuild";
+        ManagerTabs.SelectedItem=PropertyManagerTab;_loadingGraphParameters=false;
+        UpdateSheetBendPreview();RefreshCommandState();
+    }
+
+    private FeatureDocument? SheetBendCandidate()
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not SheetMetalBendFeatureParameters bend||
+           !DimensionNumbers.TryParseScalar(SheetBendAngle.Text,out var angle)||
+           !double.IsFinite(angle)||Math.Abs(angle)<=1e-6||Math.Abs(angle)>=179)return null;
+        return ReplaceGraphNode(_graphFeatureEdit with{Parameters=bend with{AngleDegrees=angle,Reverse=SheetBendReverse.IsChecked==true}});
+    }
+
+    private void SheetBendParameterChanged(object sender,RoutedEventArgs e)
+    {
+        if(!_loadingGraphParameters)UpdateSheetBendPreview();
+    }
+
+    private void UpdateSheetBendPreview()
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not SheetMetalBendFeatureParameters)return;
+        var candidate=SheetBendCandidate();
+        if(candidate is null){SheetBendError.Text="Büküm açısı -179 ile +179 derece arasında ve sıfırdan farklı olmalı.";return;}
+        var preview=_partSession.Preview(candidate);
+        var body=preview.Success?LastBody(candidate,id=>preview.Outputs.GetValueOrDefault(id)):null;
+        if(body is not null&&_viewer.PreviewFeatureBody(body))
+        {
+            _viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.72);SheetBendError.Text="";return;
+        }
+        _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.0);
+        SheetBendError.Text=preview.Report.Nodes.LastOrDefault(n=>n.State==RebuildState.Failed)?.Error??preview.Report.Error??"Büküm önizlemesi oluşturulamadı.";
+    }
+
+    private void SheetBendOk_Click(object sender,RoutedEventArgs e)
+    {
+        var candidate=SheetBendCandidate();
+        if(candidate is null||_partSession is null){SheetBendError.Text="Geçerli büküm parametreleri gerekiyor.";return;}
+        if(!_partSession.TryCommit(candidate)){SheetBendError.Text=GraphError();return;}
+        var id=_graphFeatureEdit!.Id;EndGraphFeature();RefreshPartTree(id);Status("Sac büküm/açınım işlemi onaylandı.");
+    }
+
+    private void SheetBendCancel_Click(object sender,RoutedEventArgs e)=>EndGraphFeature();
+
     private void ConvertToSheetMetal_Click(object sender,RoutedEventArgs e)
     {
         if(_inSketch||_extrudeCommandActive||!EnsurePartSession())return;
@@ -2301,6 +2404,7 @@ public partial class MainWindow
         if(node.Parameters is ReferencePlaneFeatureParameters or ReferenceAxisFeatureParameters or ReferencePointFeatureParameters){BeginReferenceGeometryFeature(node);return;}
         if(node.Parameters is SheetMetalBaseFeatureParameters){BeginSheetMetalBaseFeature(node);return;}
         if(node.Parameters is SheetMetalConvertFeatureParameters){BeginSheetMetalConvertFeature(node);return;}
+        if(node.Parameters is SheetMetalBendFeatureParameters){BeginSheetBendFeature(node);return;}
         if(node.Parameters is SheetMetalEdgeFlangeFeatureParameters or SheetMetalMiterFlangeFeatureParameters or SheetMetalJogFeatureParameters){BeginEdgeFlangeFeature(node);return;}
         _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;_depthWheel.Reset();
         var cut=node.Parameters as CutFeatureParameters;
