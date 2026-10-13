@@ -333,6 +333,7 @@
                                     <Button Content="Eşmerkezli" Margin="0,0,4,4" Click="ConcentricRelation_Click"/>
                                     <Button Content="Orta Nokta" Click="MidpointRelation_Click" Margin="2" Padding="6,3"/>
                                     <Button Content="Teğet" Click="TangentRelation_Click" Margin="2" Padding="6,3"/>
+                                    <Button Content="Simetrik" Click="SymmetricRelation_Click" Margin="2" Padding="6,3" ToolTip="İki nokta ve bir merkez çizgisi seçin; noktaları eksene göre parametrik simetrik yapar."/>
                                     <Button Content="Sabitle" Margin="0,0,4,4" Click="FixRelation_Click"/>
                                 </WrapPanel>
 
