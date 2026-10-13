@@ -31,7 +31,8 @@ public enum SketchRelationType
     Concentric,
     Fixed,
     Midpoint,
-    Tangent
+    Tangent,
+    Symmetric
 }
 
 public sealed record SketchRelation(
@@ -44,7 +45,8 @@ public sealed record SketchRelation(
     GeometryReference? ReferenceA = null,
     GeometryReference? ReferenceB = null,
     double Sense = 1,
-    bool InternalTangency = false);
+    bool InternalTangency = false,
+    GeometryReference? ReferenceC = null);
 
 public enum SketchDimensionType
 {
@@ -478,7 +480,7 @@ public sealed partial class SketchModel
         var entity = Entity(entityId);
         if (entity is null) return;
 
-        Relations.RemoveAll(r => ReferenceUsesEntity(r.ReferenceA,entityId) || ReferenceUsesEntity(r.ReferenceB,entityId));
+        Relations.RemoveAll(r => ReferenceUsesEntity(r.ReferenceA,entityId) || ReferenceUsesEntity(r.ReferenceB,entityId) || ReferenceUsesEntity(r.ReferenceC,entityId));
         Dimensions.RemoveAll(d => ReferenceUsesEntity(d.ReferenceA,entityId) || ReferenceUsesEntity(d.ReferenceB,entityId));
         Entities.RemoveAll(x => x.Id == entityId);
         Relations.RemoveAll(r => r.EntityA == entityId || r.EntityB == entityId);
@@ -504,7 +506,7 @@ public sealed partial class SketchModel
         }).Select(e => e.Id).ToList();
 
         foreach (var entityId in incident) DeleteEntity(entityId);
-        Relations.RemoveAll(r => ReferenceUsesPoint(r.ReferenceA,pointId) || ReferenceUsesPoint(r.ReferenceB,pointId));
+        Relations.RemoveAll(r => ReferenceUsesPoint(r.ReferenceA,pointId) || ReferenceUsesPoint(r.ReferenceB,pointId) || ReferenceUsesPoint(r.ReferenceC,pointId));
         Dimensions.RemoveAll(d => ReferenceUsesPoint(d.ReferenceA,pointId) || ReferenceUsesPoint(d.ReferenceB,pointId));
         Points.Remove(pointId);
         Relations.RemoveAll(r => r.PointA == pointId || r.PointB == pointId);
@@ -538,7 +540,7 @@ public sealed partial class SketchModel
 
         // Standalone point references (e.g. snapped three-point circle inputs)
         // remain part of the sketch even when an unrelated entity is deleted.
-        foreach (var reference in Relations.SelectMany(r => new[] { r.ReferenceA,r.ReferenceB })
+        foreach (var reference in Relations.SelectMany(r => new[] { r.ReferenceA,r.ReferenceB,r.ReferenceC })
                      .Concat(Dimensions.SelectMany(d => new[] { d.ReferenceA,d.ReferenceB })))
             if (reference is { Kind: GeometryReferenceKind.Point }) used.Add(reference.Id);
 
