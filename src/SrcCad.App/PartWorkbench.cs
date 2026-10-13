@@ -971,6 +971,36 @@ public partial class MainWindow
         _spatialSketchPoints.Add(point);RefreshSpatialSketchPreview();
     }
 
+    private void SpatialPointFromSelection_Click(object sender,RoutedEventArgs e)
+    {
+        Vector3d? point=null;
+        var measure=_viewer.SelectedTopologyMeasure();
+        if(measure.Length>=5&&Math.Abs(measure[0]-1)<0.5)
+            point=new Vector3d(measure[2],measure[3],measure[4]);
+        else if(_viewer.TryGetSelectedPlanarFace(out var face)&&
+                _viewer.ScreenToPlane(_lastMouseX,_lastMouseY,
+                    face.Origin.X,face.Origin.Y,face.Origin.Z,
+                    face.Normal.X,face.Normal.Y,face.Normal.Z,out var world))
+            point=new Vector3d(world.X,world.Y,world.Z);
+
+        if(point is not Vector3d value)
+        {
+            SpatialSketchError.Text="Bir gerçek köşe seçin veya düzlemsel yüz seçip imleci istediğiniz 3B konuma getirin.";
+            return;
+        }
+        if(_spatialSketchPoints.Count>0&&(value-_spatialSketchPoints[^1]).Length<=1e-9)
+        {
+            SpatialSketchError.Text="Seçilen nokta son 3B noktayla aynı.";
+            return;
+        }
+        _spatialSketchPoints.Add(value);
+        SpatialPointX.Text=value.X.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        SpatialPointY.Text=value.Y.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        SpatialPointZ.Text=value.Z.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        RefreshSpatialSketchPreview();
+        Status("Gerçek 3B geometri noktasından yol noktası eklendi.");
+    }
+
     private void SpatialPointRemove_Click(object sender,RoutedEventArgs e)
     {
         if(_spatialSketchPoints.Count>0)_spatialSketchPoints.RemoveAt(_spatialSketchPoints.Count-1);
