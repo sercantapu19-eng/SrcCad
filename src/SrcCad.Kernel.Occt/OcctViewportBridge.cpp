@@ -2694,7 +2694,7 @@ namespace SrcCad::Kernel::Occt
             FaceSemanticSignature signature;
             if(!faceSemanticSignature(face,signature))
                 throw gcnew InvalidOperationException("Referenced assembly face has no supported mate frame.");
-            return gcnew array<double>{signature.X,signature.Y,signature.Z,signature.NX,signature.NY,signature.NZ};
+            return gcnew array<double>{signature.X,signature.Y,signature.Z,signature.NX,signature.NY,signature.NZ,(double)signature.Type,signature.Radius};
         }
         catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
     }
