@@ -1154,7 +1154,7 @@ public partial class MainWindow
         MultiSketchFeatureInfo.Text=node.Parameters switch
         {
             StructuralMemberFeatureParameters=>"Profil / Weldment başlangıcı • kapalı kesit + tek, dallanmayan yol • gerçek OCCT katısı.",
-            SweepFeatureParameters or SweepCutFeatureParameters=>"Kapalı profil + tek, dallanmayan çizgisel yol. Profil delikleri bu ilk çekirdekte kabul edilmez.",
+            SweepFeatureParameters or SweepCutFeatureParameters=>"Kapalı profil + tek, dallanmayan çizgisel yol. Polygon ve dairesel iç boşluklar gerçek süpürme katısında korunur.",
             _=>"En az iki kapalı profil. Profillerin sırası FeatureManager sırasına göre loft edilir."
         };
         MultiSketchFeatureError.Text="";
@@ -2000,7 +2000,8 @@ public partial class MainWindow
             2=>$"Kenar Uzunluğu: {measure[1]:0.###} mm\nMerkez: X={measure[2]:0.###}, Y={measure[3]:0.###}, Z={measure[4]:0.###}",
             4=>$"Yüz Alanı: {measure[1]:0.###} mm²\nAğırlık Merkezi: X={measure[2]:0.###}, Y={measure[3]:0.###}, Z={measure[4]:0.###}",
             1=>$"Köşe Koordinatı: X={measure[2]:0.###}, Y={measure[3]:0.###}, Z={measure[4]:0.###}",
-            _=>"Bu seçim türü henüz ölçülemiyor."
+            6=>$"Gövde Hacmi: {measure[1]:0.###} mm³\nAğırlık Merkezi: X={measure[2]:0.###}, Y={measure[3]:0.###}, Z={measure[4]:0.###}",
+            _=>"Bu seçim türü için geometrik ölçü üretilemedi."
         };
         PropertyInfo.Text=details;ManagerTabs.SelectedItem=PropertyManagerTab;Status("Seçili geometri ölçüldü.");
     }
