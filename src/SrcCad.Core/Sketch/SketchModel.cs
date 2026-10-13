@@ -1437,8 +1437,11 @@ public sealed partial class SketchModel
         regions=new List<SketchExtrusionRegion>();
 
         var boundaries=new List<(IReadOnlyList<Point2d> Polygon,SketchCircle? Circle)>();
+        var hasLineOrArc=Lines(false).Any()||Arcs(false).Any();
         if(TryGetClosedLineLoops(out var loops))
             boundaries.AddRange(loops.Select(loop=>((IReadOnlyList<Point2d>)loop,(SketchCircle?)null)));
+        else if(hasLineOrArc)
+            return false;
 
         foreach(var ellipse in Ellipses(false))
             boundaries.Add((SampleEllipse(ellipse,96),null));
@@ -1497,8 +1500,7 @@ public sealed partial class SketchModel
             {
                 var center=Point(circleA.CenterPointId).Position;
                 if(PointInPolygon(center,b.Polygon))return true;
-                return b.Polygon.Any((p)=>false)||
-                       Enumerable.Range(0,b.Polygon.Count).Any(i=>
+                return Enumerable.Range(0,b.Polygon.Count).Any(i=>
                            DistancePointToSegment(center,b.Polygon[i],b.Polygon[(i+1)%b.Polygon.Count])<=circleA.Radius+eps);
             }
 
