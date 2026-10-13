@@ -48,6 +48,10 @@
                 <MenuItem Header="Parçayı Farklı Kaydet…" InputGestureText="Ctrl+S" Click="SavePart_Click"/>
                 <MenuItem Header="Montajı Kaydet…" Click="SaveAssembly_Click"/>
                 <Separator/>
+                <MenuItem Header="Yeni Teknik Resim" Click="NewDrawing_Click"/>
+                <MenuItem Header="Teknik Resim Aç…" Click="OpenDrawing_Click"/>
+                <MenuItem Header="Teknik Resmi Kaydet…" Click="SaveDrawing_Click"/>
+                <Separator/>
                 <MenuItem Header="Çıkış" Click="Exit_Click"/>
             </MenuItem>
             <MenuItem Header="Düzenle" IsEnabled="False"/>
@@ -183,15 +187,15 @@
             </TabItem>
             <TabItem Header="TEKNİK RESİM">
                 <WrapPanel Margin="8">
-                    <Button Style="{StaticResource CadCommandButton}" Content="Model Görünümü" Click="CadCommandPlaceholder_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="İzdüşüm" Click="CadCommandPlaceholder_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Model Görünümü" Click="DrawingModelView_Click" ToolTip=".scpart modelinden gerçek OCCT kenar izdüşümü oluşturur."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="İzdüşüm" Click="DrawingProjectedView_Click" ToolTip="Seçili görünüşten bağlı Üst/Sağ görünüş üretir."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Kesit" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Detay" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Kopuk Görünüm" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadDimensionIcon}" Content="Akıllı Ölçü" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Delik Çağrısı" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Merkez İşareti" Click="CadCommandPlaceholder_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Not" Click="CadCommandPlaceholder_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Not" Click="DrawingAddNote_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Malzeme Listesi" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Balon" Click="CadCommandPlaceholder_Click"/>
                 </WrapPanel>
