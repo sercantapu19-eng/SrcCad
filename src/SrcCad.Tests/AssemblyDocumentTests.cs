@@ -172,6 +172,14 @@ internal static class AssemblyDocumentTests
         }
         catch(InvalidDataException){_checks++;}
 
+        var assemblyPath=Path.Combine(Path.GetTempPath(),"SrcCadTests","Assembly","Main.scasm");
+        var relativeResolved=AssemblyDocumentFile.ResolveSourcePath(assemblyPath,Path.Combine("Parts","Body.scpart"));
+        Check(relativeResolved==Path.GetFullPath(Path.Combine(Path.GetDirectoryName(assemblyPath)!,"Parts","Body.scpart")),
+            "relative component source resolves against assembly directory");
+        var absoluteSource=Path.GetFullPath(Path.Combine(Path.GetTempPath(),"SrcCadTests","Absolute.scpart"));
+        Check(AssemblyDocumentFile.ResolveSourcePath(assemblyPath,absoluteSource)==absoluteSource,
+            "absolute component source path remains absolute");
+
         Console.WriteLine($"Assembly Document Tests: {_checks} PASS");
     }
 }
