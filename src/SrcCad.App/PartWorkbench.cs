@@ -3271,11 +3271,24 @@ public partial class MainWindow
         _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;_depthWheel.Reset();
         var cut=node.Parameters as CutFeatureParameters;
         var sheetCut=node.Parameters as SheetMetalCutFeatureParameters;
-        var depth=cut?.Depth??sheetCut?.Depth??Math.Abs(((ExtrudeFeatureParameters)node.Parameters).Depth);
+        var extrude=node.Parameters as ExtrudeFeatureParameters;
+        var depth=cut?.Depth??sheetCut?.Depth??Math.Abs(extrude!.Depth);
         GraphDepth.Text=depth.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
-        GraphReverse.IsChecked=cut?.Reverse??sheetCut?.Reverse??((ExtrudeFeatureParameters)node.Parameters).Depth<0;
+        GraphReverse.IsChecked=cut?.Reverse??sheetCut?.Reverse??extrude?.Depth<0;
         GraphThroughAll.IsChecked=(cut?.Termination??sheetCut?.Termination)==ExtrusionTermination.ThroughAll;
         GraphThroughAll.Visibility=cut is null&&sheetCut is null?Visibility.Collapsed:Visibility.Visible;
+        var extrusionVisibility=extrude is null?Visibility.Collapsed:Visibility.Visible;
+        GraphMidPlane.Visibility=extrusionVisibility;
+        GraphDirection2Enabled.Visibility=extrusionVisibility;
+        GraphDirection2Label.Visibility=extrusionVisibility;
+        GraphDirection2Depth.Visibility=extrusionVisibility;
+        GraphMidPlane.IsChecked=extrude?.MidPlane==true;
+        GraphDirection2Enabled.IsChecked=extrude is {Direction2Depth:>1e-9};
+        GraphDirection2Depth.Text=(extrude is {Direction2Depth:>1e-9}?extrude.Direction2Depth:10)
+            .ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        GraphDirection2Enabled.IsEnabled=extrude is not null&&extrude.MidPlane==false;
+        GraphDirection2Depth.IsEnabled=extrude is not null&&extrude.MidPlane==false&&extrude.Direction2Depth>1e-9;
+        GraphReverse.IsEnabled=extrude?.MidPlane!=true;
         _loadingGraphParameters=false;
         GraphFeaturePanel.Visibility=Visibility.Visible;PropertyTitle.Text=node.Name;
         PropertyInfo.Text="Gerçek B-Rep önizleme • ✓ tek transaction • Esc iptal";
@@ -3286,16 +3299,41 @@ public partial class MainWindow
         if(_graphFeatureEdit is null||!DimensionNumbers.TryParse(GraphDepth.Text,SketchDimensionType.LineLength,out var depth,out _))return null;
         var node=_graphFeatureEdit;
         var termination=GraphThroughAll.IsChecked==true?ExtrusionTermination.ThroughAll:ExtrusionTermination.Blind;
-        FeatureParameters parameters=node.Parameters switch
+        FeatureParameters parameters;
+        if(node.Parameters is ExtrudeFeatureParameters extrude)
+        {
+            var midPlane=GraphMidPlane.IsChecked==true;
+            double direction2=0;
+            if(!midPlane&&GraphDirection2Enabled.IsChecked==true)
+            {
+                if(!DimensionNumbers.TryParse(GraphDirection2Depth.Text,SketchDimensionType.LineLength,out direction2,out _)||direction2<=1e-9)
+                    return null;
+            }
+            parameters=extrude with
+            {
+                Depth=midPlane?depth:(GraphReverse.IsChecked==true?-depth:depth),
+                MidPlane=midPlane,
+                Direction2Depth=midPlane?0:direction2
+            };
+        }
+        else parameters=node.Parameters switch
         {
             CutFeatureParameters cut=>cut with{Depth=depth,Reverse=GraphReverse.IsChecked==true,Termination=termination},
             SheetMetalCutFeatureParameters cut=>cut with{Depth=depth,Reverse=GraphReverse.IsChecked==true,Termination=termination},
-            ExtrudeFeatureParameters extrude=>extrude with{Depth=GraphReverse.IsChecked==true?-depth:depth},
             _=>throw new InvalidOperationException("Unsupported depth feature.")
         };
         return ReplaceGraphNode(node with{Parameters=parameters});
     }
-    private void GraphParameterChanged(object sender,RoutedEventArgs e){if(!_loadingGraphParameters)UpdateGraphPreview();}
+    private void GraphParameterChanged(object sender,RoutedEventArgs e)
+    {
+        if(_loadingGraphParameters)return;
+        var isExtrude=_graphFeatureEdit?.Parameters is ExtrudeFeatureParameters;
+        var midPlane=isExtrude&&GraphMidPlane.IsChecked==true;
+        GraphDirection2Enabled.IsEnabled=isExtrude&&!midPlane;
+        GraphDirection2Depth.IsEnabled=isExtrude&&!midPlane&&GraphDirection2Enabled.IsChecked==true;
+        GraphReverse.IsEnabled=!midPlane;
+        UpdateGraphPreview();
+    }
     private void UpdateGraphPreview()
     {
         if(_partSession is null||_graphFeatureEdit is null)return;
