@@ -100,6 +100,23 @@ internal static class FeatureGraphTests
         Check(!twoClone.MidPlane&&twoClone.Depth==25&&twoClone.Direction2Depth==15,
             "two-direction extrusion parameters roundtrip");
 
+        var bossSketch2=new SketchModel(StandardPlanes.Front with{Origin=Vector3d.UnitZ*20,Name="Boss2Plane"});
+        bossSketch2.AddCornerRectangle(new(10,10),new(30,20),.001);
+        var bossSketch2Node=new FeatureNode(Guid.NewGuid(),"Boss2Sketch",
+            new SketchFeatureParameters(bossSketch2.Plane,bossSketch2.CaptureSnapshot()));
+        var chainedBoss=new FeatureNode(Guid.NewGuid(),"Ekstrüzyon2",
+            new ExtrudeFeatureParameters(bossSketch2Node.Id,10,BaseFeatureId:boss.Id,MergeResult:true));
+        var chainedDoc=initial with{Features=initial.Features.Concat(new[]{bossSketch2Node,chainedBoss}).ToArray()};
+        Check(chainedDoc.Node(chainedBoss.Id).Dependencies.ToHashSet().SetEquals(new[]{boss.Id,bossSketch2Node.Id}),
+            "second boss depends on previous solid and its sketch");
+        var chainedClone=FeatureDocumentFile.Clone(chainedDoc);
+        var chainedParams=(ExtrudeFeatureParameters)chainedClone.Node(chainedBoss.Id).Parameters;
+        Check(chainedParams.BaseFeatureId==boss.Id&&chainedParams.MergeResult,
+            "boss base dependency and merge-result roundtrip");
+        var multibodyParams=chainedParams with{MergeResult=false};
+        Check(!multibodyParams.MergeResult&&multibodyParams.BaseFeatureId==boss.Id,
+            "boss merge-result can be disabled without losing base dependency");
+
         var second=new FeatureNode(Guid.NewGuid(),"Çizim2",source.Parameters);
         var cut=new FeatureNode(Guid.NewGuid(),"Kes-Ekstrüzyon1",new CutFeatureParameters(boss.Id,second.Id,10));
         var doc=initial with{Features=initial.Features.Concat(new[]{second,cut}).ToArray()};
