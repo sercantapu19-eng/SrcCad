@@ -6,6 +6,20 @@ public sealed partial class SketchModel
 {
     private double[] ReferenceRelationResidual(SketchRelation r)
     {
+        if(r.Type==SketchRelationType.Symmetric)
+        {
+            var p=ResolvePoint(r.ReferenceA!);
+            var q=ResolvePoint(r.ReferenceB!);
+            var axis=(SketchLine)Entity(r.ReferenceC!.Id)!;
+            var a=Point(axis.StartPointId).Position;var b=Point(axis.EndPointId).Position;
+            var mid=new Point2d((p.X+q.X)/2,(p.Y+q.Y)/2);
+            var dx=b.X-a.X;var dy=b.Y-a.Y;
+            var length=Math.Max(1e-12,Point2d.Distance(a,b));
+            return new[]{
+                SignedLineDistance(mid,a,b),
+                ((q.X-p.X)*dx+(q.Y-p.Y)*dy)/length
+            };
+        }
         if(r.Type==SketchRelationType.Tangent)
         {
             var circleB=(SketchCircle)Entity(r.ReferenceB!.Id)!;
