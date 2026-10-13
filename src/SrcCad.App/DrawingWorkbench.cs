@@ -394,7 +394,7 @@ public partial class MainWindow
                     xs.Clear();ys.Clear();
                     for(var i=0;i+3<segments.Length;i+=4)
                     {
-                        var ax=segments[i],bx=segments[i+2];
+                        var ax=segments[i];var bx=segments[i+2];
                         if(!double.IsFinite(ax)||!double.IsFinite(bx))continue;
                         xs.Add(ax);xs.Add(bx);ys.Add(segments[i+1]);ys.Add(segments[i+3]);
                     }
