@@ -463,8 +463,7 @@ public partial class MainWindow
     }
 
     private static bool IsStandardAssemblyReference(AssemblyReference reference)
-        => reference.SemanticName==AssemblyReferenceCatalog.Origin||
-           AssemblyReferenceCatalog.Standard.Any(x=>x.Kind==reference.Kind&&x.Semantic==reference.SemanticName);
+        => AssemblyReferenceCatalog.IsStandard(reference);
 
     private void AssemblyMateReferenceChanged(object sender,SelectionChangedEventArgs e)
     {
@@ -627,6 +626,11 @@ public partial class MainWindow
         var previous=_assemblyEditingMateId is Guid editId?_assemblyDocument.Mates.FirstOrDefault(m=>m.Id==editId):null;
         var mate=new AssemblyMate(previous?.Id??Guid.NewGuid(),previous?.Name??"İlişki"+(_assemblyDocument.Mates.Length+1),type,
             aReference,bReference,value,previous?.Suppressed??false);
+        if(!AssemblyReferenceCatalog.IsMateCompatible(mate))
+        {
+            Status("Seçilen referanslar bu montaj ilişkisiyle uyumlu değil. Teğet için en az bir silindirik yüz; açı/dik/paralel/eşmerkezli için yön taşıyan yüz veya eksen seçin.");
+            return;
+        }
 
         try
         {
