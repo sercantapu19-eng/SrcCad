@@ -268,7 +268,15 @@ public static class AssemblyMateSolver
         if(mate.Suppressed)return document;
         var a=document.Component(mate.A.ComponentId);
         var b=document.Component(mate.B.ComponentId);
-        if(b.Fixed)throw new InvalidOperationException("Sabit bileşen montaj ilişkisiyle taşınamaz.");
+        if(a.Fixed&&b.Fixed)throw new InvalidOperationException("İki sabit bileşen arasında hareket gerektiren ilişki çözülemez.");
+        if(b.Fixed&&!a.Fixed)
+        {
+            var swapped=mate with{A=mate.B,B=mate.A};
+            return ApplyResolved(document,swapped,
+                localOriginB,localDirectionB,
+                localOriginA,localDirectionA,
+                cylindricalB,radiusB,cylindricalA,radiusA);
+        }
 
         static bool Finite(Vector3d value)
             => double.IsFinite(value.X)&&double.IsFinite(value.Y)&&double.IsFinite(value.Z);
