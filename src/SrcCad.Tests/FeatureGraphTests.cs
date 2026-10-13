@@ -77,6 +77,14 @@ internal static class FeatureGraphTests
         var noMaterialClone=FeatureDocumentFile.Clone(initial);
         Check((noMaterialClone.Properties??PartProperties.Default).DensityGPerCm3==0,
             "documents without material properties remain backward compatible");
+        var importedNode=new FeatureNode(Guid.NewGuid(),"İçe Aktarılan STEP",
+            new ImportedBodyFeatureParameters("STEP","DBRep_DrawableShape\nCASCADE Topology V1, (c) Matra-Datavision\nLocations 0\nCurve2ds 0\nCurves 0\nPolygon3D 0\nPolygonOnTriangulations 0\nSurfaces 0\nTriangulations 0\n\nTShapes 0\n"));
+        var importedDoc=new FeatureDocument(Guid.NewGuid(),new[]{importedNode});
+        var importedClone=FeatureDocumentFile.Clone(importedDoc);
+        Check(importedClone.Node(importedNode.Id).Kind==FeatureKind.ImportedBody&&
+              ((ImportedBodyFeatureParameters)importedClone.Node(importedNode.Id).Parameters).Format=="STEP",
+            "imported body feature payload roundtrip");
+
         var source=initial.Features[0];var boss=initial.Features[1];
         var second=new FeatureNode(Guid.NewGuid(),"Çizim2",source.Parameters);
         var cut=new FeatureNode(Guid.NewGuid(),"Kes-Ekstrüzyon1",new CutFeatureParameters(boss.Id,second.Id,10));
