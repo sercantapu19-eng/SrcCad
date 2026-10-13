@@ -62,6 +62,16 @@ internal static class NativeFeatureGraphTests
                 "sheet metal edge flange rebuilds through feature graph");
 
             var bossBody=session.Output(boss.Id)!.BRep!;
+            var moved=OcctFeatureKernel.Transform(bossBody,new[]{100.0,0.0,0.0,0.0,0.0,0.0});
+            var movedInfo=OcctFeatureKernel.Inspect(moved);
+            Check(Math.Abs(movedInfo[0]-24000)<1e-5,"detached assembly transform preserves solid volume");
+            var sameCommon=OcctFeatureKernel.CommonVolume(bossBody,new double[6],bossBody,new double[6]);
+            Check(Math.Abs(sameCommon-24000)<1e-5,"assembly interference returns full overlap volume");
+            var farCommon=OcctFeatureKernel.CommonVolume(bossBody,new double[6],bossBody,new[]{1000.0,0.0,0.0,0.0,0.0,0.0});
+            Check(farCommon<1e-8,"assembly interference returns zero for separated components");
+            var projected=OcctFeatureKernel.ProjectEdges(bossBody,new[]{0.0,-1.0,0.0},new[]{0.0,0.0,1.0});
+            Check(projected.Length>=16&&projected.Length%4==0,"technical drawing projection returns line segments");
+
             var bossEdges=OcctFeatureKernel.EdgeReferences(bossBody);
             Check(bossEdges.Length>=4,"extruded body exposes semantic edge references");
             var filletNode=new FeatureNode(Guid.NewGuid(),"Radyus1",new FilletFeatureParameters(boss.Id,2),
