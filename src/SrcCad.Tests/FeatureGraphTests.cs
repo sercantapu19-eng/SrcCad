@@ -259,6 +259,23 @@ internal static class FeatureGraphTests
         Check(weldClone.Node(endCapNode.Id).Kind==FeatureKind.EndCap&&weldClone.Node(weldNode.Id).Kind==FeatureKind.WeldBead,
             "end-cap and weld-bead persistent topology graph roundtrip");
 
+        var sheetEdgeRef=new FeatureReference(sheetBaseNode.Id,TopologyKind.Edge,"E;40;20;0;2");
+        var hemNode=new FeatureNode(Guid.NewGuid(),"Hem1",new SheetMetalHemFeatureParameters(sheetBaseNode.Id,12,2,2),
+            References:new[]{sheetEdgeRef});
+        var jogNode=new FeatureNode(Guid.NewGuid(),"Jog1",new SheetMetalJogFeatureParameters(hemNode.Id,8,20,2),
+            References:new[]{new FeatureReference(hemNode.Id,TopologyKind.Edge,"E;40;20;0;2")});
+        var ripNode=new FeatureNode(Guid.NewGuid(),"Yırtık1",new SheetMetalRipFeatureParameters(jogNode.Id,1),
+            References:new[]{new FeatureReference(jogNode.Id,TopologyKind.Edge,"E;40;20;0;2")});
+        var reliefNode=new FeatureNode(Guid.NewGuid(),"Köşe Rölyefi1",new SheetMetalCornerReliefFeatureParameters(ripNode.Id,3),
+            References:new[]{new FeatureReference(ripNode.Id,TopologyKind.Edge,"E;40;20;0;2")});
+        var sheetOpsDoc=new FeatureDocument(Guid.NewGuid(),new FeatureNode[]{source,sheetBaseNode,hemNode,jogNode,ripNode,reliefNode});
+        var sheetOpsClone=FeatureDocumentFile.Clone(sheetOpsDoc);
+        Check(sheetOpsClone.Node(hemNode.Id).Kind==FeatureKind.SheetMetalHem&&
+              sheetOpsClone.Node(jogNode.Id).Kind==FeatureKind.SheetMetalJog&&
+              sheetOpsClone.Node(ripNode.Id).Kind==FeatureKind.SheetMetalRip&&
+              sheetOpsClone.Node(reliefNode.Id).Kind==FeatureKind.SheetMetalCornerRelief,
+            "hem jog rip corner relief feature persistence");
+
         var external=session.Document;((IDictionary<int,SketchPoint>)((SketchFeatureParameters)external.Node(source.Id).Parameters).Sketch.Points).Clear();
         Check(((SketchFeatureParameters)session.Document.Node(source.Id).Parameters).Sketch.Points.Count>0,"external snapshot cannot mutate committed document");
         var unchangedRevision=session.Revision;var unchangedHistory=session.UndoCount;
