@@ -54,6 +54,37 @@ internal static class InteractionRegressionTests
         var snapshot = chain.CaptureSnapshot();
         Check(!chain.SetDimensionValue(drive.Id, 60) && points.All(id=>chain.Point(id).Position==snapshot.Points[id].Position), "fixed remote endpoint rejects atomically");
         Check(SmartDimensionPlacement.BetweenPoints(new(20,30),new(60,80),new(40,55))==SketchDimensionType.PointDistance, "aligned placement retained");
+
+        // Direct SolidWorks-style grab/drag: body drag translates unconstrained
+        // sketch entities while preserving relations and rolls back if fixed.
+        var drag = new SketchModel(StandardPlanes.Front);
+        var la=drag.CreatePointExact(new(10,10));var lb=drag.CreatePointExact(new(40,10));
+        var dragLine=drag.AddLine(la,lb);drag.AddRelation(SketchRelationType.Horizontal,entityA:dragLine.Id);
+        Check(drag.TryTranslateEntity(dragLine.Id,new Point2d(15,20)),"line body drag accepted");
+        Check(drag.Point(la).Position==new Point2d(25,30)&&drag.Point(lb).Position==new Point2d(55,30),
+            "line body drag translates both endpoints and keeps horizontal relation");
+        drag.SetPointFixed(la,true);
+        var dragBefore=drag.CaptureSnapshot();
+        Check(!drag.TryTranslateEntity(dragLine.Id,new Point2d(5,5))&&
+              drag.Point(la).Position==dragBefore.Points[la].Position&&drag.Point(lb).Position==dragBefore.Points[lb].Position,
+            "fixed endpoint rejects whole line drag atomically");
+
+        var circleDrag=new SketchModel(StandardPlanes.Front);
+        var center=circleDrag.CreatePointExact(new(20,20));var circle=circleDrag.AddCircle(center,8);
+        Check(circleDrag.TryTranslateEntity(circle.Id,new Point2d(-5,12))&&circleDrag.Point(center).Position==new Point2d(15,32),
+            "circle body drag translates center without changing radius");
+        Check(Math.Abs(((SketchCircle)circleDrag.Entity(circle.Id)!).Radius-8)<1e-12,"circle drag preserves radius");
+
+        var curveDrag=new SketchModel(StandardPlanes.Front);
+        var ac=curveDrag.CreatePointExact(new(0,0));var ast=curveDrag.CreatePointExact(new(10,0));var aen=curveDrag.CreatePointExact(new(0,10));
+        var arc=curveDrag.AddArc(ac,ast,aen);
+        Check(curveDrag.TryTranslateEntity(arc.Id,new Point2d(7,-3))&&
+              curveDrag.Point(ac).Position==new Point2d(7,-3)&&curveDrag.Point(ast).Position==new Point2d(17,-3)&&curveDrag.Point(aen).Position==new Point2d(7,7),
+            "arc body drag translates center and endpoints");
+        var ec=curveDrag.CreatePointExact(new(30,20));var ellipse=curveDrag.AddEllipse(ec,12,6,0.4);
+        Check(curveDrag.TryTranslateEntity(ellipse.Id,new Point2d(4,9))&&curveDrag.Point(ec).Position==new Point2d(34,29),
+            "ellipse body drag translates center");
+
         Console.WriteLine($"INTERACTION REGRESSION: {count} PASS (geometry; Windows event routing pending)");
     }
 }
