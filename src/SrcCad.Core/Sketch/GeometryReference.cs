@@ -3,7 +3,7 @@ using SrcCad.Core.Geometry;
 namespace SrcCad.Core.Sketch;
 
 // Identity is model-space and semantic; no pixel coordinates are persisted.
-public enum GeometryReferenceKind { Point, Origin, Endpoint, CenterPoint, Midpoint, Line, ConstructionLine, Circle, Axis }
+public enum GeometryReferenceKind { Point, Origin, Endpoint, CenterPoint, Midpoint, Line, ConstructionLine, Circle, Arc, Ellipse, Axis }
 public sealed record GeometryReference(GeometryReferenceKind Kind, int Id, int Slot = 0)
 {
     public bool IsPointLike => Kind is GeometryReferenceKind.Point or GeometryReferenceKind.Origin or GeometryReferenceKind.Endpoint or GeometryReferenceKind.CenterPoint or GeometryReferenceKind.Midpoint;
@@ -21,8 +21,14 @@ public sealed partial class SketchModel
         if (id == 0) return new(GeometryReferenceKind.Origin, 0);
         var circle = Circles().FirstOrDefault(c => c.CenterPointId == id);
         if (circle is not null) return new(GeometryReferenceKind.CenterPoint, circle.Id);
+        var ellipse=Ellipses().FirstOrDefault(e=>e.CenterPointId==id);
+        if(ellipse is not null)return new(GeometryReferenceKind.CenterPoint,ellipse.Id);
+        var arc=Arcs().FirstOrDefault(a=>a.CenterPointId==id);
+        if(arc is not null)return new(GeometryReferenceKind.CenterPoint,arc.Id);
         var line = Lines().FirstOrDefault(l => l.StartPointId == id || l.EndPointId == id);
-        return line is null ? new(GeometryReferenceKind.Point, id) : new(GeometryReferenceKind.Endpoint, line.Id, line.StartPointId == id ? 0 : 1);
+        if(line is not null)return new(GeometryReferenceKind.Endpoint,line.Id,line.StartPointId==id?0:1);
+        arc=Arcs().FirstOrDefault(a=>a.StartPointId==id||a.EndPointId==id);
+        return arc is null?new(GeometryReferenceKind.Point,id):new(GeometryReferenceKind.Endpoint,arc.Id,arc.StartPointId==id?0:1);
     }
     public GeometryReference AxisReference(int lineId)
         => Entity(lineId) is SketchLine ? new(GeometryReferenceKind.Axis,lineId) : throw new ArgumentException("Eksen için çizgi referansı gerekli.");
@@ -30,6 +36,8 @@ public sealed partial class SketchModel
     {
         SketchLine l => new(l.Construction ? GeometryReferenceKind.ConstructionLine : GeometryReferenceKind.Line, id),
         SketchCircle => new(GeometryReferenceKind.Circle, id),
+        SketchArc => new(GeometryReferenceKind.Arc,id),
+        SketchEllipse => new(GeometryReferenceKind.Ellipse,id),
         _ => throw new ArgumentException("Geometri bulunamadı.")
     };
     public int ReferencePointId(GeometryReference r) => r.Kind switch
@@ -37,7 +45,10 @@ public sealed partial class SketchModel
         GeometryReferenceKind.Origin => 0,
         GeometryReferenceKind.Point => r.Id,
         GeometryReferenceKind.CenterPoint when Entity(r.Id) is SketchCircle c => c.CenterPointId,
+        GeometryReferenceKind.CenterPoint when Entity(r.Id) is SketchArc a => a.CenterPointId,
+        GeometryReferenceKind.CenterPoint when Entity(r.Id) is SketchEllipse e => e.CenterPointId,
         GeometryReferenceKind.Endpoint when Entity(r.Id) is SketchLine l => r.Slot == 0 ? l.StartPointId : l.EndPointId,
+        GeometryReferenceKind.Endpoint when Entity(r.Id) is SketchArc a => r.Slot==0?a.StartPointId:a.EndPointId,
         _ => -1
     };
     public Point2d ResolvePoint(GeometryReference r)
@@ -120,6 +131,7 @@ public sealed partial class SketchModel
     {
         if(refs.Count==1 && !refs[0].IsPointLike)
         {
+            if(refs[0].Kind is GeometryReferenceKind.Arc or GeometryReferenceKind.Ellipse)return null;
             var type=refs[0].IsLine?SketchDimensionType.LineLength:SketchDimensionType.CircleDiameter;
             return new(-1,type,Measure(type,refs[0].Id,-1,-1,-1),label,EntityA:refs[0].Id);
         }
