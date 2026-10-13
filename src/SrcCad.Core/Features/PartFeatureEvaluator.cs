@@ -19,6 +19,12 @@ public interface IPartGeometryKernel
     string SweepCutSpatial(string baseBody,SketchModel profile,IReadOnlyList<Vector3d> path);
     string Loft(string? baseBody,IReadOnlyList<SketchModel> profiles);
     string LoftCut(string baseBody,IReadOnlyList<SketchModel> profiles);
+    string Boolean(string bodyA,string bodyB,BodyBooleanOperation operation);
+    string MoveCopy(string baseBody,Vector3d translation,Vector3d rotationDegrees,bool keepOriginal);
+    string Split(string baseBody,PlaneFrame plane);
+    string Dome(string baseBody,string faceReference,double height);
+    string HoleWizard(string baseBody,string faceReference,Vector3d center,double diameter,double depth,HoleWizardType type,double counterDiameter,double counterDepth,bool reverse);
+    string SketchPattern(string baseBody,SketchModel source);
     string Shell(string baseBody,IReadOnlyList<string> faceReferences,double thickness,bool outward);
     string Draft(string baseBody,IReadOnlyList<string> faceReferences,PlaneFrame neutralPlane,double angleDegrees,bool reverse);
     string Rib(string baseBody,SketchModel source,double thickness,double depth,bool reverse);
@@ -65,6 +71,8 @@ public sealed class PartFeatureEvaluator(IPartGeometryKernel kernel) : IFeatureE
             SketchFeatureParameters s => new(PartFile.Serialize(new(s.Plane,s.Sketch,null)),null),
             SpatialSketchFeatureParameters s => new(null,null,JsonSerializer.Serialize(s.Points)),
             ExtrudeFeatureParameters e => new(null,kernel.Extrude(Sketch(e.SketchId),e.Depth)),
+            BoundaryFeatureParameters b => new(null,kernel.Loft(b.BaseFeatureId is Guid bb?Base(bb):null,b.ProfileSketchIds.Select(Sketch).ToArray())),
+            BoundaryCutFeatureParameters b => new(null,kernel.LoftCut(Base(b.BaseFeatureId),b.ProfileSketchIds.Select(Sketch).ToArray())),
             CutFeatureParameters c => new(null,kernel.Cut(Base(c.BaseFeatureId),
                 Sketch(c.SketchId),c.Reverse?-c.Depth:c.Depth,c.Termination)),
             FilletFeatureParameters f => new(null,kernel.Fillet(Base(f.BaseFeatureId),EdgeReferences(f.BaseFeatureId),f.Radius)),
@@ -92,6 +100,15 @@ public sealed class PartFeatureEvaluator(IPartGeometryKernel kernel) : IFeatureE
             MirrorFeatureParameters m => new(null,kernel.Mirror(Base(m.BaseFeatureId),m.Plane,m.KeepOriginal)),
             LinearPatternFeatureParameters p => new(null,kernel.LinearPattern(Base(p.BaseFeatureId),p.Direction,p.Spacing,p.Count)),
             CircularPatternFeatureParameters p => new(null,kernel.CircularPattern(Base(p.BaseFeatureId),p.AxisOrigin,p.AxisDirection,p.AngleDegrees,p.Count)),
+            SketchPatternFeatureParameters p => new(null,kernel.SketchPattern(Base(p.BaseFeatureId),Sketch(p.SketchId))),
+            BodyBooleanFeatureParameters b => new(null,kernel.Boolean(Base(b.BodyAId),Base(b.BodyBId),b.Operation)),
+            MoveCopyBodyFeatureParameters m => new(null,kernel.MoveCopy(Base(m.BaseFeatureId),m.Translation,m.RotationDegrees,m.KeepOriginal)),
+            SplitBodyFeatureParameters s => new(null,kernel.Split(Base(s.BaseFeatureId),s.Plane)),
+            DomeFeatureParameters d => new(null,kernel.Dome(Base(d.BaseFeatureId),
+                (node.References??Array.Empty<FeatureReference>()).Single(r=>r.Kind==TopologyKind.Face&&r.ProducerId==d.BaseFeatureId).SemanticName,d.Height)),
+            HoleWizardFeatureParameters h => new(null,kernel.HoleWizard(Base(h.BaseFeatureId),
+                (node.References??Array.Empty<FeatureReference>()).Single(r=>r.Kind==TopologyKind.Face&&r.ProducerId==h.BaseFeatureId).SemanticName,
+                h.Center,h.Diameter,h.Depth,h.Type,h.CounterDiameter,h.CounterDepth,h.Reverse)),
             ReferencePlaneFeatureParameters => new(null,null),
             ReferenceAxisFeatureParameters => new(null,null),
             ReferencePointFeatureParameters => new(null,null),
