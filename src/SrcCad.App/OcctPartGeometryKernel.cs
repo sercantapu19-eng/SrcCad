@@ -184,6 +184,11 @@ internal sealed class OcctPartGeometryKernel : IPartGeometryKernel
 
     public string Boolean(string bodyA,string bodyB,BodyBooleanOperation operation)
         => OcctFeatureKernel.Boolean(bodyA,bodyB,(int)operation);
+    public string Compound(IReadOnlyList<string> bodies)
+    {
+        if(bodies is null||bodies.Count==0)throw new InvalidOperationException("Compound requires at least one body.");
+        return OcctFeatureKernel.Compound(bodies.ToArray());
+    }
     public string MoveCopy(string baseBody,SrcCad.Core.Geometry.Vector3d translation,SrcCad.Core.Geometry.Vector3d rotationDegrees,bool keepOriginal)
         => OcctFeatureKernel.MoveCopy(baseBody,
             new[]{translation.X,translation.Y,translation.Z,rotationDegrees.X,rotationDegrees.Y,rotationDegrees.Z},keepOriginal);
