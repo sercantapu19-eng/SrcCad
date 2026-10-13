@@ -105,6 +105,31 @@ public static class AssemblyReferenceCatalog
             return false;
         return true;
     }
+
+    public static bool IsCylindricalFace(AssemblyReference reference)
+        => reference.Kind==TopologyKind.Face&&reference.SemanticName.StartsWith("C;",StringComparison.Ordinal);
+
+    public static bool SuppliesDirection(AssemblyReference reference)
+        => TryDirection(reference,out _)||
+           reference.Kind==TopologyKind.Face&&
+           (reference.SemanticName.StartsWith("F;",StringComparison.Ordinal)||
+            reference.SemanticName.StartsWith("C;",StringComparison.Ordinal));
+
+    public static bool IsMateCompatible(AssemblyMate mate)
+    {
+        if(!IsWellFormed(mate.A)||!IsWellFormed(mate.B))return false;
+        return mate.Type switch
+        {
+            MateType.Parallel or MateType.Perpendicular or MateType.Angle
+                => SuppliesDirection(mate.A)&&SuppliesDirection(mate.B),
+            MateType.Concentric
+                => SuppliesDirection(mate.A)&&SuppliesDirection(mate.B),
+            MateType.Tangent
+                => mate.A.Kind==TopologyKind.Face&&mate.B.Kind==TopologyKind.Face&&
+                   (IsCylindricalFace(mate.A)||IsCylindricalFace(mate.B)),
+            _=>true
+        };
+    }
 }
 
 public static class AssemblyMateSolver
@@ -439,6 +464,7 @@ public static class AssemblyDocumentFile
                !ids.Contains(mate.A.ComponentId)||!ids.Contains(mate.B.ComponentId)||
                mate.A.ComponentId==mate.B.ComponentId||
                !AssemblyReferenceCatalog.IsWellFormed(mate.A)||!AssemblyReferenceCatalog.IsWellFormed(mate.B)||
+               !AssemblyReferenceCatalog.IsMateCompatible(mate)||
                !double.IsFinite(mate.Value))
                 throw new InvalidDataException("Invalid assembly mate.");
         }
