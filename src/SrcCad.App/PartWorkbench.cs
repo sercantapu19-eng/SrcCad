@@ -2675,7 +2675,7 @@ public partial class MainWindow
             $"{i+1}. {_partSession?.Document.Node(step.SketchId).Name??"Çizim"} • {step.AngleDegrees:0.###}°{(step.Reverse?" • ters":"")}"));
         SheetFlattenError.Text="";
         SheetFlattenPanel.Visibility=Visibility.Visible;
-        GraphFeaturePanel.Visibility=Visibility.Collapsed;SpatialSketchPanel.Visibility=Visibility.Collapsed;StructuralTrimPanel.Visibility=Visibility.Collapsed;SheetBendPanel.Visibility=Visibility.Collapsed;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;SpatialSketchPanel.Visibility=Visibility.Collapsed;StructuralTrimPanel.Visibility=Visibility.Collapsed;SheetBendPanel.Visibility=Visibility.Collapsed;SheetFlattenPanel.Visibility=Visibility.Collapsed;
         EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;RevolveFeaturePanel.Visibility=Visibility.Collapsed;
         MultiSketchFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;DraftFeaturePanel.Visibility=Visibility.Collapsed;
         RibFeaturePanel.Visibility=Visibility.Collapsed;ReferenceGeometryPanel.Visibility=Visibility.Collapsed;MirrorFeaturePanel.Visibility=Visibility.Collapsed;
@@ -2914,7 +2914,7 @@ public partial class MainWindow
     {
         _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.0);
         _graphFeatureEdit=null;_extrudeCommandActive=false;
-        GraphFeaturePanel.Visibility=Visibility.Collapsed;SpatialSketchPanel.Visibility=Visibility.Collapsed;StructuralTrimPanel.Visibility=Visibility.Collapsed;SheetBendPanel.Visibility=Visibility.Collapsed;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;SpatialSketchPanel.Visibility=Visibility.Collapsed;StructuralTrimPanel.Visibility=Visibility.Collapsed;SheetBendPanel.Visibility=Visibility.Collapsed;SheetFlattenPanel.Visibility=Visibility.Collapsed;
         EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;RevolveFeaturePanel.Visibility=Visibility.Collapsed;MultiSketchFeaturePanel.Visibility=Visibility.Collapsed;
         ShellFeaturePanel.Visibility=Visibility.Collapsed;DraftFeaturePanel.Visibility=Visibility.Collapsed;RibFeaturePanel.Visibility=Visibility.Collapsed;ReferenceGeometryPanel.Visibility=Visibility.Collapsed;
         MirrorFeaturePanel.Visibility=Visibility.Collapsed;PatternFeaturePanel.Visibility=Visibility.Collapsed;SheetMetalBasePanel.Visibility=Visibility.Collapsed;SheetMetalConvertPanel.Visibility=Visibility.Collapsed;
@@ -2951,7 +2951,7 @@ public partial class MainWindow
         SheetMetalBasePanel.Visibility=Visibility.Collapsed;
         SheetMetalConvertPanel.Visibility=Visibility.Collapsed;
         EdgeFlangePanel.Visibility=Visibility.Collapsed;EndCapPanel.Visibility=Visibility.Collapsed;
-        SpatialSketchPanel.Visibility=Visibility.Collapsed;StructuralTrimPanel.Visibility=Visibility.Collapsed;SheetBendPanel.Visibility=Visibility.Collapsed;
+        SpatialSketchPanel.Visibility=Visibility.Collapsed;StructuralTrimPanel.Visibility=Visibility.Collapsed;SheetBendPanel.Visibility=Visibility.Collapsed;SheetFlattenPanel.Visibility=Visibility.Collapsed;
         BodyBooleanPanel.Visibility=Visibility.Collapsed;MoveCopyBodyPanel.Visibility=Visibility.Collapsed;SplitBodyPanel.Visibility=Visibility.Collapsed;
         SketchPatternPanel.Visibility=Visibility.Collapsed;DomePanel.Visibility=Visibility.Collapsed;HoleWizardPanel.Visibility=Visibility.Collapsed;
     }
