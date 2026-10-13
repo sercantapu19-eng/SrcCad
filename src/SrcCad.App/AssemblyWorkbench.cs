@@ -321,14 +321,9 @@ public partial class MainWindow
             ResetAssemblyHistory();
             _assemblyPath=dialog.FileName;
             _assemblyBodies.Clear();
-            var assemblyDirectory=Path.GetDirectoryName(dialog.FileName)??Environment.CurrentDirectory;
             foreach(var component in _assemblyDocument.Components.Where(c=>!c.Suppressed))
-            {
-                var sourcePath=Path.IsPathRooted(component.SourcePath)
-                    ?component.SourcePath
-                    :Path.Combine(assemblyDirectory,component.SourcePath);
-                _assemblyBodies[component.Id]=RebuildAssemblyComponent(sourcePath);
-            }
+                _assemblyBodies[component.Id]=RebuildAssemblyComponent(
+                    AssemblyDocumentFile.ResolveSourcePath(dialog.FileName,component.SourcePath));
             RebuildAssemblyMates(false);
             RefreshAssemblyTree();
             RenderAssembly();
