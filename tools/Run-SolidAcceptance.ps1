@@ -86,10 +86,11 @@ try {
         Assert-NativeAcceptanceDeployment -TestDirectory $uiDir -BridgePath $bridge -IjwHostPath $ijwHost -OcctBin $occtBin -LogPath "$logs\solid-ui-deployment.log"
         $env:PATH="$uiDir;$previousPath"
         & (Join-Path $PSScriptRoot 'Run-WindowsInteraction.ps1') -AppPath $uiExe -ReportPath (Join-Path $logs 'windows-interaction.json')
+        if ($LASTEXITCODE -ne 0) { throw 'Windows UI interaction regression failed.' }
+        Write-Host 'Native kabul + ek regresyonlar + Windows UI interaction PASS.'
     } else {
-        Write-Host 'Windows UI interaction NOT RUN. Use -RunInteraction on an interactive desktop.'
+        Write-Host 'Native kabul ve ek regresyonlar PASS. Windows UI interaction NOT RUN; use -RunInteraction on an interactive desktop.'
     }
-    Write-Host '72 kabul kontrolu ve ek regresyon paketleri gecti. SM-073..120 ve Windows manuel akisi ayrica dogrulanmalidir; Kati Model tamamlandi sayilmaz.'
 } finally {
     $env:PATH = $previousPath
     Pop-Location
