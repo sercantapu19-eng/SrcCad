@@ -127,6 +127,32 @@ internal static class AssemblyDocumentTests
         }
         catch(InvalidDataException){_checks++;}
 
+        var validPlanarSemantic="F;100;0;0;0;0;0;1";
+        var validCylinderSemantic="C;100;0;0;0;1;0;0;12.5";
+        Check(AssemblyReferenceCatalog.IsWellFormed(new AssemblyReference(a.Id,TopologyKind.Face,validPlanarSemantic)),
+            "valid planar persistent face reference rejected");
+        Check(AssemblyReferenceCatalog.IsWellFormed(new AssemblyReference(a.Id,TopologyKind.Face,validCylinderSemantic)),
+            "valid cylindrical persistent face reference rejected");
+        Check(!AssemblyReferenceCatalog.IsWellFormed(new AssemblyReference(a.Id,TopologyKind.Edge,validPlanarSemantic)),
+            "face semantic accepted with edge topology kind");
+        Check(!AssemblyReferenceCatalog.IsWellFormed(new AssemblyReference(a.Id,TopologyKind.Face,"C;100;0;0;0;1;0;0;-2")),
+            "negative cylinder radius accepted");
+        Check(!AssemblyReferenceCatalog.IsWellFormed(new AssemblyReference(a.Id,TopologyKind.Face,"F;100;0;0;0;0;0")),
+            "truncated planar face semantic accepted");
+
+        try
+        {
+            var brokenMate=mate with
+            {
+                Id=Guid.NewGuid(),
+                Name="KırıkRef",
+                A=new AssemblyReference(a.Id,TopologyKind.Face,"F;100;0;0;0;0;0")
+            };
+            AssemblyDocumentFile.Serialize(doc with{Mates=new[]{brokenMate}});
+            throw new InvalidOperationException("assembly accepted broken persistent mate reference");
+        }
+        catch(InvalidDataException){_checks++;}
+
         Console.WriteLine($"Assembly Document Tests: {_checks} PASS");
     }
 }
