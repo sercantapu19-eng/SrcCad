@@ -1777,7 +1777,7 @@ namespace SrcCad::Kernel::Occt
             gp_Vec u(up[0],up[1],up[2]);
             if(d.Magnitude()<=1e-12||u.Magnitude()<=1e-12)throw gcnew ArgumentException("Projection vectors cannot be zero.");
             d.Normalize();
-            u-=d*u.Dot(d);
+            u-=d.Multiplied(u.Dot(d));
             if(u.Magnitude()<=1e-12)throw gcnew ArgumentException("Projection up vector cannot be parallel to direction.");
             u.Normalize();
             gp_Vec right=u.Crossed(d);
