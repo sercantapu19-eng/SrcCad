@@ -41,6 +41,7 @@ public partial class MainWindow : Window
     private bool _middleDown;
     private bool _panMode;
     private bool _inspectMeasureMode;
+    private bool _pendingSheetMetalBaseAfterSketch;
     private int _lastMouseX;
     private int _lastMouseY;
 
@@ -1823,6 +1824,30 @@ public partial class MainWindow : Window
             _sourceSketchEditBefore = null;
         }
         FinishSketchInteraction();
+
+        if(_pendingSheetMetalBaseAfterSketch)
+        {
+            _pendingSheetMetalBaseAfterSketch=false;
+            if(!EnsurePartSession()||_partSession is null)
+            {
+                Status("Sac Oluştur için çizim FeatureManager'a aktarılamadı.");
+                return;
+            }
+
+            var sheetSketch=BaseFlangeSketchCandidate();
+            if(sheetSketch is null)
+            {
+                Status("Sac Oluştur için kapalı bir profil gerekiyor. Çizimi kapalı hale getirip Sac Oluştur'a tekrar basın.");
+                return;
+            }
+
+            BeginSheetMetalBaseFeature(new FeatureNode(
+                Guid.NewGuid(),NextGraphName("Taban Flanş"),
+                new SheetMetalBaseFeatureParameters(sheetSketch.Id,2,2,0.5,false)));
+            Status("Kapalı çizim hazır • Taban Flanş parametrelerini onaylayın.");
+            return;
+        }
+
         if(_partSession is not null){Status("Çizim onaylandı; bağımlı feature grafiği yeniden oluşturuldu.");return;}
         if (_hasSolid)
             Status("Çizim düzenlemesi uygulandı • bağımlı Ekstrüzyon1 yeniden oluşturuldu • Ctrl+Z ile geri alın.");
@@ -2551,6 +2576,7 @@ public partial class MainWindow : Window
         _editingExtrude = false;
         _featureHistory.Clear();
         _inspectMeasureMode=false;
+        _pendingSheetMetalBaseAfterSketch=false;
         MeasureStatusText.Text="";
         StatusUnitText.Text="mm";
         _extrudeCommandActive = false;
@@ -2604,7 +2630,9 @@ public partial class MainWindow : Window
         LinearPatternButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
         CircularPatternButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
         ReferenceGeometryButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&(_sketch is not null||_partSession is not null);
-        BaseFlangeButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&!_hasSolid&&(_sketch is not null||_partSession is not null);
+        // SOLIDWORKS-like entry: Taban Flanş is available on an empty part too.
+        // If no sketch exists, the command opens a sketch first and continues automatically.
+        BaseFlangeButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&!_hasSolid;
         ConvertToSheetMetalButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid&&_partSession is not null&&
             !_partSession.Document.Features.Any(n=>n.Kind is SrcCad.Core.Features.FeatureKind.SheetMetalBase or SrcCad.Core.Features.FeatureKind.SheetMetalConvert);
         EdgeFlangeButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid&&_partSession is not null&&
