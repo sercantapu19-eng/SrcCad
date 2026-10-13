@@ -3225,7 +3225,9 @@ public partial class MainWindow
             Status("Ekstrüzyon için geçerli kapalı bir Çizim seçin.");
             return;
         }
-        BeginGraphFeature(new(Guid.NewGuid(),NextGraphName("Ekstrüzyon"),new ExtrudeFeatureParameters(id,20)));
+        var baseId=CurrentSolidFeature()?.Id;
+        BeginGraphFeature(new(Guid.NewGuid(),NextGraphName("Ekstrüzyon"),
+            new ExtrudeFeatureParameters(id,20,BaseFeatureId:baseId,MergeResult:true)));
     }
     private void EditGraphFeature(Guid id)
     {
@@ -3282,10 +3284,13 @@ public partial class MainWindow
         GraphDirection2Enabled.Visibility=extrusionVisibility;
         GraphDirection2Label.Visibility=extrusionVisibility;
         GraphDirection2Depth.Visibility=extrusionVisibility;
+        GraphMergeResult.Visibility=extrusionVisibility;
         GraphMidPlane.IsChecked=extrude?.MidPlane==true;
         GraphDirection2Enabled.IsChecked=extrude is {Direction2Depth:>1e-9};
         GraphDirection2Depth.Text=(extrude is {Direction2Depth:>1e-9}?extrude.Direction2Depth:10)
             .ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        GraphMergeResult.IsChecked=extrude?.MergeResult??true;
+        GraphMergeResult.IsEnabled=extrude?.BaseFeatureId is Guid;
         GraphDirection2Enabled.IsEnabled=extrude is not null&&extrude.MidPlane==false;
         GraphDirection2Depth.IsEnabled=extrude is not null&&extrude.MidPlane==false&&extrude.Direction2Depth>1e-9;
         GraphReverse.IsEnabled=extrude?.MidPlane!=true;
@@ -3313,7 +3318,8 @@ public partial class MainWindow
             {
                 Depth=midPlane?depth:(GraphReverse.IsChecked==true?-depth:depth),
                 MidPlane=midPlane,
-                Direction2Depth=midPlane?0:direction2
+                Direction2Depth=midPlane?0:direction2,
+                MergeResult=extrude.BaseFeatureId is null||GraphMergeResult.IsChecked==true
             };
         }
         else parameters=node.Parameters switch
