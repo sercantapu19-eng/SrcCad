@@ -1223,9 +1223,42 @@ namespace SrcCad::Kernel::Occt
             if(!edge.IsDone())throw gcnew InvalidOperationException("Circle profile edge failed.");
             BRepBuilderAPI_MakeWire wire(edge.Edge());
             if(!wire.IsDone())throw gcnew InvalidOperationException("Circle profile wire failed.");
-            BRepBuilderAPI_MakeFace face(wire.Wire(),true);
-            if(!face.IsDone())throw gcnew InvalidOperationException("Circle profile face failed.");
-            return face.Face();
+            BRepBuilderAPI_MakeFace faceMaker(wire.Wire(),true);
+            if(!faceMaker.IsDone())throw gcnew InvalidOperationException("Circle profile face failed.");
+
+            if(holes!=nullptr)
+            {
+                int cursor=0;
+                while(cursor<holes->Length)
+                {
+                    const int count=(int)holes[cursor++];
+                    if(count<3||cursor+count*2>holes->Length)throw gcnew ArgumentException("Invalid inner profile.");
+                    BRepBuilderAPI_MakePolygon holePolygon;
+                    for(int i=0;i<count;i++)
+                    {
+                        double u=holes[cursor++],vv=holes[cursor++];
+                        holePolygon.Add(planePoint(u,vv,f[0],f[1],f[2],f[3],f[4],f[5],f[6],f[7],f[8]));
+                    }
+                    holePolygon.Close();
+                    if(!holePolygon.IsDone())throw gcnew InvalidOperationException("Inner profile polygon failed.");
+                    TopoDS_Wire holeWire=holePolygon.Wire();holeWire.Reverse();faceMaker.Add(holeWire);
+                }
+            }
+            if(circleHoles!=nullptr)
+            {
+                if((circleHoles->Length%3)!=0)throw gcnew ArgumentException("Invalid circular holes.");
+                for(int i=0;i<circleHoles->Length;i+=3)
+                {
+                    double cu=circleHoles[i],cv=circleHoles[i+1],radius=circleHoles[i+2];
+                    if(radius<=1e-9)throw gcnew ArgumentException("Invalid circular hole radius.");
+                    gp_Pnt holeCenter=planePoint(cu,cv,f[0],f[1],f[2],f[3],f[4],f[5],f[6],f[7],f[8]);
+                    BRepBuilderAPI_MakeEdge holeEdge(gp_Circ(gp_Ax2(holeCenter,gp_Dir(f[9],f[10],f[11]),gp_Dir(f[3],f[4],f[5])),radius));
+                    BRepBuilderAPI_MakeWire holeWireMaker(holeEdge.Edge());
+                    TopoDS_Wire holeWire=holeWireMaker.Wire();holeWire.Reverse();faceMaker.Add(holeWire);
+                }
+            }
+            if(!faceMaker.IsDone())throw gcnew InvalidOperationException("Circle profile face failed.");
+            return faceMaker.Face();
         }
 
         if(outer==nullptr||outer->Length<6||(outer->Length%2)!=0)throw gcnew ArgumentException("Invalid closed profile.");
@@ -1432,18 +1465,12 @@ namespace SrcCad::Kernel::Occt
                                     array<double>^ circle, array<double>^ f)
     {
         validateFeatureFrame(f);
-        if (circle != nullptr && circle->Length > 0)
-        {
-            if (circle->Length != 3 || !std::isfinite(circle[0]) || !std::isfinite(circle[1]) ||
-                !std::isfinite(circle[2]) || circle[2] <= 1e-9) throw gcnew ArgumentException("Invalid circle profile.");
-            gp_Pnt center = planePoint(circle[0],circle[1],f[0],f[1],f[2],f[3],f[4],f[5],f[6],f[7],f[8]);
-            BRepBuilderAPI_MakeEdge edge(gp_Circ(gp_Ax2(center,gp_Dir(f[9],f[10],f[11]),gp_Dir(f[3],f[4],f[5])),circle[2]));
-            BRepBuilderAPI_MakeWire wire(edge.Edge());
-            BRepBuilderAPI_MakeFace face(wire.Wire(),true);
-            BRepPrimAPI_MakePrism prism(face.Face(),gp_Vec(f[9]*f[12],f[10]*f[12],f[11]*f[12]),true,true);
-            return prism.Shape();
-        }
-        return makePrismFromProfile(outer,holes,circleHoles,f[0],f[1],f[2],f[3],f[4],f[5],f[6],f[7],f[8],f[9],f[10],f[11],f[12]);
+        TopoDS_Face face=featureFace(outer,holes,circleHoles,circle,f);
+        BRepPrimAPI_MakePrism prism(face,gp_Vec(f[9]*f[12],f[10]*f[12],f[11]*f[12]),true,true);
+        TopoDS_Shape result=prism.Shape();
+        if(result.IsNull()||!BRepCheck_Analyzer(result).IsValid())
+            throw gcnew InvalidOperationException("Invalid extrusion B-Rep.");
+        return result;
     }
     static double featureVolume(const TopoDS_Shape& shape)
     {
