@@ -201,6 +201,44 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
         _ => Array.Empty<Guid>()
     }).Concat((References ?? Array.Empty<FeatureReference>()).Select(r=>r.ProducerId)).Distinct().ToArray();
 }
+public static class FeatureReferenceCatalog
+{
+    private static bool Number(string text,out double value)
+        => double.TryParse(text,System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture,out value)&&double.IsFinite(value);
+
+    public static bool IsPersistentEdge(FeatureReference reference,Guid producerId)
+    {
+        if(reference is null||reference.ProducerId!=producerId||reference.Kind!=TopologyKind.Edge)return false;
+        var fields=reference.SemanticName?.Split(';')??Array.Empty<string>();
+        return fields.Length==5&&fields[0]=="E"&&
+               Number(fields[1],out var length)&&length>1e-12&&
+               Number(fields[2],out _)&&Number(fields[3],out _)&&Number(fields[4],out _);
+    }
+
+    public static bool IsPersistentFace(FeatureReference reference,Guid producerId)
+    {
+        if(reference is null||reference.ProducerId!=producerId||reference.Kind!=TopologyKind.Face)return false;
+        var fields=reference.SemanticName?.Split(';')??Array.Empty<string>();
+        var cylinder=fields.Length>0&&fields[0]=="C";
+        if((!cylinder&&(fields.Length!=8||fields[0]!="F"))||(cylinder&&fields.Length!=9))return false;
+        if(!Number(fields[1],out var area)||area<=1e-12)return false;
+        for(var i=2;i<=7;i++)if(!Number(fields[i],out _))return false;
+        var nx=double.Parse(fields[5],System.Globalization.CultureInfo.InvariantCulture);
+        var ny=double.Parse(fields[6],System.Globalization.CultureInfo.InvariantCulture);
+        var nz=double.Parse(fields[7],System.Globalization.CultureInfo.InvariantCulture);
+        if(new Vector3d(nx,ny,nz).Length<=1e-12)return false;
+        return !cylinder||(Number(fields[8],out var radius)&&radius>1e-12);
+    }
+
+    public static bool ArePersistentEdges(FeatureReference[]? references,Guid producerId,int minimum=1)
+        => references is not null&&references.Length>=minimum&&references.All(r=>IsPersistentEdge(r,producerId));
+
+    public static bool ArePersistentFaces(FeatureReference[]? references,Guid producerId,int minimum=1,int? exact=null)
+        => references is not null&&references.Length>=minimum&&
+           (exact is null||references.Length==exact.Value)&&references.All(r=>IsPersistentFace(r,producerId));
+}
+
 public sealed record PartProperties(string MaterialName,double DensityGPerCm3)
 {
     public static PartProperties Default { get; }=new("Belirli değil",0);
@@ -328,20 +366,19 @@ public static class FeatureDocumentFile
                     if(!Enum.IsDefined(c.Termination)||!double.IsFinite(c.Depth)||c.Depth<=1e-9||document.Node(c.SketchId).Kind!=FeatureKind.Sketch||document.Node(c.BaseFeatureId).Kind==FeatureKind.Sketch)throw new InvalidDataException("Invalid cut.");break;
                 case FilletFeatureParameters f:
                     if(!double.IsFinite(f.Radius)||f.Radius<=1e-9||document.Node(f.BaseFeatureId).Kind==FeatureKind.Sketch||
-                       node.References is null||node.References.Length==0||node.References.Any(r=>r.Kind!=TopologyKind.Edge||r.ProducerId!=f.BaseFeatureId))
+                       !FeatureReferenceCatalog.ArePersistentEdges(node.References,f.BaseFeatureId))
                         throw new InvalidDataException("Invalid fillet.");
                     break;
                 case ChamferFeatureParameters c:
                     if(!double.IsFinite(c.Distance)||c.Distance<=1e-9||document.Node(c.BaseFeatureId).Kind==FeatureKind.Sketch||
-                       node.References is null||node.References.Length==0||node.References.Any(r=>r.Kind!=TopologyKind.Edge||r.ProducerId!=c.BaseFeatureId))
+                       !FeatureReferenceCatalog.ArePersistentEdges(node.References,c.BaseFeatureId))
                         throw new InvalidDataException("Invalid chamfer.");
                     break;
                 case HoleFeatureParameters h:
                     if(!double.IsFinite(h.Center.X)||!double.IsFinite(h.Center.Y)||!double.IsFinite(h.Center.Z)||
                        !double.IsFinite(h.Diameter)||h.Diameter<=1e-9||!double.IsFinite(h.Depth)||h.Depth<=1e-9||
                        !Enum.IsDefined(h.Termination)||document.Node(h.BaseFeatureId).Kind==FeatureKind.Sketch||
-                       node.References is null||node.References.Length!=1||node.References[0].Kind!=TopologyKind.Face||
-                       node.References[0].ProducerId!=h.BaseFeatureId)
+                       !FeatureReferenceCatalog.ArePersistentFaces(node.References,h.BaseFeatureId,1,1))
                         throw new InvalidDataException("Invalid hole.");
                     break;
                 case RevolveFeatureParameters r:
@@ -381,15 +418,13 @@ public static class FeatureDocumentFile
                     break;
                 case ShellFeatureParameters s:
                     if(!double.IsFinite(s.Thickness)||s.Thickness<=1e-9||document.Node(s.BaseFeatureId).Kind==FeatureKind.Sketch||
-                       node.References is null||node.References.Length==0||
-                       node.References.Any(r=>r.Kind!=TopologyKind.Face||r.ProducerId!=s.BaseFeatureId))
+                       !FeatureReferenceCatalog.ArePersistentFaces(node.References,s.BaseFeatureId))
                         throw new InvalidDataException("Invalid shell.");
                     break;
                 case DraftFeatureParameters d:
                     if(document.Node(d.BaseFeatureId).Kind==FeatureKind.Sketch||
                        !double.IsFinite(d.AngleDegrees)||d.AngleDegrees<=1e-9||d.AngleDegrees>=89.0||
-                       node.References is null||node.References.Length==0||
-                       node.References.Any(r=>r.Kind!=TopologyKind.Face||r.ProducerId!=d.BaseFeatureId))
+                       !FeatureReferenceCatalog.ArePersistentFaces(node.References,d.BaseFeatureId))
                         throw new InvalidDataException("Invalid draft.");
                     _=d.NeutralPlane.Validate();
                     break;
@@ -437,7 +472,7 @@ public static class FeatureDocumentFile
                     _=s.Plane.Validate();break;
                 case DomeFeatureParameters d:
                     if(document.Node(d.BaseFeatureId).Kind==FeatureKind.Sketch||!double.IsFinite(d.Height)||Math.Abs(d.Height)<=1e-9||
-                       node.References is null||node.References.Length!=1||node.References[0].Kind!=TopologyKind.Face||node.References[0].ProducerId!=d.BaseFeatureId)
+                       !FeatureReferenceCatalog.ArePersistentFaces(node.References,d.BaseFeatureId,1,1))
                         throw new InvalidDataException("Invalid dome.");
                     break;
                 case HoleWizardFeatureParameters h:
@@ -446,7 +481,7 @@ public static class FeatureDocumentFile
                        !double.IsFinite(h.Diameter)||h.Diameter<=1e-9||!double.IsFinite(h.Depth)||h.Depth<=1e-9||
                        !double.IsFinite(h.CounterDiameter)||!double.IsFinite(h.CounterDepth)||
                        (h.Type!=HoleWizardType.Simple&&(h.CounterDiameter<=h.Diameter||h.CounterDepth<=1e-9))||
-                       node.References is null||node.References.Length!=1||node.References[0].Kind!=TopologyKind.Face||node.References[0].ProducerId!=h.BaseFeatureId)
+                       !FeatureReferenceCatalog.ArePersistentFaces(node.References,h.BaseFeatureId,1,1))
                         throw new InvalidDataException("Invalid hole wizard.");
                     break;
                 case ReferencePlaneFeatureParameters p:
@@ -480,8 +515,7 @@ public static class FeatureDocumentFile
                        !double.IsFinite(s.AngleDegrees)||s.AngleDegrees<=1e-6||s.AngleDegrees>=179.999||
                        !double.IsFinite(s.Thickness)||s.Thickness<=1e-9||
                        !double.IsFinite(s.BendRadius)||s.BendRadius<0||
-                       node.References is null||node.References.Length==0||
-                       node.References.Any(r=>r.Kind!=TopologyKind.Edge||r.ProducerId!=s.BaseFeatureId))
+                       !FeatureReferenceCatalog.ArePersistentEdges(node.References,s.BaseFeatureId))
                         throw new InvalidDataException("Invalid sheet metal edge flange.");
                     break;
                 case SheetMetalMiterFlangeFeatureParameters s:
@@ -490,8 +524,7 @@ public static class FeatureDocumentFile
                        !double.IsFinite(s.AngleDegrees)||s.AngleDegrees<=1e-6||s.AngleDegrees>=179.999||
                        !double.IsFinite(s.Thickness)||s.Thickness<=1e-9||
                        !double.IsFinite(s.BendRadius)||s.BendRadius<0||
-                       node.References is null||node.References.Length<2||
-                       node.References.Any(r=>r.Kind!=TopologyKind.Edge||r.ProducerId!=s.BaseFeatureId))
+                       !FeatureReferenceCatalog.ArePersistentEdges(node.References,s.BaseFeatureId,2))
                         throw new InvalidDataException("Invalid sheet metal miter flange.");
                     break;
                 case SheetMetalConvertFeatureParameters s:
@@ -504,23 +537,23 @@ public static class FeatureDocumentFile
                 case SheetMetalHemFeatureParameters s:
                     if(document.Node(s.BaseFeatureId).Kind==FeatureKind.Sketch||!double.IsFinite(s.Width)||s.Width<=1e-9||
                        !double.IsFinite(s.Thickness)||s.Thickness<=1e-9||!double.IsFinite(s.BendRadius)||s.BendRadius<0||
-                       node.References is null||node.References.Length==0||node.References.Any(r=>r.Kind!=TopologyKind.Edge||r.ProducerId!=s.BaseFeatureId))
+                       !FeatureReferenceCatalog.ArePersistentEdges(node.References,s.BaseFeatureId))
                         throw new InvalidDataException("Invalid sheet metal hem.");
                     break;
                 case SheetMetalJogFeatureParameters s:
                     if(document.Node(s.BaseFeatureId).Kind==FeatureKind.Sketch||!double.IsFinite(s.Height)||s.Height<=1e-9||
                        !double.IsFinite(s.Offset)||s.Offset<=1e-9||!double.IsFinite(s.Thickness)||s.Thickness<=1e-9||
-                       node.References is null||node.References.Length==0||node.References.Any(r=>r.Kind!=TopologyKind.Edge||r.ProducerId!=s.BaseFeatureId))
+                       !FeatureReferenceCatalog.ArePersistentEdges(node.References,s.BaseFeatureId))
                         throw new InvalidDataException("Invalid sheet metal jog.");
                     break;
                 case SheetMetalRipFeatureParameters s:
                     if(document.Node(s.BaseFeatureId).Kind==FeatureKind.Sketch||!double.IsFinite(s.Gap)||s.Gap<=1e-9||
-                       node.References is null||node.References.Length==0||node.References.Any(r=>r.Kind!=TopologyKind.Edge||r.ProducerId!=s.BaseFeatureId))
+                       !FeatureReferenceCatalog.ArePersistentEdges(node.References,s.BaseFeatureId))
                         throw new InvalidDataException("Invalid sheet metal rip.");
                     break;
                 case SheetMetalCornerReliefFeatureParameters s:
                     if(document.Node(s.BaseFeatureId).Kind==FeatureKind.Sketch||!double.IsFinite(s.Radius)||s.Radius<=1e-9||
-                       node.References is null||node.References.Length==0||node.References.Any(r=>r.Kind!=TopologyKind.Edge||r.ProducerId!=s.BaseFeatureId))
+                       !FeatureReferenceCatalog.ArePersistentEdges(node.References,s.BaseFeatureId))
                         throw new InvalidDataException("Invalid sheet metal corner relief.");
                     break;
                 case SheetMetalBendFeatureParameters s:
@@ -549,14 +582,12 @@ public static class FeatureDocumentFile
                     break;
                 case EndCapFeatureParameters e:
                     if(document.Node(e.BaseFeatureId).Kind==FeatureKind.Sketch||!double.IsFinite(e.Thickness)||e.Thickness<=1e-9||
-                       node.References is null||node.References.Length!=1||node.References[0].Kind!=TopologyKind.Face||
-                       node.References[0].ProducerId!=e.BaseFeatureId)
+                       !FeatureReferenceCatalog.ArePersistentFaces(node.References,e.BaseFeatureId,1,1))
                         throw new InvalidDataException("Invalid end cap.");
                     break;
                 case WeldBeadFeatureParameters w:
                     if(document.Node(w.BaseFeatureId).Kind==FeatureKind.Sketch||!double.IsFinite(w.Radius)||w.Radius<=1e-9||
-                       node.References is null||node.References.Length==0||
-                       node.References.Any(r=>r.Kind!=TopologyKind.Edge||r.ProducerId!=w.BaseFeatureId))
+                       !FeatureReferenceCatalog.ArePersistentEdges(node.References,w.BaseFeatureId))
                         throw new InvalidDataException("Invalid weld bead.");
                     break;
                 default:throw new InvalidDataException("Unsupported feature parameters.");
