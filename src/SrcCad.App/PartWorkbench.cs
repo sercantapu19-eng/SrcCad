@@ -1042,7 +1042,7 @@ public partial class MainWindow
             try
             {
                 var model=GraphSketchModel(n);
-                return model.TryGetExtrusionProfile(out _,out _)||model.TryGetSingleCircle(out _);
+                return model.TryGetExtrusionRegions(out var regions)&&regions.Count>0;
             }
             catch{return false;}
         }).ToArray()??Array.Empty<FeatureNode>();
@@ -1066,11 +1066,18 @@ public partial class MainWindow
 
     private static double StructuralProfileArea(SketchModel profile)
     {
-        if(profile.TryGetSingleCircle(out var circle))return Math.PI*circle.Radius*circle.Radius;
-        if(!profile.TryGetExtrusionProfile(out var outer,out var polygonHoles,out var circleHoles))return 0;
-        var area=PolygonArea(outer)-polygonHoles.Sum(PolygonArea);
-        foreach(var hole in circleHoles)area-=Math.PI*hole.Radius*hole.Radius;
-        return Math.Max(0,area);
+        if(!profile.TryGetExtrusionRegions(out var regions))return 0;
+        double area=0;
+        foreach(var region in regions)
+        {
+            var outer=region.OuterCircle is SketchCircle circle
+                ?Math.PI*circle.Radius*circle.Radius
+                :region.OuterPolygon is not null?PolygonArea(region.OuterPolygon):0;
+            var holes=region.PolygonHoles.Sum(PolygonArea)+
+                region.CircularHoles.Sum(h=>Math.PI*h.Radius*h.Radius);
+            area+=Math.Max(0,outer-holes);
+        }
+        return area;
     }
 
     private static double StructuralPathLength(FeatureNode pathNode)
