@@ -97,9 +97,13 @@ public partial class MainWindow
         }
 
         var assembly=AssemblyDocumentFile.Load(full);
+        var directory=Path.GetDirectoryName(full)??Environment.CurrentDirectory;
         foreach(var component in assembly.Components.Where(c=>!c.Suppressed))
         {
-            var source=RebuildAssemblyComponent(component.SourcePath);
+            var sourcePath=Path.IsPathRooted(component.SourcePath)
+                ?component.SourcePath
+                :Path.Combine(directory,component.SourcePath);
+            var source=RebuildAssemblyComponent(sourcePath);
             var t=component.Transform;
             var transformed=SrcCad.Kernel.Occt.OcctFeatureKernel.Transform(source,
                 new[]{t.Translation.X,t.Translation.Y,t.Translation.Z,t.RotationDegrees.X,t.RotationDegrees.Y,t.RotationDegrees.Z});
