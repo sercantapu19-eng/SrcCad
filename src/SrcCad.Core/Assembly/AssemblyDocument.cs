@@ -22,7 +22,8 @@ public sealed record AssemblyComponent(
     RigidTransform Transform,
     bool Fixed=false,
     bool Suppressed=false,
-    PlaneFrame? MirrorPlane=null);
+    PlaneFrame? MirrorPlane=null,
+    Vector3d? ExplodeOffset=null);
 
 public enum MateType { Coincident, Parallel, Perpendicular, Concentric, Distance, Angle }
 
@@ -343,6 +344,9 @@ public static class AssemblyDocumentFile
         {
             _=component.Transform.Validate();
             if(component.MirrorPlane is PlaneFrame mirror)_=mirror.Validate();
+            if(component.ExplodeOffset is Vector3d explode&&
+               (!double.IsFinite(explode.X)||!double.IsFinite(explode.Y)||!double.IsFinite(explode.Z)))
+                throw new InvalidDataException("Invalid assembly explode offset.");
         }
 
         var ids=document.Components.Select(c=>c.Id).ToHashSet();
