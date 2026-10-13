@@ -593,6 +593,12 @@ namespace SrcCad::Kernel::Occt
             myState->Context->Deactivate(myState->SolidPresentation);
             myState->Context->Activate(myState->SolidPresentation, selectionMode, true);
         }
+        for(const auto& assemblyObject:myState->AssemblyObjects)
+        {
+            if(assemblyObject.IsNull())continue;
+            myState->Context->Deactivate(assemblyObject);
+            myState->Context->Activate(assemblyObject,selectionMode,true);
+        }
         myState->Context->UpdateCurrentViewer();
     }
 
