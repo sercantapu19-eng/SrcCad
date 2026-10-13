@@ -16,6 +16,7 @@ public partial class MainWindow
     private TreeViewItem? _drawingRoot;
     private readonly Stack<DrawingDocument> _drawingUndo=new();
     private readonly Stack<DrawingDocument> _drawingRedo=new();
+    private Guid? _drawingEditingViewId;
 
     private bool InDrawingMode=>_drawingDocument is not null;
 
@@ -64,6 +65,7 @@ public partial class MainWindow
         if(_drawingRoot is not null)FeatureTree.Items.Remove(_drawingRoot);
         _drawingRoot=null;_drawingDocument=null;_drawingPath=null;_drawingBodies.Clear();ResetDrawingHistory();
         PartNode.Visibility=Visibility.Visible;
+        DrawingViewPanel.Visibility=Visibility.Collapsed;_drawingEditingViewId=null;
     }
 
     private static (Vector3d Direction,Vector3d Up) DrawingOrientation(DrawingViewType type)
@@ -119,6 +121,7 @@ public partial class MainWindow
             {
                 var item=new TreeViewItem{Header=$"{view.Name} [{view.Type}] 1:{1.0/view.Scale:0.###}",Tag=view.Id};
                 var menu=new ContextMenu();
+                var edit=new MenuItem{Header="Görünüşü Düzenle"};edit.Click+=(_,_)=>BeginDrawingViewEdit(view.Id);menu.Items.Add(edit);
                 var del=new MenuItem{Header="Görünüşü Sil"};del.Click+=(_,_)=>DeleteDrawingView(view.Id);menu.Items.Add(del);
                 item.ContextMenu=menu;
                 sheetNode.Items.Add(item);
@@ -136,6 +139,50 @@ public partial class MainWindow
             _drawingRoot.Items.Add(sheetNode);
         }
         FeatureTree.Items.Add(_drawingRoot);ManagerTabs.SelectedItem=FeatureManagerTab;
+    }
+
+    private static bool TryDrawingNumber(string text,out double value)
+        => double.TryParse(text,System.Globalization.NumberStyles.Float,System.Globalization.CultureInfo.CurrentCulture,out value)||
+           double.TryParse(text,System.Globalization.NumberStyles.Float,System.Globalization.CultureInfo.InvariantCulture,out value);
+
+    private void BeginDrawingViewEdit(Guid id)
+    {
+        if(_drawingDocument is null)return;
+        DrawingView view;
+        try{view=_drawingDocument.View(id);}catch{Status("Düzenlenecek görünüş bulunamadı.");return;}
+        _drawingEditingViewId=id;
+        DrawingViewName.Text=view.Name;
+        DrawingViewX.Text=view.Position.X.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        DrawingViewY.Text=view.Position.Y.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        DrawingViewScale.Text=view.Scale.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        DrawingViewInfo.Text=$"{view.Type} • {(view.ParentViewId is null?"Ana görünüş":"Bağlı görünüş")}";
+        DrawingViewError.Text="";
+        DrawingViewPanel.Visibility=Visibility.Visible;
+        PropertyTitle.Text="Görünüşü Düzenle";
+        PropertyInfo.Text="Ad, sayfa konumu ve ölçek kalıcı .scdrw verisidir. Değişiklikler gerçek model izdüşümünü yeniden çizer.";
+        ManagerTabs.SelectedItem=PropertyManagerTab;
+    }
+
+    private void DrawingViewOk_Click(object sender,RoutedEventArgs e)
+    {
+        if(_drawingDocument is null||_drawingEditingViewId is not Guid id)return;
+        if(!TryDrawingNumber(DrawingViewX.Text,out var x)||!TryDrawingNumber(DrawingViewY.Text,out var y)||
+           !TryDrawingNumber(DrawingViewScale.Text,out var scale)||!double.IsFinite(scale)||scale<=1e-9||
+           string.IsNullOrWhiteSpace(DrawingViewName.Text))
+        {
+            DrawingViewError.Text="Ad boş olamaz; X/Y sonlu, ölçek pozitif olmalı.";return;
+        }
+        DrawingView current;
+        try{current=_drawingDocument.View(id);}catch{DrawingViewError.Text="Görünüş bulunamadı.";return;}
+        var updated=current with{Name=DrawingViewName.Text.Trim(),Position=new Point2d(x,y),Scale=scale};
+        SetDrawingDocument(_drawingDocument with{Views=_drawingDocument.Views.Select(v=>v.Id==id?updated:v).ToArray()});
+        DrawingViewPanel.Visibility=Visibility.Collapsed;_drawingEditingViewId=null;
+        RefreshDrawingTree(id);RenderDrawing();Status(updated.Name+" güncellendi.");
+    }
+
+    private void DrawingViewCancel_Click(object sender,RoutedEventArgs e)
+    {
+        DrawingViewPanel.Visibility=Visibility.Collapsed;_drawingEditingViewId=null;ManagerTabs.SelectedItem=FeatureManagerTab;
     }
 
     private void DeleteDrawingView(Guid id)
