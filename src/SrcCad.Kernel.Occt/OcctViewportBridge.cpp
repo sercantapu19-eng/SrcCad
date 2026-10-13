@@ -2494,6 +2494,23 @@ namespace SrcCad::Kernel::Occt
         catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
     }
 
+    array<double>^ OcctFeatureKernel::FaceFrame(String^ body,String^ faceReference)
+    {
+        if(String::IsNullOrWhiteSpace(faceReference))throw gcnew ArgumentException("Face reference is required.");
+        try
+        {
+            TopoDS_Shape shape=decodeFeature(body);
+            TopoDS_Face face=resolveFaceReference(shape,faceReference);
+            gp_Pnt planeOrigin;gp_Dir u,v,normal;
+            if(!planarFaceFrame(face,planeOrigin,u,v,normal))
+                throw gcnew InvalidOperationException("Referenced assembly face is not planar.");
+            GProp_GProps props;BRepGProp::SurfaceProperties(face,props);
+            gp_Pnt center=props.CentreOfMass();
+            return gcnew array<double>{center.X(),center.Y(),center.Z(),normal.X(),normal.Y(),normal.Z()};
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
     String^ OcctFeatureKernel::Fillet(String^ baseBody,array<String^>^ edgeReferences,double radius)
     {
         if(!std::isfinite(radius)||radius<=1e-9)throw gcnew ArgumentException("Fillet radius must be positive.");
