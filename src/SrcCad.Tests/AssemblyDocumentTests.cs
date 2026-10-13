@@ -21,6 +21,10 @@ internal static class AssemblyDocumentTests
         Check(clone.Components.Length==2,"assembly components roundtrip");
         Check(clone.Mates.Length==1&&clone.Mates[0].Type==MateType.Concentric,"assembly mate roundtrip");
         Check(clone.Component(b.Id).Transform.Translation==new Vector3d(100,20,30),"assembly transform roundtrip");
+        var exploded=b with{ExplodeOffset=new Vector3d(40,0,0)};
+        var explodedClone=AssemblyDocumentFile.Clone(new AssemblyDocument(Guid.NewGuid(),new[]{a,exploded},Array.Empty<AssemblyMate>()));
+        Check(explodedClone.Component(exploded.Id).ExplodeOffset==new Vector3d(40,0,0),
+            "assembly exploded-view offset roundtrip");
 
         var removed=clone.RemoveComponent(b.Id);
         Check(removed.Components.Length==1&&removed.Mates.Length==0,"component removal cascades mates");
