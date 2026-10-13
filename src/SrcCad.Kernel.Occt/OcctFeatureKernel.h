@@ -25,8 +25,10 @@ namespace SrcCad::Kernel::Occt
         static System::String^ SweepCut(System::String^ baseBody, array<double>^ outer, array<double>^ holes,
             array<double>^ circleHoles, array<double>^ circle, array<double>^ frame, array<double>^ pathPoints);
         static System::String^ Loft(System::String^ baseBody, array<array<double>^>^ outers,
+            array<array<double>^>^ holes, array<array<double>^>^ circleHoles,
             array<array<double>^>^ circles, array<array<double>^>^ frames);
         static System::String^ LoftCut(System::String^ baseBody, array<array<double>^>^ outers,
+            array<array<double>^>^ holes, array<array<double>^>^ circleHoles,
             array<array<double>^>^ circles, array<array<double>^>^ frames);
         static System::String^ Shell(System::String^ baseBody, array<System::String^>^ faceReferences,
             double thickness, bool outward);
