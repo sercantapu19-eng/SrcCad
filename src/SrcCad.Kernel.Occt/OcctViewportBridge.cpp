@@ -2258,6 +2258,23 @@ namespace SrcCad::Kernel::Occt
         catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
     }
 
+    String^ OcctFeatureKernel::Compound(array<String^>^ bodies)
+    {
+        if(bodies==nullptr||bodies->Length==0)throw gcnew ArgumentException("Compound requires at least one body.");
+        try
+        {
+            std::vector<TopoDS_Shape> shapes;
+            shapes.reserve(bodies->Length);
+            for each(String^ body in bodies)
+            {
+                if(String::IsNullOrWhiteSpace(body))throw gcnew ArgumentException("Compound body is empty.");
+                shapes.push_back(decodeFeature(body));
+            }
+            return encodeCompound(shapes);
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
     double OcctFeatureKernel::CommonVolume(String^ bodyA,array<double>^ transformA,String^ bodyB,array<double>^ transformB)
     {
         try
