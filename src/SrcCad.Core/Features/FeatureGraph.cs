@@ -7,7 +7,7 @@ using SrcCad.Core.Persistence;
 
 namespace SrcCad.Core.Features;
 
-public enum FeatureKind { Sketch, Extrude, ExtrudedCut, Fillet, Chamfer, Hole, Revolve, RevolvedCut, Sweep, SweptCut, Loft, LoftedCut, Shell, Draft, Rib, Mirror, LinearPattern, CircularPattern, ReferencePlane, ReferenceAxis, ReferencePoint, SheetMetalBase, SheetMetalCut, SheetMetalEdgeFlange, SheetMetalMiterFlange, SheetMetalConvert, StructuralMember, EndCap }
+public enum FeatureKind { Sketch, Extrude, ExtrudedCut, Fillet, Chamfer, Hole, Revolve, RevolvedCut, Sweep, SweptCut, Loft, LoftedCut, Shell, Draft, Rib, Mirror, LinearPattern, CircularPattern, ReferencePlane, ReferenceAxis, ReferencePoint, SheetMetalBase, SheetMetalCut, SheetMetalEdgeFlange, SheetMetalMiterFlange, SheetMetalConvert, StructuralMember, EndCap, WeldBead }
 public enum RebuildState { Clean, Dirty, Suppressed, Blocked, Failed }
 public enum ExtrusionTermination { Blind, ThroughAll }
 public enum TopologyKind { Body, Face, Edge, Vertex }
@@ -43,6 +43,7 @@ public sealed record FeatureReference(Guid ProducerId, TopologyKind Kind, string
 [JsonDerivedType(typeof(SheetMetalConvertFeatureParameters), "sheet-metal-convert")]
 [JsonDerivedType(typeof(StructuralMemberFeatureParameters), "structural-member")]
 [JsonDerivedType(typeof(EndCapFeatureParameters), "end-cap")]
+[JsonDerivedType(typeof(WeldBeadFeatureParameters), "weld-bead")]
 public abstract record FeatureParameters;
 public sealed record SketchFeatureParameters(PlaneFrame Plane, SketchSnapshot Sketch) : FeatureParameters;
 public sealed record ExtrudeFeatureParameters(Guid SketchId, double Depth) : FeatureParameters;
@@ -77,6 +78,7 @@ public sealed record SheetMetalMiterFlangeFeatureParameters(Guid BaseFeatureId, 
 public sealed record SheetMetalConvertFeatureParameters(Guid BaseFeatureId,double Thickness,double BendRadius,double KFactor) : FeatureParameters;
 public sealed record StructuralMemberFeatureParameters(Guid ProfileSketchId, Guid PathSketchId) : FeatureParameters;
 public sealed record EndCapFeatureParameters(Guid BaseFeatureId,double Thickness,bool Reverse=false) : FeatureParameters;
+public sealed record WeldBeadFeatureParameters(Guid BaseFeatureId,double Radius) : FeatureParameters;
 public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Parameters,
     bool Suppressed = false, FeatureReference[]? References = null)
 {
@@ -96,6 +98,7 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
       SheetMetalMiterFlangeFeatureParameters => FeatureKind.SheetMetalMiterFlange,
       SheetMetalConvertFeatureParameters => FeatureKind.SheetMetalConvert,
       StructuralMemberFeatureParameters => FeatureKind.StructuralMember, EndCapFeatureParameters => FeatureKind.EndCap,
+      WeldBeadFeatureParameters => FeatureKind.WeldBead,
       _ => throw new InvalidDataException("Unsupported feature") };
     [JsonIgnore] public Guid[] Dependencies => (Parameters switch
     {
@@ -126,6 +129,7 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
         SheetMetalConvertFeatureParameters s => new[] { s.BaseFeatureId },
         StructuralMemberFeatureParameters s => new[] { s.ProfileSketchId,s.PathSketchId },
         EndCapFeatureParameters e => new[] { e.BaseFeatureId },
+        WeldBeadFeatureParameters w => new[] { w.BaseFeatureId },
         _ => Array.Empty<Guid>()
     }).Concat((References ?? Array.Empty<FeatureReference>()).Select(r=>r.ProducerId)).Distinct().ToArray();
 }
@@ -372,6 +376,12 @@ public static class FeatureDocumentFile
                        node.References is null||node.References.Length!=1||node.References[0].Kind!=TopologyKind.Face||
                        node.References[0].ProducerId!=e.BaseFeatureId)
                         throw new InvalidDataException("Invalid end cap.");
+                    break;
+                case WeldBeadFeatureParameters w:
+                    if(document.Node(w.BaseFeatureId).Kind==FeatureKind.Sketch||!double.IsFinite(w.Radius)||w.Radius<=1e-9||
+                       node.References is null||node.References.Length==0||
+                       node.References.Any(r=>r.Kind!=TopologyKind.Edge||r.ProducerId!=w.BaseFeatureId))
+                        throw new InvalidDataException("Invalid weld bead.");
                     break;
                 default:throw new InvalidDataException("Unsupported feature parameters.");
             }
