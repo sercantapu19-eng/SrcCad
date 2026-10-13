@@ -172,7 +172,13 @@ public sealed class StraightSlotSketchCommand : SketchCommandBase
         if(!b.HasValue)
         {
             if(Point2d.Distance(a.Value,pick.Point)<=1e-9){Context.SetStatus?.Invoke("Slot uzunluğu sıfır olamaz.");return;}
-            b=pick.Point;Context.SetStatus?.Invoke("Slot genişliğini belirlemek için üçüncü noktayı seçin.");return;
+            var candidate=pick.Point;
+            var dx=candidate.X-a.Value.X;
+            var dy=candidate.Y-a.Value.Y;
+            const double tanSnap=0.087488663525924; // 5°
+            if(Math.Abs(dy)<=Math.Abs(dx)*tanSnap)candidate=new Point2d(candidate.X,a.Value.Y);
+            else if(Math.Abs(dx)<=Math.Abs(dy)*tanSnap)candidate=new Point2d(a.Value.X,candidate.Y);
+            b=candidate;Context.SetStatus?.Invoke("Slot genişliğini belirlemek için üçüncü noktayı seçin.");return;
         }
         if(!Geometry(a.Value,b.Value,pick.Point,out var aL,out var bL,out var bR,out var aR,out _))
         {Context.SetStatus?.Invoke("Slot genişliği sıfır olamaz.");return;}
@@ -183,11 +189,15 @@ public sealed class StraightSlotSketchCommand : SketchCommandBase
         var pBL=Sketch.CreateOrSnapPoint(bL,pick.SnapTolerance);
         var pBR=Sketch.CreateOrSnapPoint(bR,pick.SnapTolerance);
         var pAR=Sketch.CreateOrSnapPoint(aR,pick.SnapTolerance);
-        Sketch.AddLine(pAL,pBL);
+        var centerLine=Sketch.AddLine(ca,cb,true);
+        var upper=Sketch.AddLine(pAL,pBL);
         Sketch.AddArc(cb,pBL,pBR,true);
-        Sketch.AddLine(pBR,pAR);
+        var lower=Sketch.AddLine(pBR,pAR);
         Sketch.AddArc(ca,pAR,pAL,true);
-        a=null;b=null;Changed("Kapalı parametrik düz slot oluşturuldu.");
+        Sketch.AddAutomaticLineRelation(centerLine.Id);
+        Sketch.AddAutomaticLineRelation(upper.Id);
+        Sketch.AddAutomaticLineRelation(lower.Id);
+        a=null;b=null;Changed("Kapalı parametrik düz slot oluşturuldu • merkez çizgisi ölçülebilir.");
     }
 
     public override IReadOnlyList<SketchPreviewPrimitive> Preview(Point2d cursor)
