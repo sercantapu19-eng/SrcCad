@@ -19,6 +19,14 @@ internal static class DrawingDocumentTests
         Check(clone.Views.Length==2&&clone.View(top.Id).ParentViewId==front.Id,"projected drawing view roundtrip");
         Check(clone.Annotations.Single().Text=="SRC CAD","drawing annotation roundtrip");
 
+        var removedView=clone.RemoveView(front.Id,true);
+        Check(removedView.Views.Length==0&&removedView.Annotations.Length==0,
+            "removing parent view cascades projected views and attached annotations");
+
+        var removedAnnotation=clone.RemoveAnnotation(note.Id);
+        Check(removedAnnotation.Annotations.Length==0&&removedAnnotation.Views.Length==2,
+            "annotation removal preserves drawing views");
+
         try
         {
             DrawingDocumentFile.Serialize(doc with{Views=new[]{top with{ParentViewId=Guid.NewGuid()}}});
