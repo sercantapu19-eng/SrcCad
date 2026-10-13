@@ -89,11 +89,13 @@ internal sealed class OcctPartGeometryKernel : IPartGeometryKernel
         return values.ToArray();
     }
 
-    private static Profile SimpleProfile(SketchModel sketch)
+    private static Profile SweepProfile(SketchModel sketch)=>Pack(sketch,1);
+
+    private static Profile LoftProfile(SketchModel sketch)
     {
         var p=Pack(sketch,1);
         if(p.Holes.Length>0||p.CircleHoles.Length>0)
-            throw new InvalidOperationException("Sweep/Loft currently requires a single outer profile without holes.");
+            throw new InvalidOperationException("Loft currently requires matching outer profiles without inner loops.");
         return p;
     }
 
@@ -114,28 +116,28 @@ internal sealed class OcctPartGeometryKernel : IPartGeometryKernel
 
     public string Sweep(string? baseBody,SketchModel profile,SketchModel path)
     {
-        var p=SimpleProfile(profile);
-        return OcctFeatureKernel.Sweep(baseBody,p.Outer,p.Circle,p.Frame,PackSweepPath(path));
+        var p=SweepProfile(profile);
+        return OcctFeatureKernel.Sweep(baseBody,p.Outer,p.Holes,p.CircleHoles,p.Circle,p.Frame,PackSweepPath(path));
     }
     public string SweepSpatial(string? baseBody,SketchModel profile,IReadOnlyList<SrcCad.Core.Geometry.Vector3d> path)
     {
-        var p=SimpleProfile(profile);
-        return OcctFeatureKernel.Sweep(baseBody,p.Outer,p.Circle,p.Frame,PackSpatialPath(path));
+        var p=SweepProfile(profile);
+        return OcctFeatureKernel.Sweep(baseBody,p.Outer,p.Holes,p.CircleHoles,p.Circle,p.Frame,PackSpatialPath(path));
     }
     public string SweepCut(string baseBody,SketchModel profile,SketchModel path)
     {
-        var p=SimpleProfile(profile);
-        return OcctFeatureKernel.SweepCut(baseBody,p.Outer,p.Circle,p.Frame,PackSweepPath(path));
+        var p=SweepProfile(profile);
+        return OcctFeatureKernel.SweepCut(baseBody,p.Outer,p.Holes,p.CircleHoles,p.Circle,p.Frame,PackSweepPath(path));
     }
     public string SweepCutSpatial(string baseBody,SketchModel profile,IReadOnlyList<SrcCad.Core.Geometry.Vector3d> path)
     {
-        var p=SimpleProfile(profile);
-        return OcctFeatureKernel.SweepCut(baseBody,p.Outer,p.Circle,p.Frame,PackSpatialPath(path));
+        var p=SweepProfile(profile);
+        return OcctFeatureKernel.SweepCut(baseBody,p.Outer,p.Holes,p.CircleHoles,p.Circle,p.Frame,PackSpatialPath(path));
     }
     public string Loft(string? baseBody,IReadOnlyList<SketchModel> profiles)
     {
         if(profiles.Count<2)throw new InvalidOperationException("Loft requires at least two profiles.");
-        var packed=profiles.Select(SimpleProfile).ToArray();
+        var packed=profiles.Select(LoftProfile).ToArray();
         return OcctFeatureKernel.Loft(baseBody,packed.Select(p=>p.Outer).ToArray(),packed.Select(p=>p.Circle).ToArray(),packed.Select(p=>p.Frame).ToArray());
     }
     public string LoftCut(string baseBody,IReadOnlyList<SketchModel> profiles)
