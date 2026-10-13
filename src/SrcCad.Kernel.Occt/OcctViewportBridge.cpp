@@ -1280,19 +1280,88 @@ namespace SrcCad::Kernel::Occt
         return result;
     }
 
-    static TopoDS_Shape featureLoft(array<array<double>^>^ outers,array<array<double>^>^ circles,array<array<double>^>^ frames)
+    static std::vector<TopoDS_Wire> featureInnerWires(array<double>^ holes,array<double>^ circleHoles,array<double>^ f)
     {
-        if(outers==nullptr||circles==nullptr||frames==nullptr||frames->Length<2||
-           outers->Length!=frames->Length||circles->Length!=frames->Length)
+        validateFeatureFrame(f);
+        std::vector<TopoDS_Wire> result;
+        if(holes!=nullptr)
+        {
+            int cursor=0;
+            while(cursor<holes->Length)
+            {
+                const int count=(int)holes[cursor++];
+                if(count<3||cursor+count*2>holes->Length)throw gcnew ArgumentException("Invalid loft inner profile.");
+                BRepBuilderAPI_MakePolygon polygon;
+                for(int i=0;i<count;i++)
+                {
+                    double u=holes[cursor++],v=holes[cursor++];
+                    polygon.Add(planePoint(u,v,f[0],f[1],f[2],f[3],f[4],f[5],f[6],f[7],f[8]));
+                }
+                polygon.Close();
+                if(!polygon.IsDone())throw gcnew InvalidOperationException("Loft inner polygon failed.");
+                result.push_back(polygon.Wire());
+            }
+        }
+        if(circleHoles!=nullptr)
+        {
+            if((circleHoles->Length%3)!=0)throw gcnew ArgumentException("Invalid loft circular holes.");
+            for(int i=0;i<circleHoles->Length;i+=3)
+            {
+                const double u=circleHoles[i],v=circleHoles[i+1],radius=circleHoles[i+2];
+                if(!std::isfinite(radius)||radius<=1e-9)throw gcnew ArgumentException("Invalid loft circular hole radius.");
+                gp_Pnt center=planePoint(u,v,f[0],f[1],f[2],f[3],f[4],f[5],f[6],f[7],f[8]);
+                BRepBuilderAPI_MakeEdge edge(gp_Circ(gp_Ax2(center,gp_Dir(f[9],f[10],f[11]),gp_Dir(f[3],f[4],f[5])),radius));
+                BRepBuilderAPI_MakeWire wire(edge.Edge());
+                if(!wire.IsDone())throw gcnew InvalidOperationException("Loft circular inner wire failed.");
+                result.push_back(wire.Wire());
+            }
+        }
+        return result;
+    }
+
+    static TopoDS_Shape featureLoft(array<array<double>^>^ outers,array<array<double>^>^ holes,
+                                    array<array<double>^>^ circleHoles,array<array<double>^>^ circles,
+                                    array<array<double>^>^ frames)
+    {
+        if(outers==nullptr||holes==nullptr||circleHoles==nullptr||circles==nullptr||frames==nullptr||frames->Length<2||
+           outers->Length!=frames->Length||holes->Length!=frames->Length||circleHoles->Length!=frames->Length||
+           circles->Length!=frames->Length)
             throw gcnew ArgumentException("Loft requires at least two matching profiles.");
-        BRepOffsetAPI_ThruSections loft(true,false,1.0e-6);
-        loft.CheckCompatibility(true);
+
+        BRepOffsetAPI_ThruSections outerLoft(true,false,1.0e-6);
+        outerLoft.CheckCompatibility(true);
+        std::vector<std::vector<TopoDS_Wire>> innerByProfile;
+        innerByProfile.reserve(frames->Length);
         for(int i=0;i<frames->Length;++i)
-            loft.AddWire(featureProfileWire(outers[i],circles[i],frames[i]));
-        loft.Build();
-        if(!loft.IsDone())throw gcnew InvalidOperationException("OCCT loft failed.");
-        TopoDS_Shape result=loft.Shape();
+        {
+            outerLoft.AddWire(featureProfileWire(outers[i],circles[i],frames[i]));
+            innerByProfile.push_back(featureInnerWires(holes[i],circleHoles[i],frames[i]));
+        }
+        outerLoft.Build();
+        if(!outerLoft.IsDone())throw gcnew InvalidOperationException("OCCT loft failed.");
+        TopoDS_Shape result=outerLoft.Shape();
         featureVolume(result);
+
+        const size_t innerCount=innerByProfile.front().size();
+        for(const auto& profile:innerByProfile)
+            if(profile.size()!=innerCount)
+                throw gcnew InvalidOperationException("Loft inner-loop count must match across all profiles.");
+
+        for(size_t holeIndex=0;holeIndex<innerCount;++holeIndex)
+        {
+            BRepOffsetAPI_ThruSections holeLoft(true,false,1.0e-6);
+            holeLoft.CheckCompatibility(true);
+            for(size_t profileIndex=0;profileIndex<innerByProfile.size();++profileIndex)
+                holeLoft.AddWire(innerByProfile[profileIndex][holeIndex]);
+            holeLoft.Build();
+            if(!holeLoft.IsDone())throw gcnew InvalidOperationException("OCCT loft inner tool failed.");
+            TopoDS_Shape tool=holeLoft.Shape();
+            featureVolume(tool);
+            BRepAlgoAPI_Cut cut(result,tool);cut.Build();
+            if(!cut.IsDone())throw gcnew InvalidOperationException("OCCT loft inner-loop cut failed.");
+            result=cut.Shape();
+            featureVolume(result);
+        }
         return result;
     }
 
