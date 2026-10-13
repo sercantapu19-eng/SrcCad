@@ -37,6 +37,7 @@ internal static class FeatureGraphTests
                 ReferenceAxisFeatureParameters=>1,
                 ReferencePointFeatureParameters=>1,
                 SheetMetalBaseFeatureParameters p=>p.Thickness,
+                SheetMetalCutFeatureParameters p=>p.Depth,
                 _=>1
             };
             return new(own+dependencies.Values.Sum(x=>x.Value));
@@ -203,6 +204,13 @@ internal static class FeatureGraphTests
         Check(sheetClone.Node(sheetBaseNode.Id).Kind==FeatureKind.SheetMetalBase&&
               ((SheetMetalBaseFeatureParameters)sheetClone.Node(sheetBaseNode.Id).Parameters).KFactor==0.5,
             "sheet metal base thickness bend radius k-factor roundtrip");
+        var sheetCutNode=new FeatureNode(Guid.NewGuid(),"Sac Kes1",
+            new SheetMetalCutFeatureParameters(sheetBaseNode.Id,second.Id,5,ExtrusionTermination.ThroughAll,true));
+        var sheetCutDoc=new FeatureDocument(Guid.NewGuid(),new[]{source,sheetBaseNode,second,sheetCutNode});
+        var sheetCutClone=FeatureDocumentFile.Clone(sheetCutDoc);
+        Check(sheetCutClone.Node(sheetCutNode.Id).Kind==FeatureKind.SheetMetalCut&&
+              ((SheetMetalCutFeatureParameters)sheetCutClone.Node(sheetCutNode.Id).Parameters).Termination==ExtrusionTermination.ThroughAll,
+            "sheet metal cut parameters and dependency roundtrip");
 
         var external=session.Document;((IDictionary<int,SketchPoint>)((SketchFeatureParameters)external.Node(source.Id).Parameters).Sketch.Points).Clear();
         Check(((SketchFeatureParameters)session.Document.Node(source.Id).Parameters).Sketch.Points.Count>0,"external snapshot cannot mutate committed document");

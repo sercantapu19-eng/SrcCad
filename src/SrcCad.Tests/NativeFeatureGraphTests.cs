@@ -29,6 +29,16 @@ internal static class NativeFeatureGraphTests
             var sheetInspect=OcctFeatureKernel.Inspect(sheetSession.Output(sheetNode.Id)!.BRep!);
             Check(Math.Abs(sheetInspect[0]-40*30*2)<1e-4&&sheetInspect[1]==1,
                 "sheet metal base flange builds real thickness B-Rep");
+            var sheetCutSketch=new SketchModel(plane);
+            sheetCutSketch.AddCircle(sheetCutSketch.CreatePointExact(new(20,15)),5);
+            var sheetCutSketchNode=new FeatureNode(Guid.NewGuid(),"SacKesProfil",new SketchFeatureParameters(plane,sheetCutSketch.CaptureSnapshot()));
+            var sheetCutNode=new FeatureNode(Guid.NewGuid(),"Sac Kes1",
+                new SheetMetalCutFeatureParameters(sheetNode.Id,sheetCutSketchNode.Id,4,ExtrusionTermination.ThroughAll,false));
+            var sheetCutDoc=new FeatureDocument(Guid.NewGuid(),new[]{doc.Features[0],sheetNode,sheetCutSketchNode,sheetCutNode});
+            var sheetCutSession=new FeatureSession<PartFeatureOutput>(sheetCutDoc,evaluator);
+            var sheetCutInspect=OcctFeatureKernel.Inspect(sheetCutSession.Output(sheetCutNode.Id)!.BRep!);
+            Check(sheetCutInspect[0]<sheetInspect[0]&&sheetCutInspect[1]==1,
+                "sheet metal cut removes real material through thickness");
 
             var bossBody=session.Output(boss.Id)!.BRep!;
             var bossEdges=OcctFeatureKernel.EdgeReferences(bossBody);
