@@ -22,6 +22,16 @@ internal static class DrawingDocumentTests
         Check(clone.Annotations.Single().Kind==DrawingAnnotationKind.OverallSize&&clone.Annotations.Single().Data=="projection",
             "associative annotation kind/data roundtrip");
 
+        var linear=new DrawingAnnotation(Guid.NewGuid(),sheet.Id,front.Id,new Point2d(50,50),"40 mm",
+            DrawingAnnotationKind.LinearDimension,"L;0;0;40;0");
+        var diameter=new DrawingAnnotation(Guid.NewGuid(),sheet.Id,front.Id,new Point2d(80,80),"Ø10",
+            DrawingAnnotationKind.DiameterDimension,"D;20;15;5");
+        var dimensions=DrawingDocumentFile.Clone(doc with{Annotations=new[]{linear,diameter}});
+        Check(dimensions.Annotations.Any(a=>a.Kind==DrawingAnnotationKind.LinearDimension&&a.Data=="L;0;0;40;0"),
+            "associative projected-edge dimension roundtrip");
+        Check(dimensions.Annotations.Any(a=>a.Kind==DrawingAnnotationKind.DiameterDimension&&a.Data=="D;20;15;5"),
+            "associative diameter dimension roundtrip");
+
         var removedView=clone.RemoveView(front.Id,true);
         Check(removedView.Views.Length==0&&removedView.Annotations.Length==0,
             "removing parent view cascades projected views and attached annotations");
