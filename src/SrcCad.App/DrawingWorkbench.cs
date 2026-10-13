@@ -390,14 +390,45 @@ public partial class MainWindow
         return $"Ø{circles[index*3+2]*2:0.###}";
     }
 
+    private static IEnumerable<string> EnumerateBomParts(string modelPath,HashSet<string>? recursion=null)
+    {
+        var full=Path.GetFullPath(modelPath);
+        if(string.Equals(Path.GetExtension(full),".scpart",StringComparison.OrdinalIgnoreCase))
+        {
+            yield return Path.GetFileNameWithoutExtension(full);
+            yield break;
+        }
+        if(!string.Equals(Path.GetExtension(full),".scasm",StringComparison.OrdinalIgnoreCase))yield break;
+
+        recursion??=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if(!recursion.Add(full))throw new InvalidDataException("BOM alt montaj döngüsü algılandı: "+Path.GetFileName(full));
+        try
+        {
+            var assembly=AssemblyDocumentFile.Load(full);
+            var directory=Path.GetDirectoryName(full)??Environment.CurrentDirectory;
+            foreach(var component in assembly.Components.Where(c=>!c.Suppressed))
+            {
+                var child=Path.IsPathRooted(component.SourcePath)
+                    ?component.SourcePath
+                    :Path.Combine(directory,component.SourcePath);
+                foreach(var part in EnumerateBomParts(child,recursion))yield return part;
+            }
+        }
+        finally{recursion.Remove(full);}
+    }
+
+    private static (string Name,int Count)[] BomRows(string assemblyPath)
+        => EnumerateBomParts(assemblyPath)
+            .GroupBy(name=>name,StringComparer.OrdinalIgnoreCase)
+            .OrderBy(group=>group.Key,StringComparer.OrdinalIgnoreCase)
+            .Select(group=>(group.Key,group.Count()))
+            .ToArray();
+
     private static string ResolveBom(DrawingView view)
     {
         if(!string.Equals(Path.GetExtension(view.ModelPath),".scasm",StringComparison.OrdinalIgnoreCase))return "BOM";
-        var assembly=AssemblyDocumentFile.Load(view.ModelPath);
-        var groups=assembly.Components.Where(c=>!c.Suppressed)
-            .GroupBy(c=>Path.GetFileNameWithoutExtension(c.SourcePath),StringComparer.OrdinalIgnoreCase)
-            .OrderBy(g=>g.Key).ToArray();
-        return groups.Length==0?"BOM\n(Boş)":"BOM\n"+string.Join("\n",groups.Select((g,i)=>$"{i+1}. {g.Key}   Adet: {g.Count()}"));
+        var rows=BomRows(view.ModelPath);
+        return rows.Length==0?"BOM\n(Boş)":"BOM\n"+string.Join("\n",rows.Select((row,i)=>$"{i+1}. {row.Name}   Adet: {row.Count}"));
     }
 
     private void NewDrawing_Click(object sender,RoutedEventArgs e)
@@ -611,11 +642,8 @@ public partial class MainWindow
         var view=SelectedDrawingView()??_drawingDocument.Views.FirstOrDefault();
         if(view is null||!string.Equals(Path.GetExtension(view.ModelPath),".scasm",StringComparison.OrdinalIgnoreCase))
         {Status("Malzeme Listesi için montaj (.scasm) görünüşü seçin.");return;}
-        var assembly=AssemblyDocumentFile.Load(view.ModelPath);
-        var groups=assembly.Components.Where(c=>!c.Suppressed)
-            .GroupBy(c=>Path.GetFileNameWithoutExtension(c.SourcePath),StringComparer.OrdinalIgnoreCase)
-            .OrderBy(g=>g.Key).ToArray();
-        var lines=groups.Select((g,i)=>$"{i+1}. {g.Key}   Adet: {g.Count()}").ToArray();
+        var rows=BomRows(view.ModelPath);
+        var lines=rows.Select((row,i)=>$"{i+1}. {row.Name}   Adet: {row.Count}").ToArray();
         PropertyTitle.Text="Malzeme Listesi (BOM)";
         PropertyInfo.Text=lines.Length==0?"Montajda görünür bileşen yok.":string.Join("\n",lines);
         ManagerTabs.SelectedItem=PropertyManagerTab;
@@ -628,7 +656,7 @@ public partial class MainWindow
             SetDrawingDocument(_drawingDocument with{Annotations=_drawingDocument.Annotations.Append(note).ToArray()});
             RefreshDrawingTree(note.Id);RenderDrawing();
         }
-        Status($"{groups.Length} kalem BOM oluşturuldu.");
+        Status($"{rows.Length} kalem BOM oluşturuldu; alt montajlar dahil.");
     }
 
     private void DrawingBalloon_Click(object sender,RoutedEventArgs e)
