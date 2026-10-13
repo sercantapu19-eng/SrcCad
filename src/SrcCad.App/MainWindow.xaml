@@ -131,7 +131,7 @@
                     <Button Style="{StaticResource CadCommandButton}" Content="Çizim Radyusu" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Çizim Pahı" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Çizgi Kırp" Tag="{StaticResource CadTrimIcon}" Click="Trim_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Uzat" Click="CadCommandPlaceholder_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Uzat" Click="ExtendSketch_Click" ToolTip="Seçili çizgileri en yakın çizgi/daire sınırına kadar uzatır."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Ofset" Click="OffsetSketch_Click" ToolTip="Seçili çizgi/daireleri girilen mesafede gerçek geometri olarak ofsetler."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Aynala" Click="MirrorSketch_Click" ToolTip="Seçili geometri + Merkez Çizgisi ile parametrik çizim kopyası oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Doğrusal Dizilim" Click="LinearSketchPattern_Click"/>
