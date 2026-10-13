@@ -22,6 +22,7 @@
 #include <Quantity_NameOfColor.hxx>
 #include <TopAbs_ShapeEnum.hxx>
 #include <TopoDS_Shape.hxx>
+#include <TopoDS_Compound.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Wire.hxx>
 #include <TopoDS_Face.hxx>
