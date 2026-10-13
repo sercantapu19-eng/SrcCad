@@ -1267,13 +1267,12 @@ namespace SrcCad::Kernel::Occt
         return path.Wire();
     }
 
-    static TopoDS_Shape featureSweep(array<double>^ outer,array<double>^ circle,array<double>^ frame,array<double>^ pathPoints)
+    static TopoDS_Shape featureSweep(array<double>^ outer,array<double>^ holes,array<double>^ circleHoles,
+                                     array<double>^ circle,array<double>^ frame,array<double>^ pathPoints)
     {
         TopoDS_Wire spine=sweepPathWire(pathPoints);
-        TopoDS_Wire profile=featureProfileWire(outer,circle,frame);
-        BRepBuilderAPI_MakeFace profileFace(profile,true);
-        if(!profileFace.IsDone())throw gcnew InvalidOperationException("Sweep profile face failed.");
-        BRepOffsetAPI_MakePipe pipe(spine,profileFace.Face());
+        TopoDS_Face profileFace=featureFace(outer,holes,circleHoles,circle,frame);
+        BRepOffsetAPI_MakePipe pipe(spine,profileFace);
         pipe.Build();
         if(!pipe.IsDone())throw gcnew InvalidOperationException("OCCT sweep failed.");
         TopoDS_Shape result=pipe.Shape();
@@ -1423,11 +1422,12 @@ namespace SrcCad::Kernel::Occt
         catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
     }
 
-    String^ OcctFeatureKernel::Sweep(String^ baseBody,array<double>^ outer,array<double>^ circle,array<double>^ frame,array<double>^ pathPoints)
+    String^ OcctFeatureKernel::Sweep(String^ baseBody,array<double>^ outer,array<double>^ holes,
+        array<double>^ circleHoles,array<double>^ circle,array<double>^ frame,array<double>^ pathPoints)
     {
         try
         {
-            TopoDS_Shape swept=featureSweep(outer,circle,frame,pathPoints);
+            TopoDS_Shape swept=featureSweep(outer,holes,circleHoles,circle,frame,pathPoints);
             if(String::IsNullOrWhiteSpace(baseBody))return encodeFeature(swept);
             TopoDS_Shape baseShape=decodeFeature(baseBody);
             BRepAlgoAPI_Fuse fuse(baseShape,swept);fuse.Build();
@@ -1437,12 +1437,13 @@ namespace SrcCad::Kernel::Occt
         catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
     }
 
-    String^ OcctFeatureKernel::SweepCut(String^ baseBody,array<double>^ outer,array<double>^ circle,array<double>^ frame,array<double>^ pathPoints)
+    String^ OcctFeatureKernel::SweepCut(String^ baseBody,array<double>^ outer,array<double>^ holes,
+        array<double>^ circleHoles,array<double>^ circle,array<double>^ frame,array<double>^ pathPoints)
     {
         try
         {
             TopoDS_Shape baseShape=decodeFeature(baseBody);const double before=featureVolume(baseShape);
-            TopoDS_Shape tool=featureSweep(outer,circle,frame,pathPoints);
+            TopoDS_Shape tool=featureSweep(outer,holes,circleHoles,circle,frame,pathPoints);
             BRepAlgoAPI_Cut cut(baseShape,tool);cut.Build();
             if(!cut.IsDone())throw gcnew InvalidOperationException("OCCT swept cut failed.");
             TopoDS_Shape result=cut.Shape();const double after=featureVolume(result);
