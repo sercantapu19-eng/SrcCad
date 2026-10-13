@@ -93,6 +93,28 @@ internal static class AssemblyDocumentTests
         Check((faceDistanceSolved.Component(movable.Id).Transform.Translation-new Vector3d(0,0,12)).Length<1e-8,
             "resolved planar face distance mate honors offset");
 
+        var pointPlaneComponent=movable with{Transform=new RigidTransform(new Vector3d(25,40,30),Vector3d.Zero)};
+        var pointPlaneDoc=new AssemblyDocument(Guid.NewGuid(),new[]{a,pointPlaneComponent},Array.Empty<AssemblyMate>());
+        var pointToPlane=new AssemblyMate(Guid.NewGuid(),"NoktaDüzlem",MateType.Coincident,
+            new AssemblyReference(a.Id,TopologyKind.Face,AssemblyReferenceCatalog.TopPlane),
+            new AssemblyReference(pointPlaneComponent.Id,TopologyKind.Vertex,AssemblyReferenceCatalog.Origin));
+        var pointPlaneSolved=AssemblyMateSolver.ApplyResolved(
+            pointPlaneDoc,pointToPlane,
+            Vector3d.Zero,Vector3d.UnitZ,
+            Vector3d.Zero,null);
+        var pointPlaneTranslation=pointPlaneSolved.Component(pointPlaneComponent.Id).Transform.Translation;
+        Check(Math.Abs(pointPlaneTranslation.X-25)<1e-8&&Math.Abs(pointPlaneTranslation.Y-40)<1e-8&&Math.Abs(pointPlaneTranslation.Z)<1e-8,
+            "point-plane coincident preserves in-plane translation and removes normal offset");
+
+        var pointPlaneDistance=pointToPlane with{Id=Guid.NewGuid(),Name="NoktaDüzlemMesafe",Type=MateType.Distance,Value=7};
+        var pointPlaneDistanceSolved=AssemblyMateSolver.ApplyResolved(
+            pointPlaneDoc,pointPlaneDistance,
+            Vector3d.Zero,Vector3d.UnitZ,
+            Vector3d.Zero,null);
+        var pointPlaneDistanceTranslation=pointPlaneDistanceSolved.Component(pointPlaneComponent.Id).Transform.Translation;
+        Check(Math.Abs(pointPlaneDistanceTranslation.X-25)<1e-8&&Math.Abs(pointPlaneDistanceTranslation.Y-40)<1e-8&&Math.Abs(pointPlaneDistanceTranslation.Z-7)<1e-8,
+            "point-plane distance preserves in-plane translation and sets signed normal offset");
+
         var tangentComponent=movable with{Transform=new RigidTransform(new Vector3d(0,0,20),Vector3d.Zero)};
         var tangentDoc=new AssemblyDocument(Guid.NewGuid(),new[]{a,tangentComponent},Array.Empty<AssemblyMate>());
         var tangent=new AssemblyMate(Guid.NewGuid(),"Teğet1",MateType.Tangent,
