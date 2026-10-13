@@ -645,6 +645,125 @@ public partial class MainWindow
         RefreshDrawingTree(note.Id);RenderDrawing();Status("Balon "+number+" eklendi.");
     }
 
+    private static string DxfText(string value)
+        => value.Replace("\r"," ").Replace("\n"," ").Replace("\0"," ");
+
+    private IEnumerable<(double X1,double Y1,double X2,double Y2)> DrawingViewDxfLines(DrawingView view)
+    {
+        if(_drawingDocument is null)yield break;
+        var parentType=_drawingDocument.Views.FirstOrDefault(v=>v.Id==view.ParentViewId)?.Type??DrawingViewType.Front;
+        var orientationType=view.Type is DrawingViewType.Projected or DrawingViewType.Section or DrawingViewType.Detail or DrawingViewType.Broken
+            ?parentType:view.Type;
+        var (direction,up)=DrawingOrientation(orientationType);
+        var allSegments=new List<double>();
+        foreach(var body in DrawingBodies(view.ModelPath))
+        {
+            if(view.Type==DrawingViewType.Section&&view.SectionOrigin is Vector3d sectionOrigin&&view.SectionNormal is Vector3d sectionNormal)
+                allSegments.AddRange(SrcCad.Kernel.Occt.OcctFeatureKernel.SectionEdges(body,
+                    new[]{sectionOrigin.X,sectionOrigin.Y,sectionOrigin.Z},
+                    new[]{sectionNormal.X,sectionNormal.Y,sectionNormal.Z},
+                    new[]{direction.X,direction.Y,direction.Z},
+                    new[]{up.X,up.Y,up.Z}));
+            else
+                allSegments.AddRange(SrcCad.Kernel.Occt.OcctFeatureKernel.ProjectEdges(body,
+                    new[]{direction.X,direction.Y,direction.Z},
+                    new[]{up.X,up.Y,up.Z}));
+        }
+
+        var segments=allSegments.ToArray();
+        if(segments.Length<4)yield break;
+        var xs=new List<double>();var ys=new List<double>();
+        for(var i=0;i+3<segments.Length;i+=4)
+        {
+            xs.Add(segments[i]);xs.Add(segments[i+2]);
+            ys.Add(segments[i+1]);ys.Add(segments[i+3]);
+        }
+
+        double MapBrokenX(double x)
+        {
+            if(view.Type!=DrawingViewType.Broken||view.BreakStart is not double start||view.BreakEnd is not double end)return x;
+            return x<=start?x:x>=end?x-(end-start):double.NaN;
+        }
+
+        var cx=(xs.Min()+xs.Max())*0.5;
+        var cy=(ys.Min()+ys.Max())*0.5;
+        for(var i=0;i+3<segments.Length;i+=4)
+        {
+            var ax=MapBrokenX(segments[i]);var bx=MapBrokenX(segments[i+2]);
+            if(!double.IsFinite(ax)||!double.IsFinite(bx))continue;
+            yield return (
+                (ax-cx)*view.Scale+view.Position.X,
+                (segments[i+1]-cy)*view.Scale+view.Position.Y,
+                (bx-cx)*view.Scale+view.Position.X,
+                (segments[i+3]-cy)*view.Scale+view.Position.Y);
+        }
+    }
+
+    private void DrawingExportDxf_Click(object sender,RoutedEventArgs e)
+    {
+        if(_drawingDocument is null||_drawingDocument.Sheets.Length==0)
+        {Status("DXF aktarımı için teknik resim oluşturun.");return;}
+
+        var dialog=new SaveFileDialog
+        {
+            Title="Teknik Resmi DXF Olarak Aktar",
+            Filter="AutoCAD DXF (*.dxf)|*.dxf",
+            DefaultExt=".dxf",
+            AddExtension=true,
+            FileName=string.IsNullOrWhiteSpace(_drawingPath)
+                ?"SrcCad_Teknik_Resim.dxf"
+                :Path.GetFileNameWithoutExtension(_drawingPath)+".dxf"
+        };
+        if(dialog.ShowDialog(this)!=true)return;
+
+        try
+        {
+            var sheet=_drawingDocument.Sheets[0];
+            var inv=System.Globalization.CultureInfo.InvariantCulture;
+            using var writer=new StreamWriter(dialog.FileName,false,new System.Text.UTF8Encoding(false));
+            void Pair(int code,string value){writer.WriteLine(code.ToString(inv));writer.WriteLine(value);}
+            void Line(double x1,double y1,double x2,double y2,string layer="GEOMETRY")
+            {
+                Pair(0,"LINE");Pair(8,layer);
+                Pair(10,x1.ToString("G17",inv));Pair(20,y1.ToString("G17",inv));Pair(30,"0");
+                Pair(11,x2.ToString("G17",inv));Pair(21,y2.ToString("G17",inv));Pair(31,"0");
+            }
+            void Text(double x,double y,string text,string layer="ANNOTATION")
+            {
+                Pair(0,"TEXT");Pair(8,layer);
+                Pair(10,x.ToString("G17",inv));Pair(20,y.ToString("G17",inv));Pair(30,"0");
+                Pair(40,"3.5");Pair(1,DxfText(text));
+            }
+
+            Pair(0,"SECTION");Pair(2,"HEADER");
+            Pair(9,"$INSUNITS");Pair(70,"4"); // millimetres
+            Pair(0,"ENDSEC");
+            Pair(0,"SECTION");Pair(2,"ENTITIES");
+
+            Line(0,0,sheet.Width,0,"SHEET");
+            Line(sheet.Width,0,sheet.Width,sheet.Height,"SHEET");
+            Line(sheet.Width,sheet.Height,0,sheet.Height,"SHEET");
+            Line(0,sheet.Height,0,0,"SHEET");
+
+            foreach(var view in _drawingDocument.Views.Where(v=>v.SheetId==sheet.Id))
+            {
+                foreach(var segment in DrawingViewDxfLines(view))
+                    Line(segment.X1,segment.Y1,segment.X2,segment.Y2);
+                Text(view.Position.X,view.Position.Y-12,view.Name,"VIEW_LABEL");
+            }
+
+            foreach(var note in _drawingDocument.Annotations.Where(a=>a.SheetId==sheet.Id))
+                Text(note.Position.X,note.Position.Y,ResolveDrawingAnnotationText(note));
+
+            Pair(0,"ENDSEC");Pair(0,"EOF");
+            Status("DXF oluşturuldu: "+Path.GetFileName(dialog.FileName));
+        }
+        catch(Exception ex)
+        {
+            MessageBox.Show(this,ex.Message,"DXF aktarımı başarısız",MessageBoxButton.OK,MessageBoxImage.Error);
+        }
+    }
+
     private void SaveDrawing_Click(object sender,RoutedEventArgs e)
     {
         if(_drawingDocument is null){Status("Kaydedilecek teknik resim yok.");return;}
