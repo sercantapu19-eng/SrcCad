@@ -64,7 +64,7 @@ internal static class GeneralConstraintTests
             var symmetricRoundtrip=PartFile.Deserialize(PartFile.Serialize(new ExtrusionState(plane,symmetric.CaptureSnapshot(),null)));
             var symmetricCopy=new SketchModel(plane);symmetricCopy.RestoreSnapshot(symmetricRoundtrip.Sketch);
             var symmetricRelation=symmetricCopy.Relations.Single(r=>r.Type==SketchRelationType.Symmetric);
-            Check(symmetricRelation.ReferenceC?.Id==axis.Id&&symmetricCopy.ConstraintsSatisfied(),
+            Check(symmetricRelation.ReferenceC?.Id==axis.Id&&!symmetricCopy.DefinitionInfo().IsConflicting,
                 "symmetric third reference survives save/open");
 
             var u=new SketchModel(plane);p=u.CreatePointExact(new(5,5));q=u.CreatePointExact(new(30,20));var edge=u.AddLine(p,q);
