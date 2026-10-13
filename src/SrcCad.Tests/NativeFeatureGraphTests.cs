@@ -63,6 +63,31 @@ internal static class NativeFeatureGraphTests
 
             var bossBody=session.Output(boss.Id)!.BRep!;
 
+            var boss2Plane=plane with{Origin=plane.Origin+plane.Normal*20,Name="Boss2Plane"};
+            var boss2Sketch=new SketchModel(boss2Plane);
+            boss2Sketch.AddCornerRectangle(new(10,10),new(30,20),.001);
+            var boss2SketchNode=new FeatureNode(Guid.NewGuid(),"Boss2Sketch",
+                new SketchFeatureParameters(boss2Plane,boss2Sketch.CaptureSnapshot()));
+            var mergedBossNode=new FeatureNode(Guid.NewGuid(),"Ekstrüzyon2",
+                new ExtrudeFeatureParameters(boss2SketchNode.Id,10,BaseFeatureId:boss.Id,MergeResult:true));
+            var mergedBossDoc=new FeatureDocument(Guid.NewGuid(),new[]{doc.Features[0],boss,boss2SketchNode,mergedBossNode});
+            var mergedBossSession=new FeatureSession<PartFeatureOutput>(mergedBossDoc,evaluator);
+            var mergedBossInfo=OcctFeatureKernel.Inspect(mergedBossSession.Output(mergedBossNode.Id)!.BRep!);
+            Check(Math.Abs(mergedBossInfo[0]-26000)<1e-3&&mergedBossInfo[1]==1,
+                "second boss merges into previous solid through base dependency");
+
+            var multibodyBossNode=mergedBossNode with
+            {
+                Id=Guid.NewGuid(),
+                Name="Ekstrüzyon2-Multibody",
+                Parameters=((ExtrudeFeatureParameters)mergedBossNode.Parameters) with{MergeResult=false}
+            };
+            var multibodyBossDoc=new FeatureDocument(Guid.NewGuid(),new[]{doc.Features[0],boss,boss2SketchNode,multibodyBossNode});
+            var multibodyBossSession=new FeatureSession<PartFeatureOutput>(multibodyBossDoc,evaluator);
+            var multibodyBossInfo=OcctFeatureKernel.Inspect(multibodyBossSession.Output(multibodyBossNode.Id)!.BRep!);
+            Check(Math.Abs(multibodyBossInfo[0]-26000)<1e-3&&multibodyBossInfo[1]==2,
+                "merge-result off preserves previous and new boss as two-body compound");
+
             var midNode=new FeatureNode(Guid.NewGuid(),"Orta Düzlem1",
                 new ExtrudeFeatureParameters(doc.Features[0].Id,40,MidPlane:true));
             var midDoc=new FeatureDocument(Guid.NewGuid(),new[]{doc.Features[0],midNode});
