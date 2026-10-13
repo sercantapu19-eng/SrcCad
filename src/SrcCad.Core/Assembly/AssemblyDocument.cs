@@ -21,7 +21,8 @@ public sealed record AssemblyComponent(
     string SourcePath,
     RigidTransform Transform,
     bool Fixed=false,
-    bool Suppressed=false);
+    bool Suppressed=false,
+    PlaneFrame? MirrorPlane=null);
 
 public enum MateType { Coincident, Parallel, Perpendicular, Concentric, Distance, Angle }
 
@@ -105,7 +106,11 @@ public static class AssemblyDocumentFile
             throw new InvalidDataException("Invalid assembly component.");
         if(document.Components.Select(c=>c.Id).Distinct().Count()!=document.Components.Length)
             throw new InvalidDataException("Duplicate assembly component id.");
-        foreach(var component in document.Components)_=component.Transform.Validate();
+        foreach(var component in document.Components)
+        {
+            _=component.Transform.Validate();
+            if(component.MirrorPlane is PlaneFrame mirror)_=mirror.Validate();
+        }
 
         var ids=document.Components.Select(c=>c.Id).ToHashSet();
         if(document.Mates.Select(m=>m.Id).Distinct().Count()!=document.Mates.Length)
