@@ -41,6 +41,28 @@ public partial class MainWindow
         return body;
     }
 
+    private IEnumerable<string> DrawingBodies(string modelPath)
+    {
+        var full=Path.GetFullPath(modelPath);
+        if(!string.Equals(Path.GetExtension(full),".scasm",StringComparison.OrdinalIgnoreCase))
+        {
+            yield return DrawingBody(full);yield break;
+        }
+
+        var assembly=AssemblyDocumentFile.Load(full);
+        foreach(var component in assembly.Components.Where(c=>!c.Suppressed))
+        {
+            var source=RebuildAssemblyComponent(component.SourcePath);
+            var t=component.Transform;
+            var transformed=SrcCad.Kernel.Occt.OcctFeatureKernel.Transform(source,
+                new[]{t.Translation.X,t.Translation.Y,t.Translation.Z,t.RotationDegrees.X,t.RotationDegrees.Y,t.RotationDegrees.Z});
+            if(component.MirrorPlane is PlaneFrame mirror)
+                transformed=SrcCad.Kernel.Occt.OcctFeatureKernel.Mirror(transformed,
+                    new[]{mirror.Origin.X,mirror.Origin.Y,mirror.Origin.Z,mirror.U.X,mirror.U.Y,mirror.U.Z,mirror.Normal.X,mirror.Normal.Y,mirror.Normal.Z},false);
+            yield return transformed;
+        }
+    }
+
     private void RefreshDrawingTree(Guid? selected=null)
     {
         if(_drawingDocument is null)return;
@@ -78,12 +100,14 @@ public partial class MainWindow
         {
             try
             {
-                var body=DrawingBody(view.ModelPath);
                 var (direction,up)=DrawingOrientation(view.Type==DrawingViewType.Projected
                     ?(_drawingDocument.Views.FirstOrDefault(v=>v.Id==view.ParentViewId)?.Type??DrawingViewType.Front)
                     :view.Type);
-                var segments=SrcCad.Kernel.Occt.OcctFeatureKernel.ProjectEdges(body,
-                    new[]{direction.X,direction.Y,direction.Z},new[]{up.X,up.Y,up.Z});
+                var allSegments=new List<double>();
+                foreach(var body in DrawingBodies(view.ModelPath))
+                    allSegments.AddRange(SrcCad.Kernel.Occt.OcctFeatureKernel.ProjectEdges(body,
+                        new[]{direction.X,direction.Y,direction.Z},new[]{up.X,up.Y,up.Z}));
+                var segments=allSegments.ToArray();
                 if(segments.Length<4)continue;
                 var xs=new List<double>();var ys=new List<double>();
                 for(var i=0;i+3<segments.Length;i+=4){xs.Add(segments[i]);xs.Add(segments[i+2]);ys.Add(segments[i+1]);ys.Add(segments[i+3]);}
@@ -119,11 +143,11 @@ public partial class MainWindow
     {
         if(_drawingDocument is null)NewDrawing_Click(sender,e);
         if(_drawingDocument is null)return;
-        var dialog=new OpenFileDialog{Title="Teknik Resim Modeli",Filter="SrcCad Parça (*.scpart)|*.scpart"};
+        var dialog=new OpenFileDialog{Title="Teknik Resim Modeli",Filter="SrcCad Model (*.scpart;*.scasm)|*.scpart;*.scasm|SrcCad Parça (*.scpart)|*.scpart|SrcCad Montaj (*.scasm)|*.scasm"};
         if(dialog.ShowDialog(this)!=true)return;
         try
         {
-            _=DrawingBody(dialog.FileName);
+            _=DrawingBodies(dialog.FileName).FirstOrDefault()??throw new InvalidDataException("Model görünüşü için geometri bulunamadı.");
             var sheet=_drawingDocument.Sheets[0];
             var view=new DrawingView(Guid.NewGuid(),"Ön Görünüş",Path.GetFullPath(dialog.FileName),
                 DrawingViewType.Front,sheet.Id,new Point2d(sheet.Width*0.35,sheet.Height*0.55),1.0);
@@ -164,6 +188,44 @@ public partial class MainWindow
         var note=new DrawingAnnotation(Guid.NewGuid(),sheet.Id,SelectedDrawingView()?.Id,new Point2d(20,20),"NOT");
         _drawingDocument=_drawingDocument with{Annotations=_drawingDocument.Annotations.Append(note).ToArray()};
         RefreshDrawingTree(note.Id);RenderDrawing();Status("Teknik resim notu eklendi.");
+    }
+
+    private void DrawingBom_Click(object sender,RoutedEventArgs e)
+    {
+        if(_drawingDocument is null){Status("BOM için teknik resim gerekiyor.");return;}
+        var view=SelectedDrawingView()??_drawingDocument.Views.FirstOrDefault();
+        if(view is null||!string.Equals(Path.GetExtension(view.ModelPath),".scasm",StringComparison.OrdinalIgnoreCase))
+        {Status("Malzeme Listesi için montaj (.scasm) görünüşü seçin.");return;}
+        var assembly=AssemblyDocumentFile.Load(view.ModelPath);
+        var groups=assembly.Components.Where(c=>!c.Suppressed)
+            .GroupBy(c=>Path.GetFileNameWithoutExtension(c.SourcePath),StringComparer.OrdinalIgnoreCase)
+            .OrderBy(g=>g.Key).ToArray();
+        var lines=groups.Select((g,i)=>$"{i+1}. {g.Key}   Adet: {g.Count()}").ToArray();
+        PropertyTitle.Text="Malzeme Listesi (BOM)";
+        PropertyInfo.Text=lines.Length==0?"Montajda görünür bileşen yok.":string.Join("\n",lines);
+        ManagerTabs.SelectedItem=PropertyManagerTab;
+        if(lines.Length>0)
+        {
+            var sheet=_drawingDocument.Sheets[0];
+            var text="BOM\n"+string.Join("\n",lines);
+            var note=new DrawingAnnotation(Guid.NewGuid(),sheet.Id,view.Id,new Point2d(sheet.Width-120,30),text);
+            _drawingDocument=_drawingDocument with{Annotations=_drawingDocument.Annotations.Append(note).ToArray()};
+            RefreshDrawingTree(note.Id);RenderDrawing();
+        }
+        Status($"{groups.Length} kalem BOM oluşturuldu.");
+    }
+
+    private void DrawingBalloon_Click(object sender,RoutedEventArgs e)
+    {
+        if(_drawingDocument is null)return;
+        var view=SelectedDrawingView();
+        if(view is null){Status("Balon için bir görünüş seçin.");return;}
+        var sheet=_drawingDocument.Sheets[0];
+        var number=_drawingDocument.Annotations.Count(a=>a.Text.StartsWith("BALON ",StringComparison.Ordinal))+1;
+        var note=new DrawingAnnotation(Guid.NewGuid(),sheet.Id,view.Id,
+            new Point2d(view.Position.X+35,view.Position.Y+35),"BALON "+number);
+        _drawingDocument=_drawingDocument with{Annotations=_drawingDocument.Annotations.Append(note).ToArray()};
+        RefreshDrawingTree(note.Id);RenderDrawing();Status("Balon "+number+" eklendi.");
     }
 
     private void SaveDrawing_Click(object sender,RoutedEventArgs e)
