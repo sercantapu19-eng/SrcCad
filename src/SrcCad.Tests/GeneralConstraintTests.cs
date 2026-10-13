@@ -36,6 +36,37 @@ internal static class GeneralConstraintTests
             foreach(var e in new[]{c,d}) {var dim=t.AddDimension(SketchDimensionType.CircleDiameter,new(0,0),entityA:e.Id);t.SetDimensionValue(dim.Id,10);}
             Check(t.ApplyReferenceRelation(SketchRelationType.Tangent,new[]{t.ReferenceForEntity(c.Id),t.ReferenceForEntity(d.Id)})&&Near(Point2d.Distance(t.Point(p).Position,t.Point(q).Position),10),"external circle tangent");
             int n=t.Relations.Count;Check(t.ApplyReferenceRelation(SketchRelationType.Tangent,new[]{t.ReferenceForEntity(d.Id),t.ReferenceForEntity(c.Id)})&&t.Relations.Count==n,"reversed duplicate does not accumulate");
+
+            var internalTangent=new SketchModel(plane);
+            var outerCenter=internalTangent.CreatePointExact(new(0,0));
+            var innerCenter=internalTangent.CreatePointExact(new(12,0));
+            var outerCircle=internalTangent.AddCircle(outerCenter,20);
+            var innerCircle=internalTangent.AddCircle(innerCenter,8);
+            internalTangent.SetPointFixed(outerCenter,true);
+            Check(internalTangent.ApplyReferenceRelation(SketchRelationType.Tangent,
+                new[]{internalTangent.ReferenceForEntity(outerCircle.Id),internalTangent.ReferenceForEntity(innerCircle.Id)}),
+                "internal circle tangent relation applies");
+            Check(internalTangent.Relations.Last().InternalTangency&&
+                  Near(Point2d.Distance(internalTangent.Point(outerCenter).Position,internalTangent.Point(innerCenter).Position),12),
+                "internal tangent uses radius difference");
+
+            var symmetric=new SketchModel(plane);
+            var ax0=symmetric.CreatePointExact(new(0,-100));var ax1=symmetric.CreatePointExact(new(0,100));
+            symmetric.SetPointFixed(ax0,true);symmetric.SetPointFixed(ax1,true);
+            var axis=symmetric.AddLine(ax0,ax1,true);
+            var sp=symmetric.CreatePointExact(new(-30,10));var sq=symmetric.CreatePointExact(new(15,40));
+            Check(symmetric.ApplyReferenceRelation(SketchRelationType.Symmetric,
+                new[]{symmetric.ReferenceForPoint(sp),symmetric.ReferenceForPoint(sq),symmetric.ReferenceForEntity(axis.Id)}),
+                "point symmetry about construction centerline applies");
+            var spa=symmetric.Point(sp).Position;var spb=symmetric.Point(sq).Position;
+            Check(Near((spa.X+spb.X)/2,0)&&Near(spa.Y,spb.Y),
+                "symmetric points mirror around vertical centerline");
+            var symmetricRoundtrip=PartFile.Deserialize(PartFile.Serialize(new ExtrusionState(plane,symmetric.CaptureSnapshot(),null)));
+            var symmetricCopy=new SketchModel(plane);symmetricCopy.RestoreSnapshot(symmetricRoundtrip.Sketch);
+            var symmetricRelation=symmetricCopy.Relations.Single(r=>r.Type==SketchRelationType.Symmetric);
+            Check(symmetricRelation.ReferenceC?.Id==axis.Id&&symmetricCopy.ConstraintsSatisfied(),
+                "symmetric third reference survives save/open");
+
             var u=new SketchModel(plane);p=u.CreatePointExact(new(5,5));q=u.CreatePointExact(new(30,20));var edge=u.AddLine(p,q);
             Check(u.ApplyReferenceRelation(SketchRelationType.Coincident,new[]{u.ReferenceForPoint(0),u.ReferenceForEntity(edge.Id)}),"Origin coincident to arbitrary line");
             var pa=u.Point(p).Position;var pb=u.Point(q).Position;
