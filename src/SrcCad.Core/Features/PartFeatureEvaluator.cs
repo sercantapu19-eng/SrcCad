@@ -78,6 +78,8 @@ public sealed class PartFeatureEvaluator(IPartGeometryKernel kernel) : IFeatureE
             SheetMetalCutFeatureParameters s => new(null,kernel.Cut(Base(s.BaseFeatureId),Sketch(s.SketchId),s.Reverse?-s.Depth:s.Depth,s.Termination)),
             SheetMetalEdgeFlangeFeatureParameters s => new(null,kernel.EdgeFlange(Base(s.BaseFeatureId),EdgeReferences(s.BaseFeatureId),
                 s.Length,s.AngleDegrees,s.Thickness,s.BendRadius,s.Reverse)),
+            SheetMetalMiterFlangeFeatureParameters s => new(null,kernel.EdgeFlange(Base(s.BaseFeatureId),EdgeReferences(s.BaseFeatureId),
+                s.Length,s.AngleDegrees,s.Thickness,s.BendRadius,s.Reverse)),
             SheetMetalConvertFeatureParameters s => new(null,Base(s.BaseFeatureId)),
             StructuralMemberFeatureParameters s => new(null,kernel.Sweep(null,Sketch(s.ProfileSketchId),Sketch(s.PathSketchId))),
             EndCapFeatureParameters e => new(null,kernel.EndCap(Base(e.BaseFeatureId),
