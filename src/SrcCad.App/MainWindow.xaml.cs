@@ -1805,6 +1805,11 @@ public partial class MainWindow : Window
         if(_sketch is not null)ActivateSketchCommand(new CenterArcSketchCommand(_sketch));
     }
 
+    private void ThreePointArc_Click(object sender,RoutedEventArgs e)
+    {
+        if(_sketch is not null)ActivateSketchCommand(new ThreePointArcCommand(_sketch));
+    }
+
     private void Slot_Click(object sender,RoutedEventArgs e)
     {
         if(_sketch is not null)ActivateSketchCommand(new StraightSlotSketchCommand(_sketch));
