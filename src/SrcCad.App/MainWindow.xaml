@@ -283,16 +283,32 @@
             <TabControl Grid.Column="0" x:Name="ManagerTabs" BorderBrush="#BAC5CE" Background="#F8FAFB">
                 <TabItem Header="FeatureManager" x:Name="FeatureManagerTab">
                     <TreeView x:Name="FeatureTree" BorderThickness="0" Background="#FAFBFC"
-                              SelectedItemChanged="FeatureTree_SelectedItemChanged" MouseDoubleClick="FeatureTree_MouseDoubleClick">
+                              SelectedItemChanged="FeatureTree_SelectedItemChanged" MouseDoubleClick="FeatureTree_MouseDoubleClick"
+                              PreviewMouseRightButtonDown="FeatureTree_PreviewMouseRightButtonDown">
                         <TreeViewItem Header="Parça1" x:Name="PartNode" IsExpanded="True">
                             <TreeViewItem Header="Geçmiş"/>
                             <TreeViewItem Header="Sensörler"/>
                             <TreeViewItem Header="Detaylandırmalar"/>
                             <TreeViewItem Header="Malzeme &lt;belirli değil&gt;" Tag="material" x:Name="MaterialNode"/>
                             <TreeViewItem Header="Orijin" x:Name="OriginNode" IsExpanded="True">
-                                <TreeViewItem Header="Ön Düzlem" Tag="plane:front" x:Name="FrontPlaneNode"/>
-                                <TreeViewItem Header="Üst Düzlem" Tag="plane:top" x:Name="TopPlaneNode"/>
-                                <TreeViewItem Header="Sağ Düzlem" Tag="plane:right" x:Name="RightPlaneNode"/>
+                                <TreeViewItem Header="Ön Düzlem" Tag="plane:front" x:Name="FrontPlaneNode">
+                                    <TreeViewItem.ContextMenu><ContextMenu>
+                                        <MenuItem Header="Çizim Başlat" Click="StartSketch_Click"/>
+                                        <MenuItem Header="Dik Bak" Click="NormalTo_Click"/>
+                                    </ContextMenu></TreeViewItem.ContextMenu>
+                                </TreeViewItem>
+                                <TreeViewItem Header="Üst Düzlem" Tag="plane:top" x:Name="TopPlaneNode">
+                                    <TreeViewItem.ContextMenu><ContextMenu>
+                                        <MenuItem Header="Çizim Başlat" Click="StartSketch_Click"/>
+                                        <MenuItem Header="Dik Bak" Click="NormalTo_Click"/>
+                                    </ContextMenu></TreeViewItem.ContextMenu>
+                                </TreeViewItem>
+                                <TreeViewItem Header="Sağ Düzlem" Tag="plane:right" x:Name="RightPlaneNode">
+                                    <TreeViewItem.ContextMenu><ContextMenu>
+                                        <MenuItem Header="Çizim Başlat" Click="StartSketch_Click"/>
+                                        <MenuItem Header="Dik Bak" Click="NormalTo_Click"/>
+                                    </ContextMenu></TreeViewItem.ContextMenu>
+                                </TreeViewItem>
                             </TreeViewItem>
                         </TreeViewItem>
                     </TreeView>
