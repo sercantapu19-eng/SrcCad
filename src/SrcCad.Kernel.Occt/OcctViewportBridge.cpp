@@ -1900,6 +1900,69 @@ namespace SrcCad::Kernel::Occt
         catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
     }
 
+    String^ OcctFeatureKernel::Bend(String^ baseBody,array<double>^ bendFrame,double angleDegrees,bool reverse)
+    {
+        if(bendFrame==nullptr||bendFrame->Length!=9||!std::isfinite(angleDegrees)||
+           std::abs(angleDegrees)<=1e-6||std::abs(angleDegrees)>=179.0)
+            throw gcnew ArgumentException("Invalid sketched bend parameters.");
+        for each(double value in bendFrame)if(!std::isfinite(value))throw gcnew ArgumentException("Invalid bend frame.");
+        try
+        {
+            TopoDS_Shape baseShape=decodeFeature(baseBody);
+            const double before=featureVolume(baseShape);
+            gp_Pnt a(bendFrame[0],bendFrame[1],bendFrame[2]);
+            gp_Pnt b(bendFrame[3],bendFrame[4],bendFrame[5]);
+            gp_Vec tangent(a,b);
+            gp_Vec normal(bendFrame[6],bendFrame[7],bendFrame[8]);
+            if(tangent.Magnitude()<=1e-9||normal.Magnitude()<=1e-9)
+                throw gcnew ArgumentException("Bend axis/normal cannot be zero.");
+            tangent.Normalize();normal.Normalize();
+            gp_Vec split=tangent.Crossed(normal);
+            if(split.Magnitude()<=1e-9)throw gcnew ArgumentException("Bend axis must lie in the sheet plane.");
+            split.Normalize();
+
+            Bnd_Box bounds;BRepBndLib::Add(baseShape,bounds);
+            double xmin,ymin,zmin,xmax,ymax,zmax;bounds.Get(xmin,ymin,zmin,xmax,ymax,zmax);
+            const double diagonal=gp_Pnt(xmin,ymin,zmin).Distance(gp_Pnt(xmax,ymax,zmax));
+            const double extent=std::max(100.0,diagonal*4.0+10.0);
+            const double overlap=std::max(1e-5,diagonal*1e-6);
+
+            auto half=[&](gp_Vec direction,double planeShift)
+            {
+                gp_Pnt origin=a.Translated(split.Multiplied(planeShift));
+                gp_Pnt p0=origin.Translated(tangent.Multiplied(-extent)).Translated(normal.Multiplied(-extent));
+                gp_Pnt p1=origin.Translated(tangent.Multiplied(extent)).Translated(normal.Multiplied(-extent));
+                gp_Pnt p2=origin.Translated(tangent.Multiplied(extent)).Translated(normal.Multiplied(extent));
+                gp_Pnt p3=origin.Translated(tangent.Multiplied(-extent)).Translated(normal.Multiplied(extent));
+                BRepBuilderAPI_MakePolygon polygon;polygon.Add(p0);polygon.Add(p1);polygon.Add(p2);polygon.Add(p3);polygon.Close();
+                if(!polygon.IsDone())throw gcnew InvalidOperationException("Bend split profile failed.");
+                BRepBuilderAPI_MakeFace face(polygon.Wire(),true);
+                if(!face.IsDone())throw gcnew InvalidOperationException("Bend split face failed.");
+                direction.Normalize();
+                BRepPrimAPI_MakePrism prism(face.Face(),direction.Multiplied(extent*2.0),true,true);
+                BRepAlgoAPI_Common common(baseShape,prism.Shape());common.Build();
+                if(!common.IsDone())throw gcnew InvalidOperationException("Bend split failed.");
+                return common.Shape();
+            };
+
+            TopoDS_Shape moving=half(split,-overlap);
+            TopoDS_Shape fixed=half(split.Reversed(),overlap);
+            if(moving.IsNull()||fixed.IsNull())throw gcnew InvalidOperationException("Bend line does not split the sheet body.");
+
+            const double signedAngle=(reverse?-angleDegrees:angleDegrees)*3.14159265358979323846/180.0;
+            gp_Trsf rotate;rotate.SetRotation(gp_Ax1(a,gp_Dir(tangent)),signedAngle);
+            moving=BRepBuilderAPI_Transform(moving,rotate,true).Shape();
+            BRepAlgoAPI_Fuse fuse(fixed,moving);fuse.Build();
+            if(!fuse.IsDone())throw gcnew InvalidOperationException("OCCT sketched bend fuse failed.");
+            TopoDS_Shape result=fuse.Shape();
+            const double after=featureVolume(result);
+            if(after<=1e-9||std::abs(after-before)>std::max(before*0.08,1e-5))
+                throw gcnew InvalidOperationException("Sketched bend produced invalid material volume.");
+            return encodeFeature(result);
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
     String^ OcctFeatureKernel::TrimToPlane(String^ baseBody,array<double>^ planeFrame,bool keepPositive)
     {
         if(planeFrame==nullptr||planeFrame->Length!=12)throw gcnew ArgumentException("Trim plane requires 12 frame values.");
