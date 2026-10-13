@@ -52,6 +52,7 @@ public enum SketchDimensionType
 {
     LineLength,
     CircleDiameter,
+    CircleRadius,
     ArcRadius,
     EllipseAxis1Diameter,
     EllipseAxis2Diameter,
@@ -768,6 +769,7 @@ public sealed partial class SketchModel
         {
             SketchDimensionType.LineLength => SetLineLength(dim.EntityA, dim.Value),
             SketchDimensionType.CircleDiameter => SetCircleDiameter(dim.EntityA, dim.Value),
+            SketchDimensionType.CircleRadius => SetCircleRadius(dim.EntityA, dim.Value),
             SketchDimensionType.ArcRadius => SetArcRadius(dim.EntityA, dim.Value),
             SketchDimensionType.EllipseAxis1Diameter => SetEllipseAxisDiameter(dim.EntityA, dim.Value, true),
             SketchDimensionType.EllipseAxis2Diameter => SetEllipseAxisDiameter(dim.EntityA, dim.Value, false),
@@ -951,6 +953,15 @@ public sealed partial class SketchModel
         var index = Entities.FindIndex(x => x.Id == circleId);
         if (index < 0) return false;
         Entities[index] = circle with { Radius = value / 2.0 };
+        return true;
+    }
+
+    private bool SetCircleRadius(int circleId,double value)
+    {
+        if(Entity(circleId) is not SketchCircle circle||value<=1e-9)return false;
+        var index=Entities.FindIndex(x=>x.Id==circleId);
+        if(index<0)return false;
+        Entities[index]=circle with{Radius=value};
         return true;
     }
 
@@ -1203,6 +1214,9 @@ public sealed partial class SketchModel
 
             SketchDimensionType.CircleDiameter when Entity(entityA) is SketchCircle circle =>
                 circle.Radius * 2.0,
+
+            SketchDimensionType.CircleRadius when Entity(entityA) is SketchCircle radiusCircle =>
+                radiusCircle.Radius,
 
             SketchDimensionType.ArcRadius when Entity(entityA) is SketchArc arc =>
                 Point2d.Distance(Point(arc.CenterPointId).Position,Point(arc.StartPointId).Position),
