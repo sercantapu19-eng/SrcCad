@@ -149,13 +149,13 @@
                     <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadExtrudeIcon}" Content="Kenar Flanşı" Click="EdgeFlange_Click" x:Name="EdgeFlangeButton" ToolTip="Sacın doğrusal kenarlarını seçin; uzunluk, açı, kalınlık ve büküm yarıçapıyla gerçek flanş oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Gönye Flanşı" Click="MiterFlange_Click" ToolTip="En az iki bağlı sac kenarı seçin; aynı feature içinde çoklu gerçek flanş B-Rep'i oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadCutIcon}" Content="Sac Kes" Click="SheetCut_Click" x:Name="SheetCutButton" ToolTip="Sac yüzünde oluşturulan kapalı çizimi gerçek Through-All kesme olarak uygular."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Hem" Click="CadCommandPlaceholder_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Jog" Click="CadCommandPlaceholder_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Hem" Click="Hem_Click" ToolTip="Sac kenarını seçin; gerçek geri-kıvrılmış hem B-Rep oluşturur."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Jog" Click="Jog_Click" ToolTip="Sac kenarını seçin; yükseklik ve ofsetle gerçek Z-step jog oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Çizilmiş Büküm" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Açınım" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Katla" Click="CadCommandPlaceholder_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Yırtık" Click="CadCommandPlaceholder_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Köşe Rölyefi" Click="CadCommandPlaceholder_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Yırtık" Click="Rip_Click" ToolTip="Seçili sac kenarı boyunca parametrik boşluk keser."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Köşe Rölyefi" Click="CornerRelief_Click" ToolTip="Seçili kenar uçlarında gerçek dairesel köşe rahatlatması keser."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Sac'a Dönüştür" Click="ConvertToSheetMetal_Click" x:Name="ConvertToSheetMetalButton" ToolTip="Mevcut katıya sac kalınlığı, büküm yarıçapı ve K-faktörü meta verisini parametrik feature olarak bağlar."/>
                 </WrapPanel>
             </TabItem>
@@ -504,13 +504,13 @@
 
                             <StackPanel x:Name="EdgeFlangePanel" Visibility="Collapsed" Margin="0,16,0,0">
                                 <TextBlock Text="Kenar Flanşı" FontWeight="Bold" Margin="0,0,0,8"/>
-                                <TextBlock Text="Flanş Uzunluğu (mm)"/>
+                                <TextBlock x:Name="EdgeFlangeLengthLabel" Text="Flanş Uzunluğu (mm)"/>
                                 <TextBox x:Name="EdgeFlangeLength" TextChanged="EdgeFlangeParameterChanged" Margin="0,4,0,8"/>
-                                <TextBlock Text="Açı (°)"/>
+                                <TextBlock x:Name="EdgeFlangeAngleLabel" Text="Açı (°)"/>
                                 <TextBox x:Name="EdgeFlangeAngle" TextChanged="EdgeFlangeParameterChanged" Margin="0,4,0,8"/>
-                                <TextBlock Text="Sac Kalınlığı (mm)"/>
+                                <TextBlock x:Name="EdgeFlangeThicknessLabel" Text="Sac Kalınlığı (mm)"/>
                                 <TextBox x:Name="EdgeFlangeThickness" TextChanged="EdgeFlangeParameterChanged" Margin="0,4,0,8"/>
-                                <TextBlock Text="Büküm Yarıçapı (mm)"/>
+                                <TextBlock x:Name="EdgeFlangeBendRadiusLabel" Text="Büküm Yarıçapı (mm)"/>
                                 <TextBox x:Name="EdgeFlangeBendRadius" TextChanged="EdgeFlangeParameterChanged" Margin="0,4,0,8"/>
                                 <CheckBox x:Name="EdgeFlangeReverse" Content="Flanş Yönünü Ters Çevir" Checked="EdgeFlangeParameterChanged" Unchecked="EdgeFlangeParameterChanged" Margin="0,0,0,8"/>
                                 <TextBlock Text="Seçili Kenarlar" FontWeight="Bold"/>
