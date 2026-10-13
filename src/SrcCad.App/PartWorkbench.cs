@@ -1366,29 +1366,96 @@ public partial class MainWindow
         if(_inSketch||_extrudeCommandActive||!EnsurePartSession())return;
         var baseNode=CurrentSolidFeature();if(baseNode is null)return;
         if(!TryResolveMirrorPlane(out var plane))plane=_selectedPlane;
-        var node=new FeatureNode(Guid.NewGuid(),NextGraphName("Böl"),new SplitBodyFeatureParameters(baseNode.Id,plane));
-        if(_partSession!.TryCommit(ReplaceGraphNode(node)))
-        {
-            RefreshPartTree(node.Id);Status("Gövde seçili düzlemle iki gerçek B-Rep gövdeye bölündü.");
-        }
-        else Status("Gövde bölme başarısız: "+GraphError());
+        BeginSplitBodyFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Böl"),new SplitBodyFeatureParameters(baseNode.Id,plane)));
     }
+
+    private void BeginSplitBodyFeature(FeatureNode node)
+    {
+        if(node.Parameters is not SplitBodyFeatureParameters split)throw new InvalidOperationException("Unsupported split body.");
+        _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;
+        SplitBodyPlaneText.Text=split.Plane.Name;SplitBodyError.Text="";
+        SplitBodyPanel.Visibility=Visibility.Visible;PropertyTitle.Text=node.Name;
+        PropertyInfo.Text="Gerçek OCCT iki-yarım uzay bölme • her iki katı multibody sonuçta korunur";
+        ManagerTabs.SelectedItem=PropertyManagerTab;_loadingGraphParameters=false;
+        UpdateSplitBodyPreview();RefreshCommandState();
+    }
+
+    private FeatureDocument? SplitBodyCandidate()
+        => _partSession is null||_graphFeatureEdit?.Parameters is not SplitBodyFeatureParameters
+            ?null:ReplaceGraphNode(_graphFeatureEdit);
+
+    private void UpdateSplitBodyPreview()
+    {
+        var candidate=SplitBodyCandidate();
+        if(candidate is null||_partSession is null)return;
+        var preview=_partSession.Preview(candidate);
+        var body=preview.Success?LastBody(candidate,id=>preview.Outputs.GetValueOrDefault(id)):null;
+        if(body is not null&&_viewer.PreviewFeatureBody(body)){SplitBodyError.Text="";return;}
+        _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();
+        SplitBodyError.Text=preview.Report.Nodes.LastOrDefault(n=>n.State==RebuildState.Failed)?.Error??preview.Report.Error??"Bölme düzlemi gövdeyi kesmiyor.";
+    }
+
+    private void SplitBodyOk_Click(object sender,RoutedEventArgs e)
+    {
+        var candidate=SplitBodyCandidate();if(candidate is null||_partSession is null)return;
+        if(!_partSession.TryCommit(candidate)){SplitBodyError.Text=GraphError();return;}
+        var id=_graphFeatureEdit!.Id;EndGraphFeature();RefreshPartTree(id);Status("Gövde iki multibody katıya bölündü.");
+    }
+
+    private FeatureNode[] SketchPatternCandidates()
+        => _partSession?.Document.Features.Where(n=>n.Parameters is SketchFeatureParameters source&&
+            source.Sketch.Points.Values.Count(p=>p.Id!=0)>0).ToArray()??Array.Empty<FeatureNode>();
 
     private void SketchPattern_Click(object sender,RoutedEventArgs e)
     {
         if(_inSketch||_extrudeCommandActive||!EnsurePartSession()||_partSession is null)return;
         var baseNode=CurrentSolidFeature();if(baseNode is null)return;
-        var sketch=SelectedGraphNode is {Kind:FeatureKind.Sketch} selected?selected:
-            _partSession.Document.Features.LastOrDefault(n=>n.Kind==FeatureKind.Sketch);
-        if(sketch?.Parameters is not SketchFeatureParameters source||source.Sketch.Points.Values.Count(p=>p.Id!=0)<1)
-        {Status("Çizim Güdümlü Dizilim için en az bir noktalı sketch seçin.");return;}
-        var node=new FeatureNode(Guid.NewGuid(),NextGraphName("Çizim Dizilimi"),
-            new SketchPatternFeatureParameters(baseNode.Id,sketch.Id));
-        if(_partSession.TryCommit(ReplaceGraphNode(node)))
-        {
-            RefreshPartTree(node.Id);Status("Çizim noktalarına göre gerçek multibody dizilim oluşturuldu.");
-        }
-        else Status("Çizim dizilimi başarısız: "+GraphError());
+        var sketches=SketchPatternCandidates();
+        if(sketches.Length==0){Status("Çizim Güdümlü Dizilim için en az bir noktalı sketch gerekiyor.");return;}
+        var selected=SelectedGraphNode is {Kind:FeatureKind.Sketch} pick&&sketches.Any(n=>n.Id==pick.Id)?pick:sketches[^1];
+        BeginSketchPatternFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Çizim Dizilimi"),
+            new SketchPatternFeatureParameters(baseNode.Id,selected.Id)));
+    }
+
+    private void BeginSketchPatternFeature(FeatureNode node)
+    {
+        if(node.Parameters is not SketchPatternFeatureParameters pattern)throw new InvalidOperationException("Unsupported sketch pattern.");
+        _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;
+        FillSketchCombo(SketchPatternSketch,SketchPatternCandidates(),pattern.SketchId);
+        SketchPatternError.Text="";SketchPatternPanel.Visibility=Visibility.Visible;
+        PropertyTitle.Text=node.Name;PropertyInfo.Text="Sketch noktaları → gerçek 3B multibody kopyalar • history/rebuild destekli";
+        ManagerTabs.SelectedItem=PropertyManagerTab;_loadingGraphParameters=false;
+        UpdateSketchPatternPreview();RefreshCommandState();
+    }
+
+    private FeatureDocument? SketchPatternCandidate()
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not SketchPatternFeatureParameters pattern||
+           ComboFeatureId(SketchPatternSketch) is not Guid sketchId)return null;
+        return ReplaceGraphNode(_graphFeatureEdit with{Parameters=pattern with{SketchId=sketchId}});
+    }
+
+    private void SketchPatternParameterChanged(object sender,SelectionChangedEventArgs e)
+    {
+        if(!_loadingGraphParameters)UpdateSketchPatternPreview();
+    }
+
+    private void UpdateSketchPatternPreview()
+    {
+        var candidate=SketchPatternCandidate();
+        if(candidate is null||_partSession is null){SketchPatternError.Text="Nokta içeren sketch seçin.";return;}
+        var preview=_partSession.Preview(candidate);
+        var body=preview.Success?LastBody(candidate,id=>preview.Outputs.GetValueOrDefault(id)):null;
+        if(body is not null&&_viewer.PreviewFeatureBody(body)){SketchPatternError.Text="";return;}
+        _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();
+        SketchPatternError.Text=preview.Report.Nodes.LastOrDefault(n=>n.State==RebuildState.Failed)?.Error??preview.Report.Error??"Çizim dizilimi önizlemesi oluşturulamadı.";
+    }
+
+    private void SketchPatternOk_Click(object sender,RoutedEventArgs e)
+    {
+        var candidate=SketchPatternCandidate();if(candidate is null||_partSession is null)return;
+        if(!_partSession.TryCommit(candidate)){SketchPatternError.Text=GraphError();return;}
+        var id=_graphFeatureEdit!.Id;EndGraphFeature();RefreshPartTree(id);Status("Çizim güdümlü multibody dizilim onaylandı.");
     }
 
     private void Dome_Click(object sender,RoutedEventArgs e)
@@ -2720,6 +2787,8 @@ public partial class MainWindow
         if(node.Parameters is EndCapFeatureParameters){BeginEndCapFeature(node);return;}
         if(node.Parameters is BodyBooleanFeatureParameters){BeginBodyBooleanFeature(node);return;}
         if(node.Parameters is MoveCopyBodyFeatureParameters){BeginMoveCopyBodyFeature(node);return;}
+        if(node.Parameters is SplitBodyFeatureParameters){BeginSplitBodyFeature(node);return;}
+        if(node.Parameters is SketchPatternFeatureParameters){BeginSketchPatternFeature(node);return;}
         if(node.Parameters is DomeFeatureParameters){BeginDomeFeature(node);return;}
         if(node.Parameters is HoleWizardFeatureParameters){BeginHoleWizardFeature(node);return;}
         if(node.Parameters is ShellFeatureParameters){BeginShellFeature(node);return;}
@@ -2787,7 +2856,7 @@ public partial class MainWindow
         ShellFeaturePanel.Visibility=Visibility.Collapsed;DraftFeaturePanel.Visibility=Visibility.Collapsed;RibFeaturePanel.Visibility=Visibility.Collapsed;ReferenceGeometryPanel.Visibility=Visibility.Collapsed;
         MirrorFeaturePanel.Visibility=Visibility.Collapsed;PatternFeaturePanel.Visibility=Visibility.Collapsed;SheetMetalBasePanel.Visibility=Visibility.Collapsed;SheetMetalConvertPanel.Visibility=Visibility.Collapsed;
         EdgeFlangePanel.Visibility=Visibility.Collapsed;EndCapPanel.Visibility=Visibility.Collapsed;BodyBooleanPanel.Visibility=Visibility.Collapsed;MoveCopyBodyPanel.Visibility=Visibility.Collapsed;
-        DomePanel.Visibility=Visibility.Collapsed;HoleWizardPanel.Visibility=Visibility.Collapsed;
+        DomePanel.Visibility=Visibility.Collapsed;HoleWizardPanel.Visibility=Visibility.Collapsed;SplitBodyPanel.Visibility=Visibility.Collapsed;SketchPatternPanel.Visibility=Visibility.Collapsed;
         _viewer.ClearSelection();_viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Face);
         ManagerTabs.SelectedItem=FeatureManagerTab;RefreshCommandState();
     }
