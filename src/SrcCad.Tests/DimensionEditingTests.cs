@@ -44,10 +44,28 @@ internal static class DimensionEditingTests
         {
             var s=new SketchModel(StandardPlanes.Front);SketchDimension d;
             var p=s.CreatePointExact(new(30,40));
-            if(type==SketchDimensionType.CircleDiameter)
-            {var c=s.AddCircle(p,10);d=s.AddDimension(type,new(50,50),entityA:c.Id);}
+            if(type is SketchDimensionType.CircleDiameter or SketchDimensionType.CircleRadius)
+            {
+                var c=s.AddCircle(p,10);
+                d=s.AddDimension(type,new(50,50),entityA:c.Id);
+            }
+            else if(type==SketchDimensionType.ArcRadius)
+            {
+                var start=s.CreatePointExact(new(40,40));
+                var end=s.CreatePointExact(new(30,50));
+                var arc=s.AddArc(p,start,end);
+                d=s.AddDimension(type,new(50,50),entityA:arc.Id);
+            }
+            else if(type is SketchDimensionType.EllipseAxis1Diameter or SketchDimensionType.EllipseAxis2Diameter)
+            {
+                var ellipse=s.AddEllipse(p,12,6,Math.PI/8);
+                d=s.AddDimension(type,new(50,50),entityA:ellipse.Id);
+            }
             else if(type==SketchDimensionType.LineLength)
-            {var l=s.AddLine(0,p);d=s.AddDimension(type,new(50,50),entityA:l.Id);}
+            {
+                var l=s.AddLine(0,p);
+                d=s.AddDimension(type,new(50,50),entityA:l.Id);
+            }
             else if(type is SketchDimensionType.PointLineDistance or SketchDimensionType.ParallelLineDistance)
             {
                 var a=s.CreatePointExact(new(-100,0));var b=s.CreatePointExact(new(100,0));s.SetPointFixed(a,true);s.SetPointFixed(b,true);var l=s.AddLine(a,b);
@@ -55,9 +73,13 @@ internal static class DimensionEditingTests
                 if(type==SketchDimensionType.ParallelLineDistance)target=s.ReferenceForEntity(s.AddLine(p,s.CreatePointExact(new(80,40))).Id);
                 d=s.AddInferredDimension(s.InferDimension(new[]{target,s.ReferenceForEntity(l.Id)},new(50,50))!);
             }
-            else d=s.AddDimension(type,new(50,50),pointA:0,pointB:p);
+            else
+            {
+                d=s.AddDimension(type,new(50,50),pointA:0,pointB:p);
+            }
             var value=d.Value*1.2;
-            Check(new DimensionEditSession(s,d.Id).TryCommit(value.ToString(CultureInfo.InvariantCulture),out _)&&Near(s.Measure(s.Dimension(d.Id)!),value),"shared editor audit: "+type);
+            Check(value>1e-9&&new DimensionEditSession(s,d.Id).TryCommit(value.ToString(CultureInfo.InvariantCulture),out _)&&
+                  Near(s.Measure(s.Dimension(d.Id)!),value),"shared editor audit: "+type);
         }
         var saved=CultureInfo.CurrentCulture;
         try{CultureInfo.CurrentCulture=CultureInfo.GetCultureInfo("tr-TR");Check(DimensionNumbers.TryParse("45,5",SketchDimensionType.Angle,out var comma,out _)&&DimensionNumbers.TryParse("45.5",SketchDimensionType.Angle,out var dot,out _)&&comma==dot,"Turkish decimal policy");}
