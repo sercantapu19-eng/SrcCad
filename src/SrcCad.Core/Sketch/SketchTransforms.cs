@@ -120,6 +120,72 @@ public sealed partial class SketchModel
         };
     }
 
+    public int ExtendLinesToNearest(IEnumerable<int> entityIds)
+    {
+        var targets=entityIds.Distinct().Select(Entity).OfType<SketchLine>().Where(l=>!l.Construction).ToArray();
+        if(targets.Length==0)throw new InvalidOperationException("Uzat için en az bir normal çizgi seçin.");
+        var changed=0;
+
+        static bool OnSegment(Point2d p,Point2d a,Point2d b,double eps=1e-7)
+            => p.X>=Math.Min(a.X,b.X)-eps&&p.X<=Math.Max(a.X,b.X)+eps&&
+               p.Y>=Math.Min(a.Y,b.Y)-eps&&p.Y<=Math.Max(a.Y,b.Y)+eps;
+
+        foreach(var line in targets)
+        {
+            var a=Point(line.StartPointId).Position;var b=Point(line.EndPointId).Position;
+            var dx=b.X-a.X;var dy=b.Y-a.Y;var len2=dx*dx+dy*dy;
+            if(len2<=1e-18)continue;
+            var parameters=new List<double>();
+
+            foreach(var other in Entities.Where(e=>e.Id!=line.Id&&!e.Construction))
+            {
+                switch(other)
+                {
+                    case SketchLine l:
+                    {
+                        var c=Point(l.StartPointId).Position;var d=Point(l.EndPointId).Position;
+                        var ex=d.X-c.X;var ey=d.Y-c.Y;
+                        var det=dx*ey-dy*ex;
+                        if(Math.Abs(det)<=1e-12)break;
+                        var rx=c.X-a.X;var ry=c.Y-a.Y;
+                        var t=(rx*ey-ry*ex)/det;
+                        var p=new Point2d(a.X+t*dx,a.Y+t*dy);
+                        if(OnSegment(p,c,d))parameters.Add(t);
+                        break;
+                    }
+                    case SketchCircle circle:
+                    {
+                        var c=Point(circle.CenterPointId).Position;
+                        var fx=a.X-c.X;var fy=a.Y-c.Y;
+                        var qa=len2;var qb=2*(fx*dx+fy*dy);var qc=fx*fx+fy*fy-circle.Radius*circle.Radius;
+                        var disc=qb*qb-4*qa*qc;
+                        if(disc<-1e-12)break;
+                        disc=Math.Max(0,disc);
+                        var root=Math.Sqrt(disc);
+                        parameters.Add((-qb-root)/(2*qa));
+                        parameters.Add((-qb+root)/(2*qa));
+                        break;
+                    }
+                }
+            }
+
+            var before=parameters.Where(t=>t<-1e-8).OrderByDescending(t=>t).FirstOrDefault(double.NaN);
+            var after=parameters.Where(t=>t>1+1e-8).OrderBy(t=>t).FirstOrDefault(double.NaN);
+            var moved=false;
+            if(double.IsFinite(before)&&!Point(line.StartPointId).Fixed)
+            {
+                SetPointPosition(line.StartPointId,new Point2d(a.X+before*dx,a.Y+before*dy));moved=true;
+            }
+            if(double.IsFinite(after)&&!Point(line.EndPointId).Fixed)
+            {
+                SetPointPosition(line.EndPointId,new Point2d(a.X+after*dx,a.Y+after*dy));moved=true;
+            }
+            if(moved)changed++;
+        }
+        if(changed==0)throw new InvalidOperationException("Seçili çizgiler için ulaşılabilir bir uzatma sınırı bulunamadı.");
+        return changed;
+    }
+
     public IReadOnlyList<int> CircularPatternEntities(IEnumerable<int> entityIds,Point2d center,double angleDegrees,int count)
     {
         if(!double.IsFinite(angleDegrees)||angleDegrees<=1e-9||angleDegrees>360||count<2||count>500)
