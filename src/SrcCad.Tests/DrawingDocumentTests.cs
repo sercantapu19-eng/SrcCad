@@ -74,6 +74,17 @@ internal static class DrawingDocumentTests
         Check(multiSheet.Sheets.Length==2&&multiSheet.Views.Count(v=>v.SheetId==secondSheet.Id)==1&&
               multiSheet.Annotations.Count(a=>a.SheetId==secondSheet.Id)==1,
             "multi-sheet drawing roundtrip preserves per-sheet views and annotations");
+        var removedSecondSheet=multiSheet.RemoveSheet(secondSheet.Id);
+        Check(removedSecondSheet.Sheets.Length==1&&
+              removedSecondSheet.Views.All(v=>v.SheetId!=secondSheet.Id)&&
+              removedSecondSheet.Annotations.All(a=>a.SheetId!=secondSheet.Id),
+            "sheet removal cascades its views and annotations atomically");
+        try
+        {
+            removedSecondSheet.RemoveSheet(sheet.Id);
+            throw new InvalidOperationException("drawing allowed deleting the last sheet");
+        }
+        catch(InvalidOperationException){_checks++;}
 
         try
         {
