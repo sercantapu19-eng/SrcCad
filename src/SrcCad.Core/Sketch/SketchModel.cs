@@ -1323,7 +1323,16 @@ public sealed partial class SketchModel
         outerLoop = new List<Point2d>();
         polygonHoles = new List<List<Point2d>>();
         circularHoles = new List<SketchCircle>();
-        if (!TryGetClosedLineLoops(out var loops)) return false;
+
+        List<List<Point2d>> loops;
+        if(!TryGetClosedLineLoops(out loops))
+        {
+            var ellipses=Ellipses(false).ToArray();
+            if(ellipses.Length!=1||Lines(false).Any()||Arcs(false).Any())return false;
+            loops=new List<List<Point2d>>{SampleEllipse(ellipses[0],72).ToList()};
+        }
+        if(Ellipses(false).Any()&&!(loops.Count==1&&Lines(false).Count()==0&&Arcs(false).Count()==0))
+            return false;
 
         outerLoop = loops.OrderByDescending(loop => Math.Abs(SignedArea(loop))).First();
         var boundary = outerLoop;
