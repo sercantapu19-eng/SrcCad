@@ -681,11 +681,10 @@ namespace SrcCad::Kernel::Occt
     void OcctViewportBridge::ZoomWheelAt(int x,int y,int delta)
     {
         if(!IsInitialized()||delta==0)return;
+        const double factor=delta>0?1.12:(1.0/1.12);
+        const double current=myState->View->Scale();
         try
         {
-            const double factor=delta>0?1.12:(1.0/1.12);
-            const double current=myState->View->Scale();
-
             double beforeX=0,beforeY=0,beforeZ=0;
             const bool useCursor=x>=0&&y>=0;
             if(useCursor)myState->View->Convert(x,y,beforeX,beforeY,beforeZ);
@@ -708,9 +707,8 @@ namespace SrcCad::Kernel::Occt
         }
         catch(const Standard_Failure&)
         {
-            // Preserve a usable centered zoom if a driver cannot convert the cursor point.
-            const double factor=delta>0?1.12:(1.0/1.12);
-            myState->View->SetScale(std::max(1e-8,myState->View->Scale()*factor));
+            // Preserve a usable single-step centered zoom if cursor conversion is unavailable.
+            myState->View->SetScale(std::max(1e-8,current*factor));
             myState->View->Redraw();
         }
     }
