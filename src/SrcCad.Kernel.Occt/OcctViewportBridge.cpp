@@ -1790,9 +1790,11 @@ namespace SrcCad::Kernel::Occt
             Bnd_Box bounds;BRepBndLib::Add(result,bounds);
             double xmin,ymin,zmin,xmax,ymax,zmax;bounds.Get(xmin,ymin,zmin,xmax,ymax,zmax);
             const double extent=std::max(10.0,gp_Pnt(xmin,ymin,zmin).Distance(gp_Pnt(xmax,ymax,zmax))*2.0);
-            auto edges=resolveEdgeReferences(result,edgeReferences);
-            for(const auto& edge:edges)
+            for each(String^ reference in edgeReferences)
             {
+                auto resolved=resolveEdgeReferences(result,gcnew array<String^>{reference});
+                if(resolved.empty())continue;
+                TopoDS_Edge edge=resolved.front();
                 TopoDS_Vertex va,vb;TopExp::Vertices(edge,va,vb);
                 if(va.IsNull()||vb.IsNull())continue;
                 gp_Pnt a=BRep_Tool::Pnt(va),b=BRep_Tool::Pnt(vb);
@@ -1831,10 +1833,12 @@ namespace SrcCad::Kernel::Occt
             Bnd_Box bounds;BRepBndLib::Add(result,bounds);
             double xmin,ymin,zmin,xmax,ymax,zmax;bounds.Get(xmin,ymin,zmin,xmax,ymax,zmax);
             const double extent=std::max(10.0,gp_Pnt(xmin,ymin,zmin).Distance(gp_Pnt(xmax,ymax,zmax))*2.0);
-            auto edges=resolveEdgeReferences(result,edgeReferences);
             std::vector<gp_Pnt> centers;
-            for(const auto& edge:edges)
+            for each(String^ reference in edgeReferences)
             {
+                auto resolved=resolveEdgeReferences(result,gcnew array<String^>{reference});
+                if(resolved.empty())continue;
+                TopoDS_Edge edge=resolved.front();
                 TopoDS_Vertex va,vb;TopExp::Vertices(edge,va,vb);
                 if(va.IsNull()||vb.IsNull())continue;
                 TopoDS_Face support;gp_Dir n;gp_Pnt fc;
