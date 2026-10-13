@@ -318,6 +318,17 @@ public partial class MainWindow : Window
         return false;
     }
 
+    private bool FeatureSelectionAccumulatesWithoutCtrl()
+        => _graphFeatureEdit?.Parameters is
+            FilletFeatureParameters or ChamferFeatureParameters or WeldBeadFeatureParameters or
+            SheetMetalHemFeatureParameters or SheetMetalRipFeatureParameters or SheetMetalCornerReliefFeatureParameters or
+            SheetMetalEdgeFlangeFeatureParameters or SheetMetalMiterFlangeFeatureParameters or SheetMetalJogFeatureParameters;
+
+    private bool MouseWheelEditsDepth()
+        => _extrudeCommandActive &&
+           (_graphFeatureEdit is null ||
+            _graphFeatureEdit.Parameters is ExtrudeFeatureParameters or CutFeatureParameters or SheetMetalCutFeatureParameters);
+
     private void ViewportPanel_MouseDown(object? sender, WinForms.MouseEventArgs e)
     {
         _viewportPanel.Focus();
@@ -374,7 +385,8 @@ public partial class MainWindow : Window
         else
         {
             _viewer.MoveTo(e.X, e.Y);
-            var toggle = (WinForms.Control.ModifierKeys & WinForms.Keys.Control) == WinForms.Keys.Control;
+            var ctrl = (WinForms.Control.ModifierKeys & WinForms.Keys.Control) == WinForms.Keys.Control;
+            var toggle = ctrl || FeatureSelectionAccumulatesWithoutCtrl();
             var selected = _viewer.SelectDetected(toggle);
             UpdateActiveEdgeFeatureSelection();
             UpdateActiveHoleSelection();
@@ -539,7 +551,7 @@ public partial class MainWindow : Window
 
     private void Window_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
-        if (!_extrudeCommandActive) return;
+        if (!MouseWheelEditsDepth()) return;
         AdjustExtrusionDepth(e.Delta);
         e.Handled = true;
     }
@@ -566,11 +578,14 @@ public partial class MainWindow : Window
 
     private void ViewportPanel_MouseWheel(object? sender, WinForms.MouseEventArgs e)
     {
-        if (_extrudeCommandActive)
+        if (MouseWheelEditsDepth())
         {
             AdjustExtrusionDepth(e.Delta);
             return;
         }
+
+        // Every other PropertyManager / measurement / sheet-metal command keeps
+        // normal viewport navigation active, like SOLIDWORKS.
         _viewer.ZoomWheelAt(e.X,e.Y,e.Delta);
     }
 
