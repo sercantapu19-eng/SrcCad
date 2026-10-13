@@ -45,6 +45,7 @@ namespace SrcCad::Kernel::Occt
             double height,double offset,double thickness,bool reverse);
         static System::String^ Rip(System::String^ baseBody,array<System::String^>^ edgeReferences,double gap);
         static System::String^ CornerRelief(System::String^ baseBody,array<System::String^>^ edgeReferences,double radius);
+        static System::String^ Bend(System::String^ baseBody,array<double>^ bendFrame,double angleDegrees,bool reverse);
         static System::String^ TrimToPlane(System::String^ baseBody,array<double>^ planeFrame,bool keepPositive);
         static System::String^ EndCap(System::String^ baseBody,System::String^ faceReference,double thickness,bool reverse);
         static System::String^ WeldBead(System::String^ baseBody,array<System::String^>^ edgeReferences,double radius);
