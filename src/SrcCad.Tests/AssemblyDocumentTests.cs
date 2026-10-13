@@ -153,6 +153,25 @@ internal static class AssemblyDocumentTests
         }
         catch(InvalidDataException){_checks++;}
 
+        var planarA=new AssemblyReference(a.Id,TopologyKind.Face,validPlanarSemantic);
+        var planarB=new AssemblyReference(b.Id,TopologyKind.Face,"F;90;0;0;5;0;1;0");
+        var cylinderB=new AssemblyReference(b.Id,TopologyKind.Face,validCylinderSemantic);
+        Check(AssemblyReferenceCatalog.IsMateCompatible(new AssemblyMate(Guid.NewGuid(),"TeğetUyumlu",MateType.Tangent,planarA,cylinderB)),
+            "plane-cylinder tangent compatibility rejected");
+        Check(!AssemblyReferenceCatalog.IsMateCompatible(new AssemblyMate(Guid.NewGuid(),"TeğetHatalı",MateType.Tangent,planarA,planarB)),
+            "plane-plane tangent compatibility accepted");
+        Check(!AssemblyReferenceCatalog.IsMateCompatible(new AssemblyMate(Guid.NewGuid(),"AçıHatalı",MateType.Angle,
+            new AssemblyReference(a.Id,TopologyKind.Vertex,AssemblyReferenceCatalog.Origin),planarB,30)),
+            "angle mate accepted origin without direction");
+
+        try
+        {
+            var invalidTangent=new AssemblyMate(Guid.NewGuid(),"GeçersizTeğet",MateType.Tangent,planarA,planarB);
+            AssemblyDocumentFile.Serialize(new AssemblyDocument(Guid.NewGuid(),new[]{a,b},new[]{invalidTangent}));
+            throw new InvalidOperationException("assembly accepted incompatible tangent mate");
+        }
+        catch(InvalidDataException){_checks++;}
+
         Console.WriteLine($"Assembly Document Tests: {_checks} PASS");
     }
 }
