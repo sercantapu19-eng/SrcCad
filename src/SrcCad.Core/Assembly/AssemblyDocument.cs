@@ -71,6 +71,40 @@ public static class AssemblyReferenceCatalog
         };
         return direction.Length>1e-12;
     }
+
+    public static bool IsStandard(AssemblyReference reference)
+        => Standard.Any(x=>x.Kind==reference.Kind&&x.Semantic==reference.SemanticName);
+
+    public static bool IsWellFormed(AssemblyReference reference)
+    {
+        if(reference.ComponentId==Guid.Empty||string.IsNullOrWhiteSpace(reference.SemanticName)||!Enum.IsDefined(reference.Kind))
+            return false;
+        if(IsStandard(reference))return true;
+
+        if(reference.Kind!=TopologyKind.Face)return false;
+        var cylindrical=reference.SemanticName.StartsWith("C;",StringComparison.Ordinal);
+        if(!cylindrical&&!reference.SemanticName.StartsWith("F;",StringComparison.Ordinal))return false;
+
+        var fields=reference.SemanticName.Split(';');
+        var expected=cylindrical?9:8;
+        if(fields.Length!=expected)return false;
+        for(var i=1;i<fields.Length;i++)
+            if(!double.TryParse(fields[i],System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture,out var value)||!double.IsFinite(value))
+                return false;
+
+        if(!double.TryParse(fields[1],System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture,out var area)||area<=1e-12)
+            return false;
+        var nx=double.Parse(fields[5],System.Globalization.CultureInfo.InvariantCulture);
+        var ny=double.Parse(fields[6],System.Globalization.CultureInfo.InvariantCulture);
+        var nz=double.Parse(fields[7],System.Globalization.CultureInfo.InvariantCulture);
+        if(new Vector3d(nx,ny,nz).Length<=1e-12)return false;
+        if(cylindrical&&(!double.TryParse(fields[8],System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture,out var radius)||radius<=1e-12))
+            return false;
+        return true;
+    }
 }
 
 public static class AssemblyMateSolver
@@ -404,8 +438,7 @@ public static class AssemblyDocumentFile
             if(mate is null||mate.Id==Guid.Empty||string.IsNullOrWhiteSpace(mate.Name)||!Enum.IsDefined(mate.Type)||
                !ids.Contains(mate.A.ComponentId)||!ids.Contains(mate.B.ComponentId)||
                mate.A.ComponentId==mate.B.ComponentId||
-               string.IsNullOrWhiteSpace(mate.A.SemanticName)||string.IsNullOrWhiteSpace(mate.B.SemanticName)||
-               !Enum.IsDefined(mate.A.Kind)||!Enum.IsDefined(mate.B.Kind)||
+               !AssemblyReferenceCatalog.IsWellFormed(mate.A)||!AssemblyReferenceCatalog.IsWellFormed(mate.B)||
                !double.IsFinite(mate.Value))
                 throw new InvalidDataException("Invalid assembly mate.");
         }
