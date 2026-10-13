@@ -40,6 +40,7 @@ namespace SrcCad::Kernel::Occt
         static System::String^ EdgeFlange(System::String^ baseBody, array<System::String^>^ edgeReferences,
             double length, double angleDegrees, double thickness, double bendRadius, bool reverse);
         static System::String^ EndCap(System::String^ baseBody,System::String^ faceReference,double thickness,bool reverse);
+        static System::String^ WeldBead(System::String^ baseBody,array<System::String^>^ edgeReferences,double radius);
         static System::String^ Transform(System::String^ body, array<double>^ transform6);
         static double CommonVolume(System::String^ bodyA, array<double>^ transformA,
             System::String^ bodyB, array<double>^ transformB);
