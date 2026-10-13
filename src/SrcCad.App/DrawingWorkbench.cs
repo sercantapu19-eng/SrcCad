@@ -385,6 +385,25 @@ public partial class MainWindow
             var b=new Point2d(center.X+ux*radius,center.Y+uy*radius);
             Line(a,b);Line(b,note.Position);
         }
+        else if(note.Kind==DrawingAnnotationKind.RadiusDimension&&ResolveRadiusDimension(view,note.Data) is ProjectedCircle radiusCircle)
+        {
+            var center=DrawingToSheet(view,radiusCircle.X,radiusCircle.Y);
+            var radius=radiusCircle.Radius*view.Scale;
+            var dx=note.Position.X-center.X;var dy=note.Position.Y-center.Y;
+            var len=Math.Sqrt(dx*dx+dy*dy);var ux=len>1e-9?dx/len:1.0;var uy=len>1e-9?dy/len:0.0;
+            var rim=new Point2d(center.X+ux*radius,center.Y+uy*radius);
+            Line(center,rim);Line(rim,note.Position);
+        }
+        else if(note.Kind==DrawingAnnotationKind.AngularDimension&&ResolveAngularDimension(view,note.Data) is { } angular)
+        {
+            var a1=DrawingToSheet(view,angular.A.X1,angular.A.Y1);
+            var a2=DrawingToSheet(view,angular.A.X2,angular.A.Y2);
+            var b1=DrawingToSheet(view,angular.B.X1,angular.B.Y1);
+            var b2=DrawingToSheet(view,angular.B.X2,angular.B.Y2);
+            var am=new Point2d((a1.X+a2.X)*0.5,(a1.Y+a2.Y)*0.5);
+            var bm=new Point2d((b1.X+b2.X)*0.5,(b1.Y+b2.Y)*0.5);
+            Line(am,note.Position);Line(bm,note.Position);
+        }
     }
 
     private string ResolveDrawingAnnotationText(DrawingAnnotation note)
@@ -400,6 +419,10 @@ public partial class MainWindow
                     ResolveLinearDimension(view,note.Data) is ProjectedSegment segment?$"{segment.Length:0.###} mm":"?",
                 DrawingAnnotationKind.DiameterDimension when view is not null=>
                     ResolveDiameterDimension(view,note.Data) is ProjectedCircle circle?$"Ø{circle.Radius*2:0.###}":"Ø?",
+                DrawingAnnotationKind.RadiusDimension when view is not null=>
+                    ResolveRadiusDimension(view,note.Data) is ProjectedCircle radiusCircle?$"R{radiusCircle.Radius:0.###}":"R?",
+                DrawingAnnotationKind.AngularDimension when view is not null=>
+                    ResolveAngularDimension(view,note.Data) is { } angular?$"{AngularDegrees(angular.A,angular.B):0.###}°":"?°",
                 DrawingAnnotationKind.HoleCallout when view is not null=>ResolveHoleCallout(view,note.Data),
                 DrawingAnnotationKind.BillOfMaterials when view is not null=>ResolveBom(view),
                 DrawingAnnotationKind.Balloon=>note.Data is string number&&number.Length>0?"BALON "+number:note.Text,
@@ -432,6 +455,13 @@ public partial class MainWindow
 
     private static string EncodeDiameterDimension(ProjectedCircle circle)
         =>$"D;{DrawingNumber(circle.X)};{DrawingNumber(circle.Y)};{DrawingNumber(circle.Radius)}";
+
+    private static string EncodeRadiusDimension(ProjectedCircle circle)
+        =>$"R;{DrawingNumber(circle.X)};{DrawingNumber(circle.Y)};{DrawingNumber(circle.Radius)}";
+
+    private static string EncodeAngularDimension(ProjectedSegment a,ProjectedSegment b)
+        =>$"A;{DrawingNumber(a.X1)};{DrawingNumber(a.Y1)};{DrawingNumber(a.X2)};{DrawingNumber(a.Y2)};"+
+          $"{DrawingNumber(b.X1)};{DrawingNumber(b.Y1)};{DrawingNumber(b.X2)};{DrawingNumber(b.Y2)}";
 
     private static bool TryDrawingData(string? data,char type,int count,out double[] values)
     {
@@ -488,12 +518,56 @@ public partial class MainWindow
     private ProjectedCircle? ResolveDiameterDimension(DrawingView view,string? encoded)
     {
         if(!TryDrawingData(encoded,'D',3,out var wanted))return null;
+        return ResolveCircleDimension(view,wanted);
+    }
+
+    private ProjectedCircle? ResolveRadiusDimension(DrawingView view,string? encoded)
+    {
+        if(!TryDrawingData(encoded,'R',3,out var wanted))return null;
+        return ResolveCircleDimension(view,wanted);
+    }
+
+    private ProjectedCircle? ResolveCircleDimension(DrawingView view,double[] wanted)
+    {
         var target=new ProjectedCircle(wanted[0],wanted[1],wanted[2]);
         return DrawingProjectedCircles(view)
             .OrderBy(circle=>
                 Point2d.Distance(new Point2d(circle.X,circle.Y),new Point2d(target.X,target.Y))/Math.Max(1.0,target.Radius)+
                 Math.Abs(circle.Radius-target.Radius)/Math.Max(1e-9,target.Radius))
             .FirstOrDefault();
+    }
+
+    private static double SegmentMatchScore(ProjectedSegment segment,ProjectedSegment target)
+    {
+        var targetLength=Math.Max(target.Length,1e-9);
+        var lengthScore=Math.Abs(segment.Length-target.Length)/targetLength;
+        var midScore=Point2d.Distance(segment.Mid,target.Mid)/Math.Max(1.0,targetLength);
+        var ax=(target.X2-target.X1)/targetLength;var ay=(target.Y2-target.Y1)/targetLength;
+        var len=Math.Max(segment.Length,1e-9);var bx=(segment.X2-segment.X1)/len;var by=(segment.Y2-segment.Y1)/len;
+        return lengthScore+midScore+(1-Math.Abs(ax*bx+ay*by))*2;
+    }
+
+    private (ProjectedSegment A,ProjectedSegment B)? ResolveAngularDimension(DrawingView view,string? encoded)
+    {
+        if(!TryDrawingData(encoded,'A',8,out var wanted))return null;
+        var aTarget=new ProjectedSegment(wanted[0],wanted[1],wanted[2],wanted[3]);
+        var bTarget=new ProjectedSegment(wanted[4],wanted[5],wanted[6],wanted[7]);
+        var segments=DrawingProjectedSegments(view);
+        if(segments.Length<2)return null;
+        var a=segments.OrderBy(segment=>SegmentMatchScore(segment,aTarget)).First();
+        var b=segments.Where(segment=>!ReferenceEquals(segment,a))
+            .OrderBy(segment=>SegmentMatchScore(segment,bTarget)).FirstOrDefault();
+        return b is null?null:(a,b);
+    }
+
+    private static double AngularDegrees(ProjectedSegment a,ProjectedSegment b)
+    {
+        var adx=a.X2-a.X1;var ady=a.Y2-a.Y1;var bdx=b.X2-b.X1;var bdy=b.Y2-b.Y1;
+        var al=Math.Sqrt(adx*adx+ady*ady);var bl=Math.Sqrt(bdx*bdx+bdy*bdy);
+        if(al<=1e-9||bl<=1e-9)return 0;
+        var dot=Math.Clamp((adx*bdx+ady*bdy)/(al*bl),-1.0,1.0);
+        var angle=Math.Acos(dot)*180.0/Math.PI;
+        return angle>180?360-angle:angle;
     }
 
     private Point2d DrawingToSheet(DrawingView view,double x,double y)
