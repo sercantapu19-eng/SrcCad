@@ -7,7 +7,7 @@ using SrcCad.Core.Persistence;
 
 namespace SrcCad.Core.Features;
 
-public enum FeatureKind { Sketch, Extrude, ExtrudedCut, Fillet, Chamfer, Hole, Revolve, RevolvedCut, Sweep, SweptCut, Loft, LoftedCut, Shell, Draft, Rib, Mirror, LinearPattern, CircularPattern, ReferencePlane, ReferenceAxis, ReferencePoint, SheetMetalBase, SheetMetalCut, SheetMetalEdgeFlange, SheetMetalMiterFlange, SheetMetalConvert, SheetMetalHem, SheetMetalJog, SheetMetalRip, SheetMetalCornerRelief, StructuralMember, EndCap, WeldBead }
+public enum FeatureKind { Sketch, SpatialSketch, Extrude, ExtrudedCut, Fillet, Chamfer, Hole, Revolve, RevolvedCut, Sweep, SweptCut, Loft, LoftedCut, Shell, Draft, Rib, Mirror, LinearPattern, CircularPattern, ReferencePlane, ReferenceAxis, ReferencePoint, SheetMetalBase, SheetMetalCut, SheetMetalEdgeFlange, SheetMetalMiterFlange, SheetMetalConvert, SheetMetalHem, SheetMetalJog, SheetMetalRip, SheetMetalCornerRelief, StructuralMember, EndCap, WeldBead }
 public enum RebuildState { Clean, Dirty, Suppressed, Blocked, Failed }
 public enum ExtrusionTermination { Blind, ThroughAll }
 public enum TopologyKind { Body, Face, Edge, Vertex }
@@ -16,6 +16,7 @@ public sealed record FeatureReference(Guid ProducerId, TopologyKind Kind, string
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
 [JsonDerivedType(typeof(SketchFeatureParameters), "sketch")]
+[JsonDerivedType(typeof(SpatialSketchFeatureParameters), "spatial-sketch")]
 [JsonDerivedType(typeof(ExtrudeFeatureParameters), "extrude")]
 [JsonDerivedType(typeof(CutFeatureParameters), "extruded-cut")]
 [JsonDerivedType(typeof(FilletFeatureParameters), "fillet")]
@@ -50,6 +51,7 @@ public sealed record FeatureReference(Guid ProducerId, TopologyKind Kind, string
 [JsonDerivedType(typeof(WeldBeadFeatureParameters), "weld-bead")]
 public abstract record FeatureParameters;
 public sealed record SketchFeatureParameters(PlaneFrame Plane, SketchSnapshot Sketch) : FeatureParameters;
+public sealed record SpatialSketchFeatureParameters(Vector3d[] Points,bool Closed=false) : FeatureParameters;
 public sealed record ExtrudeFeatureParameters(Guid SketchId, double Depth) : FeatureParameters;
 public sealed record CutFeatureParameters(Guid BaseFeatureId, Guid SketchId, double Depth,
     ExtrusionTermination Termination = ExtrusionTermination.Blind, bool Reverse = false) : FeatureParameters;
@@ -91,7 +93,8 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
     bool Suppressed = false, FeatureReference[]? References = null)
 {
     [JsonIgnore] public FeatureKind Kind => Parameters switch
-    { SketchFeatureParameters => FeatureKind.Sketch, ExtrudeFeatureParameters => FeatureKind.Extrude,
+    { SketchFeatureParameters => FeatureKind.Sketch, SpatialSketchFeatureParameters => FeatureKind.SpatialSketch,
+      ExtrudeFeatureParameters => FeatureKind.Extrude,
       CutFeatureParameters => FeatureKind.ExtrudedCut, FilletFeatureParameters => FeatureKind.Fillet,
       ChamferFeatureParameters => FeatureKind.Chamfer, HoleFeatureParameters => FeatureKind.Hole,
       RevolveFeatureParameters => FeatureKind.Revolve, RevolveCutFeatureParameters => FeatureKind.RevolvedCut,
@@ -114,6 +117,7 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
       _ => throw new InvalidDataException("Unsupported feature") };
     [JsonIgnore] public Guid[] Dependencies => (Parameters switch
     {
+        SpatialSketchFeatureParameters => Array.Empty<Guid>(),
         ExtrudeFeatureParameters e => new[] { e.SketchId },
         CutFeatureParameters c => new[] { c.BaseFeatureId, c.SketchId },
         FilletFeatureParameters f => new[] { f.BaseFeatureId },
@@ -235,6 +239,12 @@ public static class FeatureDocumentFile
             switch(node.Parameters)
             {
                 case SketchFeatureParameters s: _=PartFile.Serialize(new(s.Plane,s.Sketch,null));break;
+                case SpatialSketchFeatureParameters s:
+                    if(s.Points is null||s.Points.Length<2||(s.Closed&&s.Points.Length<3)||
+                       s.Points.Any(p=>!double.IsFinite(p.X)||!double.IsFinite(p.Y)||!double.IsFinite(p.Z))||
+                       s.Points.Zip(s.Points.Skip(1),(a,b)=>(b-a).Length).Any(length=>length<=1e-9))
+                        throw new InvalidDataException("Invalid 3D sketch.");
+                    break;
                 case ExtrudeFeatureParameters e:
                     if(!double.IsFinite(e.Depth)||Math.Abs(e.Depth)<1e-9||document.Node(e.SketchId).Kind!=FeatureKind.Sketch)throw new InvalidDataException("Invalid extrusion.");break;
                 case CutFeatureParameters c:
@@ -272,13 +282,13 @@ public static class FeatureDocumentFile
                         throw new InvalidDataException("Invalid revolved cut.");
                     break;
                 case SweepFeatureParameters s:
-                    if(document.Node(s.ProfileSketchId).Kind!=FeatureKind.Sketch||document.Node(s.PathSketchId).Kind!=FeatureKind.Sketch||
+                    if(document.Node(s.ProfileSketchId).Kind!=FeatureKind.Sketch||document.Node(s.PathSketchId).Kind is not (FeatureKind.Sketch or FeatureKind.SpatialSketch)||
                        s.ProfileSketchId==s.PathSketchId||(s.BaseFeatureId is Guid sb&&document.Node(sb).Kind==FeatureKind.Sketch))
                         throw new InvalidDataException("Invalid sweep.");
                     break;
                 case SweepCutFeatureParameters s:
                     if(document.Node(s.BaseFeatureId).Kind==FeatureKind.Sketch||document.Node(s.ProfileSketchId).Kind!=FeatureKind.Sketch||
-                       document.Node(s.PathSketchId).Kind!=FeatureKind.Sketch||s.ProfileSketchId==s.PathSketchId)
+                       document.Node(s.PathSketchId).Kind is not (FeatureKind.Sketch or FeatureKind.SpatialSketch)||s.ProfileSketchId==s.PathSketchId)
                         throw new InvalidDataException("Invalid swept cut.");
                     break;
                 case LoftFeatureParameters l:
@@ -406,7 +416,7 @@ public static class FeatureDocumentFile
                 case StructuralMemberFeatureParameters s:
                     if(s.ProfileSketchId==s.PathSketchId||
                        document.Node(s.ProfileSketchId).Kind!=FeatureKind.Sketch||
-                       document.Node(s.PathSketchId).Kind!=FeatureKind.Sketch)
+                       document.Node(s.PathSketchId).Kind is not (FeatureKind.Sketch or FeatureKind.SpatialSketch))
                         throw new InvalidDataException("Invalid structural member.");
                     break;
                 case EndCapFeatureParameters e:
