@@ -166,7 +166,7 @@
                     <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadTrimIcon}" Content="Kırp / Uzat" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Köşebent" Click="Gusset_Click" ToolTip="Açık çizimden gerçek OCCT nervür/gusset katısı oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Uç Kapağı" Click="EndCap_Click" x:Name="EndCapButton" ToolTip="Düzlemsel uç yüzünü seçin; gerçek OCCT B-Rep uç kapağı ekler."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Kaynak Dikişi" Click="CadCommandPlaceholder_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Kaynak Dikişi" Click="WeldBead_Click" x:Name="WeldBeadButton" ToolTip="Seçili kenarlar boyunca gerçek OCCT süpürme kaynak dikişi katısı oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Kesim Listesi" Click="StructuralCutList_Click" ToolTip="Yapısal Eleman feature'larından gerçek boy/kesit alanı/hacim listesi üretir."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Profil Kütüphanesi" Click="ProfileLibrary_Click" ToolTip="Ölçülü dikdörtgen veya dairesel profil sketch'i üretir; Yapısal Eleman için kullanılabilir."/>
                 </WrapPanel>
