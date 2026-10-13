@@ -1784,6 +1784,17 @@ public partial class MainWindow : Window
         }
     }
 
+    private void ExtendSketch_Click(object sender,RoutedEventArgs e)
+    {
+        if(_sketch is null||_selectedSketchEntities.Count==0){Status("Uzat için çizgi seçin.");return;}
+        var ids=_selectedSketchEntities.ToArray();
+        ApplySketchTransform(()=>
+        {
+            _sketch.ExtendLinesToNearest(ids);
+            return ids;
+        },"Seçili çizgiler en yakın çizgi/daire sınırına uzatıldı.");
+    }
+
     private void OffsetSketch_Click(object sender,RoutedEventArgs e)
     {
         if(_sketch is null||_selectedSketchEntities.Count==0){Status("Ofset için çizgi veya daire seçin.");return;}
