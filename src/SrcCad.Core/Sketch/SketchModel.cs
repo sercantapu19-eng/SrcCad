@@ -1366,7 +1366,10 @@ public sealed partial class SketchModel
     {
         var circles = Circles(false).ToList();
         circle = circles.FirstOrDefault()!;
-        return circles.Count == 1 && !Lines(false).Any();
+        return circles.Count == 1 &&
+               !Lines(false).Any() &&
+               !Arcs(false).Any() &&
+               !Ellipses(false).Any();
     }
 
     private bool TryGetClosedLineLoops(out List<List<Point2d>> loops)
