@@ -300,6 +300,58 @@ namespace SrcCad::Kernel::Occt
         return true;
     }
 
+#pragma managed(push, off)
+    static TopoDS_Shape buildDomeResultNative(const TopoDS_Shape& baseShape,const TopoDS_Face& support,double height)
+    {
+        gp_Pnt origin;gp_Dir u,v,normal;
+        if(!planarFaceFrame(support,origin,u,v,normal))return TopoDS_Shape();
+
+        GProp_GProps props;BRepGProp::SurfaceProperties(support,props);
+        gp_Pnt center=props.CentreOfMass();
+        double rimRadius=0.0;
+        for(TopExp_Explorer ex(support,TopAbs_VERTEX);ex.More();ex.Next())
+            rimRadius=std::max(rimRadius,center.Distance(BRep_Tool::Pnt(TopoDS::Vertex(ex.Current()))));
+        if(rimRadius<=1e-9)return TopoDS_Shape();
+
+        const double h=std::abs(height);
+        const double sphereRadius=(rimRadius*rimRadius+h*h)/(2.0*h);
+        gp_Vec n(normal.X(),normal.Y(),normal.Z());
+        if(height<0)n.Reverse();
+        gp_Pnt sphereCenter=center.Translated(n.Multiplied(-(sphereRadius-h)));
+        BRepPrimAPI_MakeSphere sphere(sphereCenter,sphereRadius);
+        TopoDS_Shape sphereShape=sphere.Shape();
+        if(sphereShape.IsNull())return TopoDS_Shape();
+
+        Bnd_Box bounds;BRepBndLib::Add(baseShape,bounds);
+        if(bounds.IsVoid())return TopoDS_Shape();
+        double xmin,ymin,zmin,xmax,ymax,zmax;bounds.Get(xmin,ymin,zmin,xmax,ymax,zmax);
+        const double extent=std::max(100.0,gp_Pnt(xmin,ymin,zmin).Distance(gp_Pnt(xmax,ymax,zmax))*4.0+10.0);
+
+        gp_Pnt p0=center.Translated(gp_Vec(u.X(),u.Y(),u.Z()).Multiplied(-extent)).Translated(gp_Vec(v.X(),v.Y(),v.Z()).Multiplied(-extent));
+        gp_Pnt p1=center.Translated(gp_Vec(u.X(),u.Y(),u.Z()).Multiplied(extent)).Translated(gp_Vec(v.X(),v.Y(),v.Z()).Multiplied(-extent));
+        gp_Pnt p2=center.Translated(gp_Vec(u.X(),u.Y(),u.Z()).Multiplied(extent)).Translated(gp_Vec(v.X(),v.Y(),v.Z()).Multiplied(extent));
+        gp_Pnt p3=center.Translated(gp_Vec(u.X(),u.Y(),u.Z()).Multiplied(-extent)).Translated(gp_Vec(v.X(),v.Y(),v.Z()).Multiplied(extent));
+        BRepBuilderAPI_MakePolygon poly;poly.Add(p0);poly.Add(p1);poly.Add(p2);poly.Add(p3);poly.Close();
+        if(!poly.IsDone())return TopoDS_Shape();
+        BRepBuilderAPI_MakeFace planeFace(poly.Wire(),true);
+        if(!planeFace.IsDone())return TopoDS_Shape();
+        BRepPrimAPI_MakePrism halfPrism(planeFace.Face(),n.Multiplied(extent*2.0),true,true);
+        BRepAlgoAPI_Common capOp(sphereShape,halfPrism.Shape());capOp.Build();
+        if(!capOp.IsDone())return TopoDS_Shape();
+        TopoDS_Shape cap=capOp.Shape();
+        if(cap.IsNull())return TopoDS_Shape();
+
+        if(height>0)
+        {
+            BRepAlgoAPI_Fuse fuse(baseShape,cap);fuse.Build();
+            return fuse.IsDone()?fuse.Shape():TopoDS_Shape();
+        }
+
+        BRepAlgoAPI_Cut cut(baseShape,cap);cut.Build();
+        return cut.IsDone()?cut.Shape():TopoDS_Shape();
+    }
+#pragma managed(pop)
+
     struct FaceSemanticSignature
     {
         int Type=0; // 0=planar, 1=cylindrical
@@ -2375,54 +2427,15 @@ namespace SrcCad::Kernel::Occt
             TopoDS_Shape baseShape=decodeFeature(baseBody);
             const double before=featureVolume(baseShape);
             TopoDS_Face support=resolveFaceReference(baseShape,faceReference);
-            gp_Pnt origin;gp_Dir u,v,normal;
-            if(!planarFaceFrame(support,origin,u,v,normal))throw gcnew InvalidOperationException("Dome requires a planar face.");
-            GProp_GProps props;BRepGProp::SurfaceProperties(support,props);
-            gp_Pnt center=props.CentreOfMass();
-            double rimRadius=0.0;
-            for(TopExp_Explorer ex(support,TopAbs_VERTEX);ex.More();ex.Next())
-                rimRadius=std::max(rimRadius,center.Distance(BRep_Tool::Pnt(TopoDS::Vertex(ex.Current()))));
-            if(rimRadius<=1e-9)throw gcnew InvalidOperationException("Dome face has no usable boundary radius.");
-
-            const double h=std::abs(height);
-            const double sphereRadius=(rimRadius*rimRadius+h*h)/(2.0*h);
-            gp_Vec n(normal.X(),normal.Y(),normal.Z());
-            if(height<0)n.Reverse();
-            gp_Pnt sphereCenter=center.Translated(n.Multiplied(-(sphereRadius-h)));
-            BRepPrimAPI_MakeSphere sphere(sphereCenter,sphereRadius);
-            TopoDS_Shape sphereShape=sphere.Shape();
-
-            Bnd_Box bounds;BRepBndLib::Add(baseShape,bounds);
-            double xmin,ymin,zmin,xmax,ymax,zmax;bounds.Get(xmin,ymin,zmin,xmax,ymax,zmax);
-            const double extent=std::max(100.0,gp_Pnt(xmin,ymin,zmin).Distance(gp_Pnt(xmax,ymax,zmax))*4.0+10.0);
-
-            gp_Pnt p0=center.Translated(gp_Vec(u.X(),u.Y(),u.Z()).Multiplied(-extent)).Translated(gp_Vec(v.X(),v.Y(),v.Z()).Multiplied(-extent));
-            gp_Pnt p1=center.Translated(gp_Vec(u.X(),u.Y(),u.Z()).Multiplied(extent)).Translated(gp_Vec(v.X(),v.Y(),v.Z()).Multiplied(-extent));
-            gp_Pnt p2=center.Translated(gp_Vec(u.X(),u.Y(),u.Z()).Multiplied(extent)).Translated(gp_Vec(v.X(),v.Y(),v.Z()).Multiplied(extent));
-            gp_Pnt p3=center.Translated(gp_Vec(u.X(),u.Y(),u.Z()).Multiplied(-extent)).Translated(gp_Vec(v.X(),v.Y(),v.Z()).Multiplied(extent));
-            BRepBuilderAPI_MakePolygon poly;poly.Add(p0);poly.Add(p1);poly.Add(p2);poly.Add(p3);poly.Close();
-            BRepBuilderAPI_MakeFace planeFace(poly.Wire(),true);
-            BRepPrimAPI_MakePrism halfPrism(planeFace.Face(),n.Multiplied(extent*2.0),true,true);
-            BRepAlgoAPI_Common capOp(sphereShape,halfPrism.Shape());capOp.Build();
-            if(!capOp.IsDone())throw gcnew InvalidOperationException("Dome cap intersection failed.");
-            TopoDS_Shape cap=capOp.Shape();
-
-            if(height>0)
-            {
-                BRepAlgoAPI_Fuse fuse(baseShape,cap);fuse.Build();
-                if(!fuse.IsDone())throw gcnew InvalidOperationException("OCCT dome fuse failed.");
-                TopoDS_Shape result=fuse.Shape();
-                if(featureVolume(result)<=before+std::max(1e-8,before*1e-10))throw gcnew InvalidOperationException("Dome adds no material.");
-                return encodeFeature(result);
-            }
-            else
-            {
-                BRepAlgoAPI_Cut cut(baseShape,cap);cut.Build();
-                if(!cut.IsDone())throw gcnew InvalidOperationException("OCCT inward dome cut failed.");
-                TopoDS_Shape result=cut.Shape();
-                if(featureVolume(result)>=before-std::max(1e-8,before*1e-10))throw gcnew InvalidOperationException("Inward dome removes no material.");
-                return encodeFeature(result);
-            }
+            TopoDS_Shape result=buildDomeResultNative(baseShape,support,height);
+            if(result.IsNull()||!BRepCheck_Analyzer(result).IsValid())
+                throw gcnew InvalidOperationException("OCCT dome construction failed.");
+            const double after=featureVolume(result);
+            if(height>0&&after<=before+std::max(1e-8,before*1e-10))
+                throw gcnew InvalidOperationException("Dome adds no material.");
+            if(height<0&&after>=before-std::max(1e-8,before*1e-10))
+                throw gcnew InvalidOperationException("Inward dome removes no material.");
+            return encodeFeature(result);
         }
         catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
     }
