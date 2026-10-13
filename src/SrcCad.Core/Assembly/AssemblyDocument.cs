@@ -303,7 +303,7 @@ public static class AssemblyMateSolver
                 else if(cylindricalA&&!cylindricalB)
                 {
                     if(radiusA<=1e-9)throw new InvalidOperationException("Silindirik teğet ilişkide yarıçap bulunamadı.");
-                    var planeNormal=WorldDirection(b,localDirectionB!.Value);
+                    var planeNormal=Multiply(RotationMatrix(transform.RotationDegrees),localDirectionB!.Value).Normalized();
                     var signed=Vector3d.Dot(aOrigin-currentBOrigin,planeNormal);
                     var sign=Math.Abs(signed)>1e-9?Math.Sign(signed):1.0;
                     var target=sign*radiusA;
