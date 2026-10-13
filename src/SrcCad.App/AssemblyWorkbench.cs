@@ -420,6 +420,93 @@ public partial class MainWindow
 
     private void AssemblyMate_Click(object sender,RoutedEventArgs e)=>BeginAssemblyMate(null);
 
+    private static void SelectAssemblyComboComponent(ComboBox combo,Guid id)
+    {
+        foreach(var item in combo.Items.OfType<ComboBoxItem>())
+            if(item.Tag is Guid value&&value==id){combo.SelectedItem=item;return;}
+    }
+
+    private static bool IsStandardAssemblyReference(AssemblyReference reference)
+        => reference.SemanticName==AssemblyReferenceCatalog.Origin||
+           AssemblyReferenceCatalog.Standard.Any(x=>x.Kind==reference.Kind&&x.Semantic==reference.SemanticName);
+
+    private void AssemblyMateReferenceChanged(object sender,SelectionChangedEventArgs e)
+    {
+        if(sender==AssemblyMateAReference&&AssemblyMateAReference.SelectedItem is ComboBoxItem a)
+        {
+            _assemblyPickedMateA=null;
+            AssemblyMateAReferenceText.Text="Standart referans: "+a.Content;
+        }
+        else if(sender==AssemblyMateBReference&&AssemblyMateBReference.SelectedItem is ComboBoxItem b)
+        {
+            _assemblyPickedMateB=null;
+            AssemblyMateBReferenceText.Text="Standart referans: "+b.Content;
+        }
+    }
+
+    private void AssemblyCaptureMateA_Click(object sender,RoutedEventArgs e)=>CaptureAssemblyMateFace(true);
+    private void AssemblyCaptureMateB_Click(object sender,RoutedEventArgs e)=>CaptureAssemblyMateFace(false);
+
+    private void CaptureAssemblyMateFace(bool first)
+    {
+        if(_assemblyDocument is null)return;
+        var idText=_viewer.SelectedAssemblyComponentId();
+        var semantic=_viewer.SelectedAssemblyFaceReference();
+        if(!Guid.TryParse(idText,out var componentId)||string.IsNullOrWhiteSpace(semantic))
+        {
+            Status("Montajda tek bir düzlemsel bileşen yüzü seçin.");return;
+        }
+        var component=_assemblyDocument.Components.FirstOrDefault(c=>c.Id==componentId);
+        if(component is null){Status("Seçili yüzün montaj bileşeni bulunamadı.");return;}
+        if(component.MirrorPlane is not null)
+        {
+            Status("Aynalanmış bileşende yüz referansı yerine standart düzlem/eksen kullanın.");return;
+        }
+
+        var reference=new AssemblyReference(componentId,TopologyKind.Face,semantic);
+        if(first)
+        {
+            _assemblyPickedMateA=reference;AssemblyMateAReference.SelectedIndex=-1;
+            SelectAssemblyComboComponent(AssemblyMateA,componentId);
+            AssemblyMateAReferenceText.Text=component.Name+" • seçili gerçek yüz";
+        }
+        else
+        {
+            _assemblyPickedMateB=reference;AssemblyMateBReference.SelectedIndex=-1;
+            SelectAssemblyComboComponent(AssemblyMateB,componentId);
+            AssemblyMateBReferenceText.Text=component.Name+" • seçili gerçek yüz";
+        }
+        Status((first?"A":"B")+" montaj referansı seçili düzlemsel yüzden yakalandı.");
+    }
+
+    private bool TryAssemblyMateLocalFrame(AssemblyReference reference,out Vector3d origin,out Vector3d? direction)
+    {
+        origin=Vector3d.Zero;direction=null;
+        if(reference.SemanticName==AssemblyReferenceCatalog.Origin)return true;
+        if(AssemblyReferenceCatalog.TryDirection(reference,out var standard))
+        {
+            direction=standard;return true;
+        }
+        if(reference.Kind!=TopologyKind.Face||!_assemblyBodies.TryGetValue(reference.ComponentId,out var body))return false;
+        try
+        {
+            var frame=SrcCad.Kernel.Occt.OcctFeatureKernel.FaceFrame(body,reference.SemanticName);
+            if(frame.Length<6)return false;
+            origin=new Vector3d(frame[0],frame[1],frame[2]);
+            direction=new Vector3d(frame[3],frame[4],frame[5]).Normalized();
+            return true;
+        }
+        catch{return false;}
+    }
+
+    private AssemblyDocument SolveAssemblyMate(AssemblyDocument document,AssemblyMate mate)
+    {
+        if(!TryAssemblyMateLocalFrame(mate.A,out var aOrigin,out var aDirection)||
+           !TryAssemblyMateLocalFrame(mate.B,out var bOrigin,out var bDirection))
+            throw new InvalidOperationException("Montaj referans geometrisi çözülemedi.");
+        return AssemblyMateSolver.ApplyResolved(document,mate,aOrigin,aDirection,bOrigin,bDirection);
+    }
+
     private void BeginAssemblyMate(Guid? mateId)
     {
         if(_assemblyDocument is null||_assemblyDocument.Components.Length<2)
