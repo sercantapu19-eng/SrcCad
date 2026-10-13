@@ -59,6 +59,22 @@ internal static class AssemblyDocumentTests
         Check((concentricSolved.Component(movable.Id).Transform.Translation-new Vector3d(10,0,0)).Length<1e-8,
             "concentric standard axes remove perpendicular offset");
 
+        var perpendicular=new AssemblyMate(Guid.NewGuid(),"Dik1",MateType.Perpendicular,
+            new AssemblyReference(a.Id,TopologyKind.Face,AssemblyReferenceCatalog.FrontPlane),
+            new AssemblyReference(movable.Id,TopologyKind.Face,AssemblyReferenceCatalog.FrontPlane));
+        var perpendicularSolved=AssemblyMateSolver.Apply(solveDoc,perpendicular);
+        var perpendicularRotation=perpendicularSolved.Component(movable.Id).Transform.RotationDegrees;
+        Check(Math.Abs(Math.Abs(perpendicularRotation.X)-90)<1e-6||Math.Abs(Math.Abs(perpendicularRotation.Z)-90)<1e-6,
+            "perpendicular mate rotates reference directions by ninety degrees");
+
+        var angleMate=new AssemblyMate(Guid.NewGuid(),"Açı1",MateType.Angle,
+            new AssemblyReference(a.Id,TopologyKind.Face,AssemblyReferenceCatalog.FrontPlane),
+            new AssemblyReference(movable.Id,TopologyKind.Face,AssemblyReferenceCatalog.FrontPlane),30);
+        var angleSolved=AssemblyMateSolver.Apply(solveDoc,angleMate);
+        var angleRotation=angleSolved.Component(movable.Id).Transform.RotationDegrees;
+        Check(Math.Abs(angleRotation.X)+Math.Abs(angleRotation.Y)+Math.Abs(angleRotation.Z)>1e-6,
+            "angle mate produces a non-zero controlled rotation");
+
         var faceA=new AssemblyReference(a.Id,TopologyKind.Face,"F;A");
         var faceB=new AssemblyReference(movable.Id,TopologyKind.Face,"F;B");
         var faceMate=new AssemblyMate(Guid.NewGuid(),"YüzÇakışık",MateType.Coincident,faceA,faceB);
