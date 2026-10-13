@@ -70,6 +70,13 @@ internal static class FeatureGraphTests
         int n=0;void Check(bool ok,string message){if(!ok)throw new Exception("Feature graph: "+message);n++;}
         var sketch=new SketchModel(StandardPlanes.Front);sketch.AddCornerRectangle(new(0,0),new(40,30),.001);
         var initial=FeatureDocumentFile.FromLegacy(new(StandardPlanes.Front,sketch.CaptureSnapshot(),20));
+        var materialDocument=initial with{Properties=new PartProperties("Çelik",7.85)};
+        var materialClone=FeatureDocumentFile.Clone(materialDocument);
+        Check(materialClone.Properties is {MaterialName:"Çelik"}&&Math.Abs(materialClone.Properties.DensityGPerCm3-7.85)<1e-12,
+            "part material and density roundtrip through scpart document");
+        var noMaterialClone=FeatureDocumentFile.Clone(initial);
+        Check((noMaterialClone.Properties??PartProperties.Default).DensityGPerCm3==0,
+            "documents without material properties remain backward compatible");
         var source=initial.Features[0];var boss=initial.Features[1];
         var second=new FeatureNode(Guid.NewGuid(),"Çizim2",source.Parameters);
         var cut=new FeatureNode(Guid.NewGuid(),"Kes-Ekstrüzyon1",new CutFeatureParameters(boss.Id,second.Id,10));
