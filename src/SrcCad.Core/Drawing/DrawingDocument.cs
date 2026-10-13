@@ -3,7 +3,7 @@ using SrcCad.Core.Geometry;
 
 namespace SrcCad.Core.Drawing;
 
-public enum DrawingViewType { Front, Top, Right, Isometric, Projected, Section, Detail }
+public enum DrawingViewType { Front, Top, Right, Isometric, Projected, Section, Detail, Broken }
 public enum DrawingProjectionStandard { FirstAngle, ThirdAngle }
 
 public sealed record DrawingSheet(
@@ -24,7 +24,9 @@ public sealed record DrawingView(
     Guid? ParentViewId = null,
     string? Configuration = null,
     Vector3d? SectionOrigin = null,
-    Vector3d? SectionNormal = null);
+    Vector3d? SectionNormal = null,
+    double? BreakStart = null,
+    double? BreakEnd = null);
 
 public sealed record DrawingAnnotation(
     Guid Id,
@@ -117,6 +119,12 @@ public static class DrawingDocumentFile
                    !double.IsFinite(origin.X)||!double.IsFinite(origin.Y)||!double.IsFinite(origin.Z)||
                    !double.IsFinite(normal.X)||!double.IsFinite(normal.Y)||!double.IsFinite(normal.Z)||normal.Length<=1e-9)
                     throw new InvalidDataException("Section view requires a valid section plane.");
+            }
+            if(view.Type==DrawingViewType.Broken)
+            {
+                if(view.BreakStart is not double start||view.BreakEnd is not double end||
+                   !double.IsFinite(start)||!double.IsFinite(end)||end-start<=1e-9||view.ParentViewId is null)
+                    throw new InvalidDataException("Broken view requires a valid break interval and parent view.");
             }
         }
 
