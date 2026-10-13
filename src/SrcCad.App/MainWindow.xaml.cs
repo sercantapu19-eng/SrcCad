@@ -2443,6 +2443,13 @@ public partial class MainWindow : Window
 
     private void Exit_Click(object sender, RoutedEventArgs e) => Close();
 
+    private void About_Click(object sender,RoutedEventArgs e)
+    {
+        MessageBox.Show(this,
+            "SrcCad\nParametrik CAD • OCCT B-Rep\n\nParça, Çizim, Sac Levha, Profiller, Montaj, Teknik Resim ve İnceleme çalışma alanları.",
+            "SrcCad Hakkında",MessageBoxButton.OK,MessageBoxImage.Information);
+    }
+
     private void RefreshCommandState()
     {
         StartSketchButton.IsEnabled = !_inSketch && !_extrudeCommandActive;
