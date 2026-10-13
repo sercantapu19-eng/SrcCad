@@ -145,6 +145,31 @@ internal sealed class OcctPartGeometryKernel : IPartGeometryKernel
         return OcctFeatureKernel.LoftCut(baseBody,packed.Select(p=>p.Outer).ToArray(),packed.Select(p=>p.Circle).ToArray(),packed.Select(p=>p.Frame).ToArray());
     }
 
+    public string Boolean(string bodyA,string bodyB,BodyBooleanOperation operation)
+        => OcctFeatureKernel.Boolean(bodyA,bodyB,(int)operation);
+    public string MoveCopy(string baseBody,SrcCad.Core.Geometry.Vector3d translation,SrcCad.Core.Geometry.Vector3d rotationDegrees,bool keepOriginal)
+        => OcctFeatureKernel.MoveCopy(baseBody,
+            new[]{translation.X,translation.Y,translation.Z,rotationDegrees.X,rotationDegrees.Y,rotationDegrees.Z},keepOriginal);
+    public string Split(string baseBody,SrcCad.Core.Geometry.PlaneFrame plane)
+        => OcctFeatureKernel.SplitToPlane(baseBody,
+            new[]{plane.Origin.X,plane.Origin.Y,plane.Origin.Z,plane.U.X,plane.U.Y,plane.U.Z,plane.V.X,plane.V.Y,plane.V.Z,plane.Normal.X,plane.Normal.Y,plane.Normal.Z});
+    public string Dome(string baseBody,string faceReference,double height)
+        => OcctFeatureKernel.Dome(baseBody,faceReference,height);
+    public string HoleWizard(string baseBody,string faceReference,SrcCad.Core.Geometry.Vector3d center,double diameter,double depth,
+        HoleWizardType type,double counterDiameter,double counterDepth,bool reverse)
+        => OcctFeatureKernel.HoleWizard(baseBody,faceReference,center.X,center.Y,center.Z,diameter,depth,(int)type,counterDiameter,counterDepth,reverse);
+    public string SketchPattern(string baseBody,SketchModel source)
+    {
+        var origin=source.Plane.Origin;
+        var offsets=source.Points.Values.Where(p=>p.Id!=0).SelectMany(p=>
+        {
+            var w=source.Plane.SketchToWorld(p.Position.X,p.Position.Y);
+            return new[]{w.X-origin.X,w.Y-origin.Y,w.Z-origin.Z};
+        }).ToArray();
+        if(offsets.Length<3)throw new InvalidOperationException("Sketch pattern requires at least one sketch point.");
+        return OcctFeatureKernel.PatternOffsets(baseBody,offsets);
+    }
+
     public string Shell(string baseBody,IReadOnlyList<string> faceReferences,double thickness,bool outward)
         => OcctFeatureKernel.Shell(baseBody,faceReferences.ToArray(),thickness,outward);
     public string Draft(string baseBody,IReadOnlyList<string> faceReferences,SrcCad.Core.Geometry.PlaneFrame neutralPlane,double angleDegrees,bool reverse)
