@@ -156,7 +156,7 @@
                     <Button Style="{StaticResource CadCommandButton}" Content="Katla" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Yırtık" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Köşe Rölyefi" Click="CadCommandPlaceholder_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Sac'a Dönüştür" Click="CadCommandPlaceholder_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Sac'a Dönüştür" Click="ConvertToSheetMetal_Click" x:Name="ConvertToSheetMetalButton" ToolTip="Mevcut katıya sac kalınlığı, büküm yarıçapı ve K-faktörü meta verisini parametrik feature olarak bağlar."/>
                 </WrapPanel>
             </TabItem>
             <TabItem Header="PROFİLLER">
@@ -520,6 +520,22 @@
                                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                     <Button Content="✓" Width="52" Height="34" Click="EdgeFlangeOk_Click"/>
                                     <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="EdgeFlangeCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="SheetMetalConvertPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Sac'a Dönüştür" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <TextBlock Text="Sac Kalınlığı (mm)"/>
+                                <TextBox x:Name="ConvertSheetThickness" TextChanged="SheetMetalConvertParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock Text="Varsayılan Büküm Yarıçapı (mm)"/>
+                                <TextBox x:Name="ConvertSheetBendRadius" TextChanged="SheetMetalConvertParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock Text="K-Faktörü (0–1)"/>
+                                <TextBox x:Name="ConvertSheetKFactor" TextChanged="SheetMetalConvertParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock Text="Bu feature katıyı yeniden örneklemez; mevcut B-Rep'i sac parametreleriyle işaretler ve sonraki sac işlemlerinin bağımlılık kökü olur." Foreground="#5F6B76" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="SheetMetalConvertError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="SheetMetalConvertOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="SheetMetalConvertCancel_Click"/>
                                 </StackPanel>
                             </StackPanel>
 
