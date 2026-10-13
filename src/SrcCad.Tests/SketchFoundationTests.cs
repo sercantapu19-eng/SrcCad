@@ -101,6 +101,28 @@ internal static class SketchFoundationTests
 
         {
             var s=new SketchModel(StandardPlanes.Front);
+            var c=s.CreatePointExact(new(0,0));
+            var a=s.CreatePointExact(new(10,0));
+            var b=s.CreatePointExact(new(0,10));
+            var arc=s.AddArc(c,a,b,false);
+            Check(s.Arcs(false).Single().Id==arc.Id&&s.FindEntityNear(new(7.071,7.071),0.02)==arc.Id,
+                "parametric arc selection");
+            Check(s.SampleArc(arc,8).Count==9,"arc sampling preserves endpoints");
+        }
+
+        {
+            var s=new SketchModel(StandardPlanes.Front);
+            var command=new StraightSlotSketchCommand(s);command.Begin(new());
+            command.Pick(new(new(-20,0),-1,0.001,1));
+            command.Pick(new(new(20,0),-1,0.001,1));
+            command.Pick(new(new(0,5),-1,0.001,1));
+            Check(s.Lines(false).Count()==2&&s.Arcs(false).Count()==2,"slot creates two lines and two true arcs");
+            Check(s.TryGetExtrusionProfile(out var slotLoop,out _,out _)&&slotLoop.Count>20,
+                "arc slot is accepted as closed extrusion profile");
+        }
+
+        {
+            var s=new SketchModel(StandardPlanes.Front);
             var a=s.CreatePointExact(new(0,0));var b=s.CreatePointExact(new(10,0));var target=s.AddLine(a,b);
             var c=s.CreatePointExact(new(20,-10));var d=s.CreatePointExact(new(20,10));s.AddLine(c,d);
             Check(s.ExtendLinesToNearest(new[]{target.Id})==1&&Near(s.Point(b).Position.X,20),"extend line to nearest boundary");
