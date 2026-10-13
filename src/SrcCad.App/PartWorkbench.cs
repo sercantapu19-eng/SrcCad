@@ -1906,16 +1906,27 @@ public partial class MainWindow
     {
         if(_partSession is null||_graphFeatureEdit is null||
            (_graphFeatureEdit.References?.Length??0)==0||
-           !DimensionNumbers.TryParse(EdgeFlangeLength.Text,SketchDimensionType.LineLength,out var length,out _)||
-           !DimensionNumbers.TryParseScalar(EdgeFlangeAngle.Text,out var angle)||
-           !DimensionNumbers.TryParse(EdgeFlangeThickness.Text,SketchDimensionType.LineLength,out var thickness,out _)||
-           !DimensionNumbers.TryParseScalar(EdgeFlangeBendRadius.Text,out var radius)||
-           angle<=1e-6||angle>=179.999||radius<0)return null;
+           !DimensionNumbers.TryParse(EdgeFlangeLength.Text,SketchDimensionType.LineLength,out var first,out _)||
+           !DimensionNumbers.TryParseScalar(EdgeFlangeAngle.Text,out var second)||
+           !DimensionNumbers.TryParse(EdgeFlangeThickness.Text,SketchDimensionType.LineLength,out var thickness,out _))
+            return null;
+
+        if(_graphFeatureEdit.Parameters is SheetMetalJogFeatureParameters jog)
+        {
+            if(first<=1e-9||second<=1e-9||thickness<=1e-9)return null;
+            return ReplaceGraphNode(_graphFeatureEdit with{Parameters=jog with
+            {
+                Offset=first,Height=second,Thickness=thickness,Reverse=EdgeFlangeReverse.IsChecked==true
+            }});
+        }
+
+        if(!DimensionNumbers.TryParseScalar(EdgeFlangeBendRadius.Text,out var radius)||
+           first<=1e-9||second<=1e-6||second>=179.999||thickness<=1e-9||radius<0)return null;
         FeatureParameters? parameters=_graphFeatureEdit.Parameters switch
         {
-            SheetMetalEdgeFlangeFeatureParameters f=>f with{Length=length,AngleDegrees=angle,Thickness=thickness,BendRadius=radius,Reverse=EdgeFlangeReverse.IsChecked==true},
+            SheetMetalEdgeFlangeFeatureParameters f=>f with{Length=first,AngleDegrees=second,Thickness=thickness,BendRadius=radius,Reverse=EdgeFlangeReverse.IsChecked==true},
             SheetMetalMiterFlangeFeatureParameters f when (_graphFeatureEdit.References?.Length??0)>=2
-                =>f with{Length=length,AngleDegrees=angle,Thickness=thickness,BendRadius=radius,Reverse=EdgeFlangeReverse.IsChecked==true},
+                =>f with{Length=first,AngleDegrees=second,Thickness=thickness,BendRadius=radius,Reverse=EdgeFlangeReverse.IsChecked==true},
             _=>null
         };
         return parameters is null?null:ReplaceGraphNode(_graphFeatureEdit with{Parameters=parameters});
@@ -1928,7 +1939,7 @@ public partial class MainWindow
 
     private void UpdateEdgeFlangePreview()
     {
-        if(_partSession is null||_graphFeatureEdit?.Parameters is not (SheetMetalEdgeFlangeFeatureParameters or SheetMetalMiterFlangeFeatureParameters))return;
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not (SheetMetalEdgeFlangeFeatureParameters or SheetMetalMiterFlangeFeatureParameters or SheetMetalJogFeatureParameters))return;
         var candidate=EdgeFlangeCandidate();
         if(candidate is null)
         {
@@ -2117,7 +2128,8 @@ public partial class MainWindow
     }
     private void BeginGraphFeature(FeatureNode node)
     {
-        if(node.Parameters is FilletFeatureParameters or ChamferFeatureParameters or WeldBeadFeatureParameters){BeginEdgeFeature(node);return;}
+        if(node.Parameters is FilletFeatureParameters or ChamferFeatureParameters or WeldBeadFeatureParameters or
+            SheetMetalHemFeatureParameters or SheetMetalRipFeatureParameters or SheetMetalCornerReliefFeatureParameters){BeginEdgeFeature(node);return;}
         if(node.Parameters is HoleFeatureParameters){BeginHoleFeature(node);return;}
         if(node.Parameters is RevolveFeatureParameters or RevolveCutFeatureParameters){BeginRevolveFeature(node);return;}
         if(node.Parameters is SweepFeatureParameters or SweepCutFeatureParameters or LoftFeatureParameters or LoftCutFeatureParameters or StructuralMemberFeatureParameters){BeginMultiSketchFeature(node);return;}
@@ -2130,7 +2142,7 @@ public partial class MainWindow
         if(node.Parameters is ReferencePlaneFeatureParameters or ReferenceAxisFeatureParameters or ReferencePointFeatureParameters){BeginReferenceGeometryFeature(node);return;}
         if(node.Parameters is SheetMetalBaseFeatureParameters){BeginSheetMetalBaseFeature(node);return;}
         if(node.Parameters is SheetMetalConvertFeatureParameters){BeginSheetMetalConvertFeature(node);return;}
-        if(node.Parameters is SheetMetalEdgeFlangeFeatureParameters or SheetMetalMiterFlangeFeatureParameters){BeginEdgeFlangeFeature(node);return;}
+        if(node.Parameters is SheetMetalEdgeFlangeFeatureParameters or SheetMetalMiterFlangeFeatureParameters or SheetMetalJogFeatureParameters){BeginEdgeFlangeFeature(node);return;}
         _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;_depthWheel.Reset();
         var cut=node.Parameters as CutFeatureParameters;
         var sheetCut=node.Parameters as SheetMetalCutFeatureParameters;
