@@ -232,6 +232,10 @@
             </TabItem>
             <TabItem Header="TEKNİK RESİM">
                 <WrapPanel Margin="8">
+                    <Button Style="{StaticResource CadCommandButton}" Content="Yeni Pafta" Click="DrawingNewSheet_Click" ToolTip="Aktif paftanın boyut ve izdüşüm standardıyla yeni teknik resim paftası oluşturur."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Önceki Pafta" Click="DrawingPreviousSheet_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Sonraki Pafta" Click="DrawingNextSheet_Click"/>
+                    <Separator Margin="8,2"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Model Görünümü" Click="DrawingModelView_Click" ToolTip=".scpart modelinden gerçek OCCT kenar izdüşümü oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="İzdüşüm" Click="DrawingProjectedView_Click" ToolTip="Seçili görünüşten bağlı Üst/Sağ görünüş üretir."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Kesit" Click="DrawingSectionView_Click" ToolTip="Seçili görünüşten model merkezinden geçen gerçek OCCT kesit eğrileri üretir."/>
