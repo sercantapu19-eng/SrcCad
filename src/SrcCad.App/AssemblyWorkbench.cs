@@ -486,7 +486,7 @@ public partial class MainWindow
         var semantic=_viewer.SelectedAssemblyFaceReference();
         if(!Guid.TryParse(idText,out var componentId)||string.IsNullOrWhiteSpace(semantic))
         {
-            Status("Montajda tek bir düzlemsel bileşen yüzü seçin.");return;
+            Status("Montajda tek bir düzlemsel veya silindirik bileşen yüzü seçin.");return;
         }
         var component=_assemblyDocument.Components.FirstOrDefault(c=>c.Id==componentId);
         if(component is null){Status("Seçili yüzün montaj bileşeni bulunamadı.");return;}
@@ -500,15 +500,15 @@ public partial class MainWindow
         {
             _assemblyPickedMateA=reference;AssemblyMateAReference.SelectedIndex=-1;
             SelectAssemblyComboComponent(AssemblyMateA,componentId);
-            AssemblyMateAReferenceText.Text=component.Name+" • seçili gerçek yüz";
+            AssemblyMateAReferenceText.Text=component.Name+" • seçili gerçek "+(semantic.StartsWith("C;",StringComparison.Ordinal)?"silindirik yüz":"düzlemsel yüz");
         }
         else
         {
             _assemblyPickedMateB=reference;AssemblyMateBReference.SelectedIndex=-1;
             SelectAssemblyComboComponent(AssemblyMateB,componentId);
-            AssemblyMateBReferenceText.Text=component.Name+" • seçili gerçek yüz";
+            AssemblyMateBReferenceText.Text=component.Name+" • seçili gerçek "+(semantic.StartsWith("C;",StringComparison.Ordinal)?"silindirik yüz":"düzlemsel yüz");
         }
-        Status((first?"A":"B")+" montaj referansı seçili düzlemsel yüzden yakalandı.");
+        Status((first?"A":"B")+" montaj referansı seçili gerçek yüzden yakalandı.");
     }
 
     private bool TryAssemblyMateLocalFrame(AssemblyReference reference,out Vector3d origin,out Vector3d? direction)
@@ -585,7 +585,7 @@ public partial class MainWindow
         AssemblyMateValue.Text=(existing?.Value??0).ToString("G17",CultureInfo.CurrentCulture);
         AssemblyMatePanel.Visibility=Visibility.Visible;AssemblyMovePanel.Visibility=Visibility.Collapsed;
         PropertyTitle.Text=existing is null?"Montaj İlişkisi":"Montaj İlişkisini Düzenle";
-        PropertyInfo.Text="Standart Origin/Düzlem/Eksen veya gerçek seçili düzlemsel yüz • kalıcı semantic referans • 3B mate çözümü • tek Undo/Redo transaction.";
+        PropertyInfo.Text="Standart Origin/Düzlem/Eksen veya gerçek seçili düzlemsel/silindirik yüz • kalıcı semantic referans • 3B mate çözümü • tek Undo/Redo transaction.";
         ManagerTabs.SelectedItem=PropertyManagerTab;
     }
 
