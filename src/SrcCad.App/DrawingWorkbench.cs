@@ -592,16 +592,10 @@ public partial class MainWindow
         if(!TryDrawingData(encoded,'L',4,out var wanted))return null;
         var target=new ProjectedSegment(wanted[0],wanted[1],wanted[2],wanted[3]);
         var targetLength=Math.Max(target.Length,1e-9);var targetMid=target.Mid;
-        return DrawingProjectedSegments(view)
-            .OrderBy(segment=>
-            {
-                var lengthScore=Math.Abs(segment.Length-target.Length)/targetLength;
-                var midScore=Point2d.Distance(segment.Mid,targetMid)/Math.Max(1.0,targetLength);
-                var ax=(target.X2-target.X1)/targetLength;var ay=(target.Y2-target.Y1)/targetLength;
-                var len=Math.Max(segment.Length,1e-9);var bx=(segment.X2-segment.X1)/len;var by=(segment.Y2-segment.Y1)/len;
-                var directionScore=1-Math.Abs(ax*bx+ay*by);
-                return lengthScore+midScore+directionScore*2;
-            }).FirstOrDefault();
+        var best=DrawingProjectedSegments(view)
+            .Select(segment=>new{Segment=segment,Score=SegmentMatchScore(segment,target)})
+            .OrderBy(item=>item.Score).FirstOrDefault();
+        return best is not null&&best.Score<=0.75?best.Segment:null;
     }
 
     private ProjectedCircle? ResolveDiameterDimension(DrawingView view,string? encoded)
@@ -619,11 +613,15 @@ public partial class MainWindow
     private ProjectedCircle? ResolveCircleDimension(DrawingView view,double[] wanted)
     {
         var target=new ProjectedCircle(wanted[0],wanted[1],wanted[2]);
-        return DrawingProjectedCircles(view)
-            .OrderBy(circle=>
-                Point2d.Distance(new Point2d(circle.X,circle.Y),new Point2d(target.X,target.Y))/Math.Max(1.0,target.Radius)+
-                Math.Abs(circle.Radius-target.Radius)/Math.Max(1e-9,target.Radius))
-            .FirstOrDefault();
+        var best=DrawingProjectedCircles(view)
+            .Select(circle=>new
+            {
+                Circle=circle,
+                Score=Point2d.Distance(new Point2d(circle.X,circle.Y),new Point2d(target.X,target.Y))/Math.Max(1.0,target.Radius)+
+                      Math.Abs(circle.Radius-target.Radius)/Math.Max(1e-9,target.Radius)
+            })
+            .OrderBy(item=>item.Score).FirstOrDefault();
+        return best is not null&&best.Score<=0.75?best.Circle:null;
     }
 
     private static double SegmentMatchScore(ProjectedSegment segment,ProjectedSegment target)
@@ -643,10 +641,13 @@ public partial class MainWindow
         var bTarget=new ProjectedSegment(wanted[4],wanted[5],wanted[6],wanted[7]);
         var segments=DrawingProjectedSegments(view);
         if(segments.Length<2)return null;
-        var a=segments.OrderBy(segment=>SegmentMatchScore(segment,aTarget)).First();
-        var b=segments.Where(segment=>!ReferenceEquals(segment,a))
-            .OrderBy(segment=>SegmentMatchScore(segment,bTarget)).FirstOrDefault();
-        return b is null?null:(a,b);
+        var aMatch=segments.Select(segment=>new{Segment=segment,Score=SegmentMatchScore(segment,aTarget)})
+            .OrderBy(item=>item.Score).First();
+        if(aMatch.Score>0.75)return null;
+        var bMatch=segments.Where(segment=>!ReferenceEquals(segment,aMatch.Segment))
+            .Select(segment=>new{Segment=segment,Score=SegmentMatchScore(segment,bTarget)})
+            .OrderBy(item=>item.Score).FirstOrDefault();
+        return bMatch is null||bMatch.Score>0.75?null:(aMatch.Segment,bMatch.Segment);
     }
 
     private static double AngularDegrees(ProjectedSegment a,ProjectedSegment b)
