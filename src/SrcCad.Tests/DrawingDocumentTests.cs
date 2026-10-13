@@ -26,11 +26,19 @@ internal static class DrawingDocumentTests
             DrawingAnnotationKind.LinearDimension,"L;0;0;40;0");
         var diameter=new DrawingAnnotation(Guid.NewGuid(),sheet.Id,front.Id,new Point2d(80,80),"Ø10",
             DrawingAnnotationKind.DiameterDimension,"D;20;15;5");
-        var dimensions=DrawingDocumentFile.Clone(doc with{Annotations=new[]{linear,diameter}});
+        var radius=new DrawingAnnotation(Guid.NewGuid(),sheet.Id,front.Id,new Point2d(90,85),"R5",
+            DrawingAnnotationKind.RadiusDimension,"R;20;15;5");
+        var angular=new DrawingAnnotation(Guid.NewGuid(),sheet.Id,front.Id,new Point2d(100,95),"45°",
+            DrawingAnnotationKind.AngularDimension,"A;0;0;40;0;0;0;20;20");
+        var dimensions=DrawingDocumentFile.Clone(doc with{Annotations=new[]{linear,diameter,radius,angular}});
         Check(dimensions.Annotations.Any(a=>a.Kind==DrawingAnnotationKind.LinearDimension&&a.Data=="L;0;0;40;0"),
             "associative projected-edge dimension roundtrip");
         Check(dimensions.Annotations.Any(a=>a.Kind==DrawingAnnotationKind.DiameterDimension&&a.Data=="D;20;15;5"),
             "associative diameter dimension roundtrip");
+        Check(dimensions.Annotations.Any(a=>a.Kind==DrawingAnnotationKind.RadiusDimension&&a.Data=="R;20;15;5"),
+            "associative radius dimension roundtrip");
+        Check(dimensions.Annotations.Any(a=>a.Kind==DrawingAnnotationKind.AngularDimension&&a.Data=="A;0;0;40;0;0;0;20;20"),
+            "associative angular dimension roundtrip");
 
         var removedView=clone.RemoveView(front.Id,true);
         Check(removedView.Views.Length==0&&removedView.Annotations.Length==0,
