@@ -182,7 +182,12 @@ public partial class MainWindow : Window
 
         if (control && key is Key.S or Key.O)
         {
-            if(InAssemblyMode)
+            if(InDrawingMode)
+            {
+                if(key==Key.S)SaveDrawing_Click(this,new RoutedEventArgs());
+                else OpenDrawing_Click(this,new RoutedEventArgs());
+            }
+            else if(InAssemblyMode)
             {
                 if(key==Key.S)SaveAssembly_Click(this,new RoutedEventArgs());
                 else OpenAssembly_Click(this,new RoutedEventArgs());
@@ -2218,6 +2223,7 @@ public partial class MainWindow : Window
     private void NewPart_Click(object sender, RoutedEventArgs e)
     {
         ExitAssemblyMode();
+        ExitDrawingMode();
         ResetPartWorkbench();
         _commandManager.Cancel();
         _sketchCommand = null;
