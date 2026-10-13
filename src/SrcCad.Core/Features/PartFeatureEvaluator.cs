@@ -24,6 +24,7 @@ public interface IPartGeometryKernel
     string CircularPattern(string baseBody,Vector3d axisOrigin,Vector3d axisDirection,double angleDegrees,int count);
     string EdgeFlange(string baseBody,IReadOnlyList<string> edgeReferences,double length,double angleDegrees,double thickness,double bendRadius,bool reverse);
     string EndCap(string baseBody,string faceReference,double thickness,bool reverse);
+    string WeldBead(string baseBody,IReadOnlyList<string> edgeReferences,double radius);
 }
 // Strings are immutable; native cache is detached from the document/viewport.
 public sealed record PartFeatureOutput(string? SketchData, string? BRep);
@@ -85,6 +86,7 @@ public sealed class PartFeatureEvaluator(IPartGeometryKernel kernel) : IFeatureE
             EndCapFeatureParameters e => new(null,kernel.EndCap(Base(e.BaseFeatureId),
                 (node.References??Array.Empty<FeatureReference>()).Single(r=>r.Kind==TopologyKind.Face&&r.ProducerId==e.BaseFeatureId).SemanticName,
                 e.Thickness,e.Reverse)),
+            WeldBeadFeatureParameters w => new(null,kernel.WeldBead(Base(w.BaseFeatureId),EdgeReferences(w.BaseFeatureId),w.Radius)),
             _=>throw new NotSupportedException("Feature evaluator unavailable.")
         };
     }
