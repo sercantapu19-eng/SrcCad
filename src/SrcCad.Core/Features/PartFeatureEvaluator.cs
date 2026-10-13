@@ -30,6 +30,7 @@ public interface IPartGeometryKernel
     string Jog(string baseBody,IReadOnlyList<string> edgeReferences,double height,double offset,double thickness,bool reverse);
     string Rip(string baseBody,IReadOnlyList<string> edgeReferences,double gap);
     string CornerRelief(string baseBody,IReadOnlyList<string> edgeReferences,double radius);
+    string Bend(string baseBody,SketchModel bendSketch,double angleDegrees,bool reverse);
     string TrimToPlane(string baseBody,PlaneFrame plane,bool keepPositive);
     string EndCap(string baseBody,string faceReference,double thickness,bool reverse);
     string WeldBead(string baseBody,IReadOnlyList<string> edgeReferences,double radius);
@@ -105,6 +106,7 @@ public sealed class PartFeatureEvaluator(IPartGeometryKernel kernel) : IFeatureE
             SheetMetalJogFeatureParameters s => new(null,kernel.Jog(Base(s.BaseFeatureId),EdgeReferences(s.BaseFeatureId),s.Height,s.Offset,s.Thickness,s.Reverse)),
             SheetMetalRipFeatureParameters s => new(null,kernel.Rip(Base(s.BaseFeatureId),EdgeReferences(s.BaseFeatureId),s.Gap)),
             SheetMetalCornerReliefFeatureParameters s => new(null,kernel.CornerRelief(Base(s.BaseFeatureId),EdgeReferences(s.BaseFeatureId),s.Radius)),
+            SheetMetalBendFeatureParameters s => new(null,kernel.Bend(Base(s.BaseFeatureId),Sketch(s.SketchId),s.AngleDegrees,s.Reverse)),
             StructuralMemberFeatureParameters s => new(null,IsSpatial(s.PathSketchId)
                 ?kernel.SweepSpatial(null,Sketch(s.ProfileSketchId),SpatialPath(s.PathSketchId))
                 :kernel.Sweep(null,Sketch(s.ProfileSketchId),Sketch(s.PathSketchId))),
