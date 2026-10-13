@@ -515,9 +515,9 @@ public partial class MainWindow
         Status((first?"A":"B")+" montaj referansı seçili gerçek yüzden yakalandı.");
     }
 
-    private bool TryAssemblyMateLocalFrame(AssemblyReference reference,out Vector3d origin,out Vector3d? direction)
+    private bool TryAssemblyMateLocalFrame(AssemblyReference reference,out Vector3d origin,out Vector3d? direction,out bool cylindrical,out double radius)
     {
-        origin=Vector3d.Zero;direction=null;
+        origin=Vector3d.Zero;direction=null;cylindrical=false;radius=0;
         if(reference.SemanticName==AssemblyReferenceCatalog.Origin)return true;
         if(AssemblyReferenceCatalog.TryDirection(reference,out var standard))
         {
@@ -530,6 +530,17 @@ public partial class MainWindow
             if(frame.Length<6)return false;
             origin=new Vector3d(frame[0],frame[1],frame[2]);
             direction=new Vector3d(frame[3],frame[4],frame[5]).Normalized();
+            if(frame.Length>=8)
+            {
+                cylindrical=Math.Abs(frame[6]-1.0)<0.5;
+                radius=cylindrical?frame[7]:0;
+            }
+            else if(reference.SemanticName.StartsWith("C;",StringComparison.Ordinal))
+            {
+                cylindrical=true;
+                var fields=reference.SemanticName.Split(';');
+                if(fields.Length>=9)double.TryParse(fields[^1],NumberStyles.Float,CultureInfo.InvariantCulture,out radius);
+            }
             return true;
         }
         catch{return false;}
@@ -537,10 +548,10 @@ public partial class MainWindow
 
     private AssemblyDocument SolveAssemblyMate(AssemblyDocument document,AssemblyMate mate)
     {
-        if(!TryAssemblyMateLocalFrame(mate.A,out var aOrigin,out var aDirection)||
-           !TryAssemblyMateLocalFrame(mate.B,out var bOrigin,out var bDirection))
+        if(!TryAssemblyMateLocalFrame(mate.A,out var aOrigin,out var aDirection,out var aCylinder,out var aRadius)||
+           !TryAssemblyMateLocalFrame(mate.B,out var bOrigin,out var bDirection,out var bCylinder,out var bRadius))
             throw new InvalidOperationException("Montaj referans geometrisi çözülemedi.");
-        return AssemblyMateSolver.ApplyResolved(document,mate,aOrigin,aDirection,bOrigin,bDirection);
+        return AssemblyMateSolver.ApplyResolved(document,mate,aOrigin,aDirection,bOrigin,bDirection,aCylinder,aRadius,bCylinder,bRadius);
     }
 
     private void BeginAssemblyMate(Guid? mateId)
@@ -574,7 +585,7 @@ public partial class MainWindow
             if(existing is not null&&existing.B.Kind==reference.Kind&&existing.B.SemanticName==reference.Semantic)
                 AssemblyMateBReference.SelectedItem=bRef;
         }
-        foreach(var type in new[]{MateType.Coincident,MateType.Concentric,MateType.Parallel,MateType.Perpendicular,MateType.Distance,MateType.Angle})
+        foreach(var type in new[]{MateType.Coincident,MateType.Concentric,MateType.Parallel,MateType.Perpendicular,MateType.Tangent,MateType.Distance,MateType.Angle})
         {
             var item=new ComboBoxItem{Content=type.ToString(),Tag=type};AssemblyMateType.Items.Add(item);
             if(existing?.Type==type)AssemblyMateType.SelectedItem=item;
@@ -589,7 +600,7 @@ public partial class MainWindow
         AssemblyMateValue.Text=(existing?.Value??0).ToString("G17",CultureInfo.CurrentCulture);
         AssemblyMatePanel.Visibility=Visibility.Visible;AssemblyMovePanel.Visibility=Visibility.Collapsed;
         PropertyTitle.Text=existing is null?"Montaj İlişkisi":"Montaj İlişkisini Düzenle";
-        PropertyInfo.Text="Standart Origin/Düzlem/Eksen veya gerçek seçili düzlemsel/silindirik yüz • kalıcı semantic referans • 3B mate çözümü • tek Undo/Redo transaction.";
+        PropertyInfo.Text="Standart Origin/Düzlem/Eksen veya gerçek düzlemsel/silindirik yüz • Çakışık/Eşmerkezli/Paralel/Dik/Teğet/Mesafe/Açı • kalıcı semantic referans • 3B mate çözümü.";
         ManagerTabs.SelectedItem=PropertyManagerTab;
     }
 
