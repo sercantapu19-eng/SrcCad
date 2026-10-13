@@ -1200,48 +1200,71 @@ public sealed partial class SketchModel
 
     private bool TryGetClosedLineLoops(out List<List<Point2d>> loops)
     {
-        loops = new List<List<Point2d>>();
-        var lines = Lines(false).ToList();
-        if (lines.Count == 0) return false;
+        loops=new List<List<Point2d>>();
+        var entities=Entities.Where(e=>!e.Construction&&(e is SketchLine||e is SketchArc)).ToArray();
+        if(entities.Length==0)return false;
 
-        var adjacency = new Dictionary<int, List<SketchLine>>();
-        foreach (var line in lines)
+        (int A,int B) Endpoints(SketchEntity entity)=>entity switch
         {
-            if (!adjacency.TryGetValue(line.StartPointId, out var a)) adjacency[line.StartPointId] = a = new();
-            if (!adjacency.TryGetValue(line.EndPointId, out var b)) adjacency[line.EndPointId] = b = new();
-            a.Add(line);
-            b.Add(line);
+            SketchLine line=>(line.StartPointId,line.EndPointId),
+            SketchArc arc=>(arc.StartPointId,arc.EndPointId),
+            _=>throw new InvalidOperationException()
+        };
+
+        var adjacency=new Dictionary<int,List<SketchEntity>>();
+        foreach(var entity in entities)
+        {
+            var (a,b)=Endpoints(entity);
+            if(!adjacency.TryGetValue(a,out var aa))adjacency[a]=aa=new();
+            if(!adjacency.TryGetValue(b,out var bb))adjacency[b]=bb=new();
+            aa.Add(entity);bb.Add(entity);
         }
-        if (adjacency.Values.Any(v => v.Count != 2)) return false;
+        if(adjacency.Values.Any(v=>v.Count!=2))return false;
 
-        var unused = new HashSet<int>(lines.Select(l => l.Id));
-        while (unused.Count > 0)
+        var unused=new HashSet<int>(entities.Select(e=>e.Id));
+        while(unused.Count>0)
         {
-            var first = lines.First(l => unused.Contains(l.Id));
-            var startPoint = first.StartPointId;
-            var currentPoint = startPoint;
-            SketchLine? previous = null;
-            var loop = new List<Point2d>();
+            var first=entities.First(e=>unused.Contains(e.Id));
+            var startPoint=Endpoints(first).A;
+            var currentPoint=startPoint;
+            SketchEntity? previous=null;
+            var loop=new List<Point2d>();
 
-            while (true)
+            while(true)
             {
-                loop.Add(Point(currentPoint).Position);
-                var next = adjacency[currentPoint]
-                    .FirstOrDefault(l => unused.Contains(l.Id) && (previous is null || l.Id != previous.Id));
-                if (next is null) return false;
+                var next=adjacency[currentPoint]
+                    .FirstOrDefault(e=>unused.Contains(e.Id)&&(previous is null||e.Id!=previous.Id));
+                if(next is null)return false;
                 unused.Remove(next.Id);
-                var nextPoint = next.StartPointId == currentPoint ? next.EndPointId : next.StartPointId;
-                previous = next;
-                currentPoint = nextPoint;
-                if (currentPoint == startPoint) break;
-                if (loop.Count > lines.Count) return false;
+
+                var (a,b)=Endpoints(next);
+                var forward=a==currentPoint;
+                var nextPoint=forward?b:a;
+
+                if(next is SketchLine)
+                {
+                    loop.Add(Point(currentPoint).Position);
+                }
+                else if(next is SketchArc arc)
+                {
+                    var sampled=SampleArc(arc,24);
+                    var ordered=forward?sampled:sampled.Reverse().ToArray();
+                    // Include the current endpoint and interior samples, but leave the
+                    // terminal endpoint for the next connected entity.
+                    for(var i=0;i<ordered.Count-1;i++)loop.Add(ordered[i]);
+                }
+
+                previous=next;
+                currentPoint=nextPoint;
+                if(currentPoint==startPoint)break;
+                if(loop.Count>entities.Length*64)return false;
             }
 
-            if (loop.Count < 3 || !SimpleLoop(loop)) return false;
-            if (SignedArea(loop) < 0) loop.Reverse();
+            if(loop.Count<3||!SimpleLoop(loop))return false;
+            if(SignedArea(loop)<0)loop.Reverse();
             loops.Add(loop);
         }
-        return loops.Count > 0;
+        return loops.Count>0;
     }
 
     public bool TryGetClosedPolyline(out List<Point2d> orderedPoints)
