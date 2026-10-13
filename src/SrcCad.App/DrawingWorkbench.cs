@@ -12,6 +12,7 @@ public partial class MainWindow
 {
     private DrawingDocument? _drawingDocument;
     private string? _drawingPath;
+    private Guid? _activeDrawingSheetId;
     private readonly Dictionary<string,string> _drawingBodies=new(StringComparer.OrdinalIgnoreCase);
     private TreeViewItem? _drawingRoot;
     private readonly Stack<DrawingDocument> _drawingUndo=new();
@@ -30,6 +31,8 @@ public partial class MainWindow
             _drawingRedo.Clear();
         }
         _drawingDocument=safe;
+        if(_activeDrawingSheetId is not Guid active||!safe.Sheets.Any(s=>s.Id==active))
+            _activeDrawingSheetId=safe.Sheets.FirstOrDefault()?.Id;
     }
 
     private void ResetDrawingHistory()
@@ -40,6 +43,8 @@ public partial class MainWindow
     private void RestoreDrawingDocument(DrawingDocument document)
     {
         _drawingDocument=DrawingDocumentFile.Clone(document);
+        if(_activeDrawingSheetId is not Guid active||!_drawingDocument.Sheets.Any(s=>s.Id==active))
+            _activeDrawingSheetId=_drawingDocument.Sheets.FirstOrDefault()?.Id;
         _drawingBodies.Clear();
         RefreshDrawingTree();
         RenderDrawing();
@@ -64,11 +69,54 @@ public partial class MainWindow
     private void ExitDrawingMode()
     {
         if(_drawingRoot is not null)FeatureTree.Items.Remove(_drawingRoot);
-        _drawingRoot=null;_drawingDocument=null;_drawingPath=null;_drawingBodies.Clear();ResetDrawingHistory();
+        _drawingRoot=null;_drawingDocument=null;_drawingPath=null;_activeDrawingSheetId=null;_drawingBodies.Clear();ResetDrawingHistory();
         PartNode.Visibility=Visibility.Visible;
         DrawingViewPanel.Visibility=Visibility.Collapsed;_drawingEditingViewId=null;
         DrawingAnnotationPanel.Visibility=Visibility.Collapsed;_drawingEditingAnnotationId=null;
     }
+
+    private DrawingSheet ActiveDrawingSheet()
+    {
+        if(_drawingDocument is null||_drawingDocument.Sheets.Length==0)
+            throw new InvalidOperationException("Teknik resim paftası bulunamadı.");
+        if(_activeDrawingSheetId is Guid id)
+        {
+            var active=_drawingDocument.Sheets.FirstOrDefault(s=>s.Id==id);
+            if(active is not null)return active;
+        }
+        _activeDrawingSheetId=_drawingDocument.Sheets[0].Id;
+        return _drawingDocument.Sheets[0];
+    }
+
+    private void DrawingNewSheet_Click(object sender,RoutedEventArgs e)
+    {
+        if(_drawingDocument is null){NewDrawing_Click(sender,e);return;}
+        var template=ActiveDrawingSheet();
+        var next=new DrawingSheet(Guid.NewGuid(),"Pafta"+(_drawingDocument.Sheets.Length+1),
+            template.Width,template.Height,template.Projection);
+        SetDrawingDocument(_drawingDocument with{Sheets=_drawingDocument.Sheets.Append(next).ToArray()});
+        _activeDrawingSheetId=next.Id;
+        RefreshDrawingTree();RenderDrawing();
+        Status(next.Name+" oluşturuldu ve aktif pafta yapıldı.");
+    }
+
+    private void ChangeDrawingSheet(int delta)
+    {
+        if(_drawingDocument is null||_drawingDocument.Sheets.Length==0)return;
+        var current=ActiveDrawingSheet();
+        var index=Array.FindIndex(_drawingDocument.Sheets,s=>s.Id==current.Id);
+        var next=Math.Clamp(index+delta,0,_drawingDocument.Sheets.Length-1);
+        if(next==index)
+        {
+            Status(delta<0?"İlk paftadasınız.":"Son paftadasınız.");return;
+        }
+        _activeDrawingSheetId=_drawingDocument.Sheets[next].Id;
+        RefreshDrawingTree();RenderDrawing();
+        Status(_drawingDocument.Sheets[next].Name+" aktif.");
+    }
+
+    private void DrawingPreviousSheet_Click(object sender,RoutedEventArgs e)=>ChangeDrawingSheet(-1);
+    private void DrawingNextSheet_Click(object sender,RoutedEventArgs e)=>ChangeDrawingSheet(1);
 
     private static (Vector3d Direction,Vector3d Up) DrawingOrientation(DrawingViewType type)
         => type switch
@@ -124,7 +172,7 @@ public partial class MainWindow
         _drawingRoot=new TreeViewItem{Header="Teknik Resim1",IsExpanded=true,Tag="drawing-root"};
         foreach(var sheet in _drawingDocument.Sheets)
         {
-            var sheetNode=new TreeViewItem{Header=$"{sheet.Name} ({sheet.Width:0.#} × {sheet.Height:0.#} mm)",Tag=sheet.Id,IsExpanded=true};
+            var sheetNode=new TreeViewItem{Header=$"{sheet.Name}{(_activeDrawingSheetId==sheet.Id?" [Aktif]":"")} ({sheet.Width:0.#} × {sheet.Height:0.#} mm)",Tag=sheet.Id,IsExpanded=true};
             foreach(var view in _drawingDocument.Views.Where(v=>v.SheetId==sheet.Id))
             {
                 var item=new TreeViewItem{Header=$"{view.Name} [{view.Type}] 1:{1.0/view.Scale:0.###}",Tag=view.Id};
@@ -276,7 +324,7 @@ public partial class MainWindow
         if(_drawingDocument is null||_drawingDocument.Sheets.Length==0)return;
         _viewer.ClearModel();
         _viewer.ClearSketch();
-        var sheet=_drawingDocument.Sheets[0];
+        var sheet=ActiveDrawingSheet();
         void Line(double x1,double y1,double x2,double y2,int state=0)
             => _viewer.AddStyledSketchLine(x1,y1,0,x2,y2,0,state);
         Line(0,0,sheet.Width,0);Line(sheet.Width,0,sheet.Width,sheet.Height);
@@ -664,7 +712,7 @@ public partial class MainWindow
         var sheet=new DrawingSheet(Guid.NewGuid(),"A3",420,297,DrawingProjectionStandard.FirstAngle);
         _drawingDocument=new DrawingDocument(Guid.NewGuid(),new[]{sheet},Array.Empty<DrawingView>(),Array.Empty<DrawingAnnotation>());
         ResetDrawingHistory();
-        _drawingPath=null;PartNode.Visibility=Visibility.Collapsed;
+        _drawingPath=null;_activeDrawingSheetId=sheet.Id;PartNode.Visibility=Visibility.Collapsed;
         RefreshDrawingTree();RenderDrawing();CommandTabs.SelectedIndex=5;
         Status("Yeni Teknik Resim • Model Görünümü ile .scpart seçin.");
     }
@@ -678,7 +726,7 @@ public partial class MainWindow
         try
         {
             _=DrawingBodies(dialog.FileName).FirstOrDefault()??throw new InvalidDataException("Model görünüşü için geometri bulunamadı.");
-            var sheet=_drawingDocument.Sheets[0];
+            var sheet=ActiveDrawingSheet();
             var view=new DrawingView(Guid.NewGuid(),"Ön Görünüş",Path.GetFullPath(dialog.FileName),
                 DrawingViewType.Front,sheet.Id,new Point2d(sheet.Width*0.35,sheet.Height*0.55),1.0);
             SetDrawingDocument(_drawingDocument with{Views=_drawingDocument.Views.Append(view).ToArray()});
@@ -961,8 +1009,9 @@ public partial class MainWindow
     private void DrawingAddNote_Click(object sender,RoutedEventArgs e)
     {
         if(_drawingDocument is null)return;
-        var sheet=_drawingDocument.Sheets[0];
-        var note=new DrawingAnnotation(Guid.NewGuid(),sheet.Id,SelectedDrawingView()?.Id,new Point2d(20,20),"NOT");
+        var sheet=ActiveDrawingSheet();
+        var selected=SelectedDrawingView();
+        var note=new DrawingAnnotation(Guid.NewGuid(),sheet.Id,selected?.SheetId==sheet.Id?selected.Id:null,new Point2d(20,20),"NOT");
         SetDrawingDocument(_drawingDocument with{Annotations=_drawingDocument.Annotations.Append(note).ToArray()});
         RefreshDrawingTree(note.Id);RenderDrawing();Status("Teknik resim notu eklendi.");
     }
@@ -980,7 +1029,7 @@ public partial class MainWindow
         ManagerTabs.SelectedItem=PropertyManagerTab;
         if(lines.Length>0)
         {
-            var sheet=_drawingDocument.Sheets[0];
+            var sheet=_drawingDocument.Sheet(view.SheetId);
             var text="BOM\n"+string.Join("\n",lines);
             var note=new DrawingAnnotation(Guid.NewGuid(),sheet.Id,view.Id,new Point2d(sheet.Width-120,30),text,
                 DrawingAnnotationKind.BillOfMaterials);
@@ -995,7 +1044,7 @@ public partial class MainWindow
         if(_drawingDocument is null)return;
         var view=SelectedDrawingView();
         if(view is null){Status("Balon için bir görünüş seçin.");return;}
-        var sheet=_drawingDocument.Sheets[0];
+        var sheet=_drawingDocument.Sheet(view.SheetId);
         var number=_drawingDocument.Annotations.Count(a=>a.Text.StartsWith("BALON ",StringComparison.Ordinal))+1;
         var note=new DrawingAnnotation(Guid.NewGuid(),sheet.Id,view.Id,
             new Point2d(view.Position.X+35,view.Position.Y+35),"BALON "+number,
@@ -1140,7 +1189,7 @@ public partial class MainWindow
 
         try
         {
-            var sheet=_drawingDocument.Sheets[0];
+            var sheet=ActiveDrawingSheet();
             var inv=System.Globalization.CultureInfo.InvariantCulture;
             using var writer=new StreamWriter(dialog.FileName,false,new System.Text.UTF8Encoding(false));
             void Pair(int code,string value){writer.WriteLine(code.ToString(inv));writer.WriteLine(value);}
@@ -1215,6 +1264,7 @@ public partial class MainWindow
         {
             NewDrawing_Click(sender,e);
             _drawingDocument=DrawingDocumentFile.Load(dialog.FileName);ResetDrawingHistory();_drawingPath=dialog.FileName;
+            _activeDrawingSheetId=_drawingDocument.Sheets.FirstOrDefault()?.Id;
             _drawingBodies.Clear();RefreshDrawingTree();RenderDrawing();
             Status("Teknik resim açıldı: "+Path.GetFileName(dialog.FileName));
         }
