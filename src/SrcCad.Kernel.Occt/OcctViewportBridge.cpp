@@ -2597,35 +2597,28 @@ namespace SrcCad::Kernel::Occt
         catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
     }
 
-    static void projectionBasis(array<double>^ direction,array<double>^ up,gp_Vec& d,gp_Vec& u,gp_Vec& right);
-    static array<double>^ projectShapeEdges(const TopoDS_Shape& shape,array<double>^ direction,array<double>^ up);
-
-    array<double>^ OcctFeatureKernel::ProjectEdges(String^ body,array<double>^ direction,array<double>^ up)
+#pragma managed(push, off)
+    static bool projectionBasisNative(const std::array<double,3>& direction,const std::array<double,3>& up,
+                                      gp_Vec& d,gp_Vec& u,gp_Vec& right)
     {
-        try{return projectShapeEdges(decodeFeature(body),direction,up);}
-        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
-    }
-
-    static void projectionBasis(array<double>^ direction,array<double>^ up,gp_Vec& d,gp_Vec& u,gp_Vec& right)
-    {
-        if(direction==nullptr||direction->Length!=3||up==nullptr||up->Length!=3)
-            throw gcnew ArgumentException("Projection requires direction and up vectors.");
-        for each(double value in direction)if(!std::isfinite(value))throw gcnew ArgumentException("Invalid projection direction.");
-        for each(double value in up)if(!std::isfinite(value))throw gcnew ArgumentException("Invalid projection up vector.");
         d=gp_Vec(direction[0],direction[1],direction[2]);
         u=gp_Vec(up[0],up[1],up[2]);
-        if(d.Magnitude()<=1e-12||u.Magnitude()<=1e-12)throw gcnew ArgumentException("Projection vectors cannot be zero.");
+        if(d.Magnitude()<=1e-12||u.Magnitude()<=1e-12)return false;
         d.Normalize();u-=d.Multiplied(u.Dot(d));
-        if(u.Magnitude()<=1e-12)throw gcnew ArgumentException("Projection up vector cannot be parallel to direction.");
+        if(u.Magnitude()<=1e-12)return false;
         u.Normalize();right=u.Crossed(d);
-        if(right.Magnitude()<=1e-12)throw gcnew ArgumentException("Projection basis is invalid.");
+        if(right.Magnitude()<=1e-12)return false;
         right.Normalize();
+        return true;
     }
 
-    static array<double>^ projectShapeEdges(const TopoDS_Shape& shape,array<double>^ direction,array<double>^ up)
+    static std::vector<double> projectShapeEdgesNative(const TopoDS_Shape& shape,
+                                                        const std::array<double,3>& direction,
+                                                        const std::array<double,3>& up)
     {
-        gp_Vec d,u,right;projectionBasis(direction,up,d,u,right);
-        auto values=gcnew System::Collections::Generic::List<double>();
+        gp_Vec d,u,right;
+        if(!projectionBasisNative(direction,up,d,u,right))return {};
+        std::vector<double> values;
         for(TopExp_Explorer ex(shape,TopAbs_EDGE);ex.More();ex.Next())
         {
             TopoDS_Edge edge=TopoDS::Edge(ex.Current());
@@ -2639,12 +2632,34 @@ namespace SrcCad::Kernel::Occt
                 const double t=first+(last-first)*(double(i)/segments);
                 gp_Pnt current=curve.Value(t);
                 gp_Vec pa(gp_Pnt(0,0,0),previous),pb(gp_Pnt(0,0,0),current);
-                values->Add(pa.Dot(right));values->Add(pa.Dot(u));
-                values->Add(pb.Dot(right));values->Add(pb.Dot(u));
+                values.push_back(pa.Dot(right));values.push_back(pa.Dot(u));
+                values.push_back(pb.Dot(right));values.push_back(pb.Dot(u));
                 previous=current;
             }
         }
-        return values->ToArray();
+        return values;
+    }
+#pragma managed(pop)
+
+    array<double>^ OcctFeatureKernel::ProjectEdges(String^ body,array<double>^ direction,array<double>^ up)
+    {
+        if(direction==nullptr||direction->Length!=3||up==nullptr||up->Length!=3)
+            throw gcnew ArgumentException("Projection requires direction and up vectors.");
+        for each(double value in direction)if(!std::isfinite(value))throw gcnew ArgumentException("Invalid projection direction.");
+        for each(double value in up)if(!std::isfinite(value))throw gcnew ArgumentException("Invalid projection up vector.");
+        std::array<double,3> nativeDirection{direction[0],direction[1],direction[2]};
+        std::array<double,3> nativeUp{up[0],up[1],up[2]};
+        gp_Vec d,u,right;
+        if(!projectionBasisNative(nativeDirection,nativeUp,d,u,right))
+            throw gcnew ArgumentException("Projection vectors are zero or parallel.");
+        try
+        {
+            auto nativeValues=projectShapeEdgesNative(decodeFeature(body),nativeDirection,nativeUp);
+            auto values=gcnew array<double>((int)nativeValues.size());
+            for(int i=0;i<values->Length;++i)values[i]=nativeValues[(size_t)i];
+            return values;
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
     }
 
     array<double>^ OcctFeatureKernel::Bounds(String^ body)
@@ -2661,9 +2676,18 @@ namespace SrcCad::Kernel::Occt
 
     array<double>^ OcctFeatureKernel::ProjectCircles(String^ body,array<double>^ direction,array<double>^ up)
     {
+        if(direction==nullptr||direction->Length!=3||up==nullptr||up->Length!=3)
+            throw gcnew ArgumentException("Projection requires direction and up vectors.");
+        for each(double value in direction)if(!std::isfinite(value))throw gcnew ArgumentException("Invalid projection direction.");
+        for each(double value in up)if(!std::isfinite(value))throw gcnew ArgumentException("Invalid projection up vector.");
+        std::array<double,3> nativeDirection{direction[0],direction[1],direction[2]};
+        std::array<double,3> nativeUp{up[0],up[1],up[2]};
+        gp_Vec d,u,right;
+        if(!projectionBasisNative(nativeDirection,nativeUp,d,u,right))
+            throw gcnew ArgumentException("Projection vectors are zero or parallel.");
         try
         {
-            TopoDS_Shape shape=decodeFeature(body);gp_Vec d,u,right;projectionBasis(direction,up,d,u,right);
+            TopoDS_Shape shape=decodeFeature(body);
             auto values=gcnew System::Collections::Generic::List<double>();
             for(TopExp_Explorer ex(shape,TopAbs_EDGE);ex.More();ex.Next())
             {
@@ -2687,6 +2711,15 @@ namespace SrcCad::Kernel::Occt
             throw gcnew ArgumentException("Section plane requires origin and normal.");
         for each(double value in planeOrigin)if(!std::isfinite(value))throw gcnew ArgumentException("Invalid section origin.");
         for each(double value in planeNormal)if(!std::isfinite(value))throw gcnew ArgumentException("Invalid section normal.");
+        if(direction==nullptr||direction->Length!=3||up==nullptr||up->Length!=3)
+            throw gcnew ArgumentException("Projection requires direction and up vectors.");
+        for each(double value in direction)if(!std::isfinite(value))throw gcnew ArgumentException("Invalid projection direction.");
+        for each(double value in up)if(!std::isfinite(value))throw gcnew ArgumentException("Invalid projection up vector.");
+        std::array<double,3> nativeDirection{direction[0],direction[1],direction[2]};
+        std::array<double,3> nativeUp{up[0],up[1],up[2]};
+        gp_Vec d,u,right;
+        if(!projectionBasisNative(nativeDirection,nativeUp,d,u,right))
+            throw gcnew ArgumentException("Projection vectors are zero or parallel.");
         try
         {
             TopoDS_Shape shape=decodeFeature(body);
@@ -2694,7 +2727,10 @@ namespace SrcCad::Kernel::Occt
             gp_Pln plane(gp_Pnt(planeOrigin[0],planeOrigin[1],planeOrigin[2]),normal);
             BRepAlgoAPI_Section section(shape,plane,false);section.ComputePCurveOn1(false);section.Approximation(true);section.Build();
             if(!section.IsDone())throw gcnew InvalidOperationException("OCCT section operation failed.");
-            return projectShapeEdges(section.Shape(),direction,up);
+            auto nativeValues=projectShapeEdgesNative(section.Shape(),nativeDirection,nativeUp);
+            auto values=gcnew array<double>((int)nativeValues.size());
+            for(int i=0;i<values->Length;++i)values[i]=nativeValues[(size_t)i];
+            return values;
         }
         catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
     }
