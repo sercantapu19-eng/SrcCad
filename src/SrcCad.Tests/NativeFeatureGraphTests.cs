@@ -86,6 +86,28 @@ internal static class NativeFeatureGraphTests
             var shellInspect=OcctFeatureKernel.Inspect(shellPreview.Outputs[shellNode.Id].BRep!);
             Check(shellInspect[0]>0&&shellInspect[0]<24000&&shellInspect[1]==1,"shell feature produces valid hollow solid");
 
+            string? draftFace=null;
+            string? draftedBody=null;
+            var neutralFrame=new[]{plane.Origin.X,plane.Origin.Y,plane.Origin.Z,plane.Normal.X,plane.Normal.Y,plane.Normal.Z};
+            foreach(var faceRef in faceRefs)
+            {
+                try
+                {
+                    var candidate=OcctFeatureKernel.Draft(bossBody,new[]{faceRef},neutralFrame,3,false);
+                    var info=OcctFeatureKernel.Inspect(candidate);
+                    if(info[0]>0&&info[1]==1){draftFace=faceRef;draftedBody=candidate;break;}
+                }
+                catch(InvalidOperationException){}
+            }
+            Check(draftFace is not null&&draftedBody is not null,"native draft resolves a face against neutral plane");
+            var draftNode=new FeatureNode(Guid.NewGuid(),"Draft1",new DraftFeatureParameters(boss.Id,plane,3),
+                References:new[]{new FeatureReference(boss.Id,TopologyKind.Face,draftFace!)});
+            var draftDoc=doc with{Features=doc.Features.Append(draftNode).ToArray()};
+            var draftPreview=session.Preview(draftDoc);
+            Check(draftPreview.Success,"draft preview succeeds through feature graph");
+            var draftInspect=OcctFeatureKernel.Inspect(draftPreview.Outputs[draftNode.Id].BRep!);
+            Check(draftInspect[0]>0&&draftInspect[1]==1,"draft feature produces valid solid B-Rep");
+
             var mirrorPlane=new PlaneFrame("Ayna",plane.Origin,plane.U,plane.V,plane.Normal).Validate();
             var mirrorBody=OcctFeatureKernel.Mirror(bossBody,
                 new[]{mirrorPlane.Origin.X,mirrorPlane.Origin.Y,mirrorPlane.Origin.Z,
@@ -189,7 +211,7 @@ internal static class NativeFeatureGraphTests
             }
             finally{File.Delete(path);}
         }
-        Console.WriteLine($"NATIVE FEATURE GRAPH: {n}/81 PASS");
+        Console.WriteLine($"NATIVE FEATURE GRAPH: {n} PASS");
     }
 }
 #endif

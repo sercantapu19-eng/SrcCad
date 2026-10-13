@@ -52,6 +52,7 @@
 #include <gp_Pnt.hxx>
 #include <gp_Vec.hxx>
 #include <gp_Trsf.hxx>
+#include <gp_Pln.hxx>
 #include <Standard_Failure.hxx>
 #include <StdSelect_BRepOwner.hxx>
 #include <Prs3d_Drawer.hxx>
@@ -67,6 +68,7 @@
 #include <BRepFilletAPI_MakeFillet.hxx>
 #include <BRepFilletAPI_MakeChamfer.hxx>
 #include <BRepOffsetAPI_MakeThickSolid.hxx>
+#include <BRepOffsetAPI_DraftAngle.hxx>
 #include <TopTools_ListOfShape.hxx>
 #include <BRepTools.hxx>
 #include <BRep_Builder.hxx>
@@ -1267,6 +1269,37 @@ namespace SrcCad::Kernel::Occt
             shell.MakeThickSolidByJoin(baseShape,closingFaces,offset,1.0e-3);
             if(!shell.IsDone())throw gcnew InvalidOperationException("OCCT shell operation failed.");
             TopoDS_Shape result=shell.Shape();
+            return encodeFeature(result);
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
+    String^ OcctFeatureKernel::Draft(String^ baseBody,array<String^>^ faceReferences,
+        array<double>^ neutralPlane,double angleDegrees,bool reverse)
+    {
+        if(faceReferences==nullptr||faceReferences->Length==0)
+            throw gcnew ArgumentException("Draft requires at least one face.");
+        if(neutralPlane==nullptr||neutralPlane->Length!=6)
+            throw gcnew ArgumentException("Draft neutral plane requires origin and normal.");
+        for each(double value in neutralPlane)
+            if(!std::isfinite(value))throw gcnew ArgumentException("Invalid draft neutral plane.");
+        if(!std::isfinite(angleDegrees)||angleDegrees<=1e-9||angleDegrees>=89.0)
+            throw gcnew ArgumentException("Draft angle must be between 0 and 89 degrees.");
+        try
+        {
+            TopoDS_Shape baseShape=decodeFeature(baseBody);
+            gp_Pnt origin(neutralPlane[0],neutralPlane[1],neutralPlane[2]);
+            gp_Dir pull(neutralPlane[3],neutralPlane[4],neutralPlane[5]);
+            gp_Pln neutral(origin,pull);
+            double angle=angleDegrees*3.14159265358979323846/180.0;
+            if(reverse)angle=-angle;
+
+            BRepOffsetAPI_DraftAngle draft(baseShape);
+            for each(String^ reference in faceReferences)
+                draft.Add(resolveFaceReference(baseShape,reference),pull,angle,neutral,false);
+            draft.Build();
+            if(!draft.IsDone())throw gcnew InvalidOperationException("OCCT draft operation failed.");
+            TopoDS_Shape result=draft.Shape();
             return encodeFeature(result);
         }
         catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
