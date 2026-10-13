@@ -152,7 +152,7 @@ public partial class MainWindow
         };
         var offset=next==DrawingViewType.Top?new Point2d(0,-90):new Point2d(120,0);
         var view=new DrawingView(Guid.NewGuid(),next==DrawingViewType.Top?"Üst Görünüş":"Sağ Görünüş",
-            parent.ModelPath,next,parent.SheetId,parent.Position+offset,parent.Scale,parent.Id);
+            parent.ModelPath,next,parent.SheetId,new Point2d(parent.Position.X+offset.X,parent.Position.Y+offset.Y),parent.Scale,parent.Id);
         _drawingDocument=_drawingDocument with{Views=_drawingDocument.Views.Append(view).ToArray()};
         RefreshDrawingTree(view.Id);RenderDrawing();Status(view.Name+" oluşturuldu.");
     }
