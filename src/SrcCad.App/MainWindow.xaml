@@ -335,13 +335,16 @@
 
                             <StackPanel x:Name="AssemblyMatePanel" Visibility="Collapsed" Margin="0,16,0,0">
                                 <TextBlock Text="Bileşen A" FontWeight="Bold"/>
-                                <ComboBox x:Name="AssemblyMateA" Margin="0,4,0,8"/>
+                                <ComboBox x:Name="AssemblyMateA" Margin="0,4,0,4"/>
+                                <ComboBox x:Name="AssemblyMateAReference" Margin="0,0,0,8" ToolTip="Orijin, standart düzlem veya eksen referansı"/>
                                 <TextBlock Text="Bileşen B" FontWeight="Bold"/>
-                                <ComboBox x:Name="AssemblyMateB" Margin="0,4,0,8"/>
+                                <ComboBox x:Name="AssemblyMateB" Margin="0,4,0,4"/>
+                                <ComboBox x:Name="AssemblyMateBReference" Margin="0,0,0,8" ToolTip="Orijin, standart düzlem veya eksen referansı"/>
                                 <TextBlock Text="İlişki Tipi" FontWeight="Bold"/>
                                 <ComboBox x:Name="AssemblyMateType" Margin="0,4,0,8"/>
                                 <TextBlock Text="Mesafe / Açı Değeri" FontWeight="Bold"/>
                                 <TextBox x:Name="AssemblyMateValue" Margin="0,4,0,8"/>
+                                <TextBlock Text="Coincident / Parallel / Perpendicular / Concentric / Distance / Angle ilişkileri seçilen standart referansların gerçek 3B yönlerini çözer." TextWrapping="Wrap" Foreground="#5F6B76" Margin="0,0,0,8"/>
                                 <StackPanel Orientation="Horizontal">
                                     <Button Content="✓" Width="52" Height="34" Click="AssemblyMateOk_Click"/>
                                     <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="AssemblyMateCancel_Click"/>
