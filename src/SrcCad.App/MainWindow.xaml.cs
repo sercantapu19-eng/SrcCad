@@ -40,6 +40,7 @@ public partial class MainWindow : Window
         (WinForms.Control.ModifierKeys & WinForms.Keys.Control) != 0;
     private bool _middleDown;
     private bool _panMode;
+    private bool _inspectMeasureMode;
     private int _lastMouseX;
     private int _lastMouseY;
 
@@ -364,8 +365,11 @@ public partial class MainWindow : Window
             UpdateActiveDraftSelection();
             UpdateActiveEdgeFlangeSelection();
             UpdateActiveEndCapSelection();
-            Status(selected ? _viewer.SelectionSummary() : "Seçim yok");
-            if (selected && e.Clicks >= 2 && !toggle)
+            if(_inspectMeasureMode)
+                UpdateInspectMeasureFromSelection();
+            else
+                Status(selected ? _viewer.SelectionSummary() : "Seçim yok");
+            if (selected && e.Clicks >= 2 && !toggle && !_inspectMeasureMode)
                 NormalToSelectedSupport();
         }
     }
@@ -544,7 +548,7 @@ public partial class MainWindow : Window
             AdjustExtrusionDepth(e.Delta);
             return;
         }
-        _viewer.ZoomWheel(e.Delta);
+        _viewer.ZoomWheelAt(e.X,e.Y,e.Delta);
     }
 
     private bool TryGetSketchCursor(int x, int y, out Point2d uv, out int snappedPointId, bool snap = true)
@@ -2417,8 +2421,11 @@ public partial class MainWindow : Window
     private void NormalTo_Click(object sender,RoutedEventArgs e) => NormalToSelectedSupport();
     private void Iso_Click(object sender, RoutedEventArgs e) => _viewer.SetIsoView();
     private void Front_Click(object sender, RoutedEventArgs e) => _viewer.SetFrontView();
+    private void Back_Click(object sender, RoutedEventArgs e) => _viewer.SetBackView();
     private void Top_Click(object sender, RoutedEventArgs e) => _viewer.SetTopView();
+    private void Bottom_Click(object sender, RoutedEventArgs e) => _viewer.SetBottomView();
     private void Right_Click(object sender, RoutedEventArgs e) => _viewer.SetRightView();
+    private void Left_Click(object sender, RoutedEventArgs e) => _viewer.SetLeftView();
 
     private void ShadedEdges_Click(object sender,RoutedEventArgs e)
     {
@@ -2438,18 +2445,21 @@ public partial class MainWindow : Window
 
     private void FaceSelection_Click(object sender, RoutedEventArgs e)
     {
+        _inspectMeasureMode=false;MeasureStatusText.Text="";
         _viewer.SetSelectionMode(CadSelectionMode.Face);
         Status("Yüz seçimi aktif • mouse üstünde OCCT pre-highlight görünür.");
     }
 
     private void EdgeSelection_Click(object sender, RoutedEventArgs e)
     {
+        _inspectMeasureMode=false;MeasureStatusText.Text="";
         _viewer.SetSelectionMode(CadSelectionMode.Edge);
         Status("Kenar seçimi aktif • mouse üstünde OCCT pre-highlight görünür.");
     }
 
     private void VertexSelection_Click(object sender, RoutedEventArgs e)
     {
+        _inspectMeasureMode=false;MeasureStatusText.Text="";
         _viewer.SetSelectionMode(CadSelectionMode.Vertex);
         Status("Köşe seçimi aktif • mouse üstünde OCCT pre-highlight görünür.");
     }
