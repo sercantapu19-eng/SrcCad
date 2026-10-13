@@ -36,7 +36,7 @@
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                     <Image Width="30" Height="30" Margin="0,0,0,4"
                            Source="{Binding Tag, RelativeSource={RelativeSource AncestorType=Button}}"/>
-                    <TextBlock Text="{Binding}" TextAlignment="Center" TextWrapping="Wrap"
+                    <TextBlock Text="{Binding Content, RelativeSource={RelativeSource AncestorType=Button}}" TextAlignment="Center" TextWrapping="Wrap"
                                Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                                MaxWidth="92" MinHeight="28" VerticalAlignment="Center"/>
                 </StackPanel>
