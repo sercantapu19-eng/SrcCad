@@ -54,7 +54,9 @@ public partial class MainWindow : Window
     private int _hoverSketchDimensionId = -1;
     private SketchPointerTarget? _pointerTarget;
     private int _dragSketchPointId = -1;
+    private int _dragSketchEntityId = -1;
     private int _dragSketchDimensionId = -1;
+    private Point2d? _dragSketchLastUv;
     private SketchSnapshot? _dragSketchSnapshot;
     private bool _dragSketchChanged;
 
@@ -383,10 +385,15 @@ public partial class MainWindow : Window
             {
                 _sketchUndo.Push(_dragSketchSnapshot);
                 _sketchRedo.Clear();
+                MarkSourceSketchDirty();
+                UpdateSketchPropertyPanel();
+                RefreshCommandState();
             }
 
             _dragSketchPointId = -1;
+            _dragSketchEntityId = -1;
             _dragSketchDimensionId = -1;
+            _dragSketchLastUv = null;
             _dragSketchSnapshot = null;
             _dragSketchChanged = false;
         }
@@ -453,6 +460,28 @@ public partial class MainWindow : Window
                 RenderSketch();
                 Status($"P{_dragSketchPointId} sürükleniyor • ilişkiler ve sürücü ölçüler korunuyor.");
             }
+            return;
+        }
+
+        if (_inSketch &&
+            _sketchCommand is null &&
+            !_smartDimensionMode &&
+            _dragSketchEntityId >= 0 &&
+            _dragSketchLastUv is Point2d lastDragUv &&
+            e.Button == WinForms.MouseButtons.Left &&
+            _sketch is not null &&
+            TryGetSketchCursor(e.X, e.Y, out var entityDragUv, out _, snap: false))
+        {
+            var delta=new Point2d(entityDragUv.X-lastDragUv.X,entityDragUv.Y-lastDragUv.Y);
+            if (!_sketch.TryTranslateEntity(_dragSketchEntityId,delta))
+            {
+                Status("Geometri bu yönde sürüklenemedi; sabit ilişkiler ve sürücü ölçüler korunuyor.");
+                return;
+            }
+            _dragSketchLastUv=entityDragUv;
+            _dragSketchChanged=true;
+            RenderSketch();
+            Status($"E{_dragSketchEntityId} tutulup sürükleniyor • ilişkiler ve ölçüler korunuyor.");
             return;
         }
 
@@ -653,6 +682,8 @@ public partial class MainWindow : Window
         {
             _dragSketchDimensionId = dimensionId;
             _dragSketchPointId = -1;
+            _dragSketchEntityId = -1;
+            _dragSketchLastUv = null;
             _dragSketchSnapshot = _sketch.CaptureSnapshot();
             _dragSketchChanged = false;
             return;
@@ -662,9 +693,23 @@ public partial class MainWindow : Window
         if (!toggle && pointId > 0 && !_sketch.Point(pointId).Fixed)
         {
             _dragSketchPointId = pointId;
+            _dragSketchEntityId = -1;
             _dragSketchDimensionId = -1;
+            _dragSketchLastUv = uv;
             _dragSketchSnapshot = _sketch.CaptureSnapshot();
             _dragSketchChanged = false;
+            return;
+        }
+
+        var dragReference=_sketch.HitReference(uv,tolerance);
+        if(!toggle&&dragReference is {IsPointLike:false}&&_sketch.Entity(dragReference.Id) is not null)
+        {
+            _dragSketchPointId=-1;
+            _dragSketchEntityId=dragReference.Id;
+            _dragSketchDimensionId=-1;
+            _dragSketchLastUv=uv;
+            _dragSketchSnapshot=_sketch.CaptureSnapshot();
+            _dragSketchChanged=false;
         }
     }
 
@@ -846,7 +891,8 @@ public partial class MainWindow : Window
         if(_boxStart is not null)FinishWindowSelection(0,0,true);
         _sketchCommand?.CancelStep();
         _viewer.ClearPreview();
-        _dragSketchPointId = _dragSketchDimensionId = -1;
+        _dragSketchPointId = _dragSketchEntityId = _dragSketchDimensionId = -1;
+        _dragSketchLastUv = null;
         _hoverSketchPointId = _hoverSketchEntityId = _hoverSketchDimensionId = -1;
         _dragSketchSnapshot = null;
         _dragSketchChanged = false;
