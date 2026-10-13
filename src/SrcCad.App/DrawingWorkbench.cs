@@ -232,7 +232,15 @@ public partial class MainWindow
         }
         var note=_drawingDocument.Annotations.FirstOrDefault(a=>a.Id==id);
         if(note is null){DrawingAnnotationError.Text="Not bulunamadı.";return;}
-        var updated=note with{Text=DrawingAnnotationText.Text.Trim(),Position=new Point2d(x,y)};
+        var editedText=DrawingAnnotationText.Text.Trim();
+        var textChanged=!string.Equals(editedText,note.Text,StringComparison.Ordinal);
+        var updated=note with
+        {
+            Text=editedText,
+            Position=new Point2d(x,y),
+            Kind=textChanged?DrawingAnnotationKind.Text:note.Kind,
+            Data=textChanged?null:note.Data
+        };
         SetDrawingDocument(_drawingDocument with
         {
             Annotations=_drawingDocument.Annotations.Select(a=>a.Id==id?updated:a).ToArray()
@@ -332,8 +340,64 @@ public partial class MainWindow
             catch(Exception ex){Status(view.Name+" görünümü oluşturulamadı: "+ex.Message);}
         }
         foreach(var note in _drawingDocument.Annotations.Where(a=>a.SheetId==sheet.Id))
-            _viewer.AddSketchText(note.Position.X,note.Position.Y,0,note.Text,0);
+        {
+            var text=ResolveDrawingAnnotationText(note);
+            _viewer.AddSketchText(note.Position.X,note.Position.Y,0,text,0);
+        }
         _viewer.SetTopView();_viewer.FitAll();
+    }
+
+    private string ResolveDrawingAnnotationText(DrawingAnnotation note)
+    {
+        if(_drawingDocument is null)return note.Text;
+        try
+        {
+            var view=note.ViewId is Guid viewId?_drawingDocument.Views.FirstOrDefault(v=>v.Id==viewId):null;
+            return note.Kind switch
+            {
+                DrawingAnnotationKind.OverallSize when view is not null=>ResolveOverallSize(view),
+                DrawingAnnotationKind.HoleCallout when view is not null=>ResolveHoleCallout(view,note.Data),
+                DrawingAnnotationKind.BillOfMaterials when view is not null=>ResolveBom(view),
+                DrawingAnnotationKind.Balloon=>note.Data is string number&&number.Length>0?"BALON "+number:note.Text,
+                _=>note.Text
+            };
+        }
+        catch{return note.Text;}
+    }
+
+    private string ResolveOverallSize(DrawingView view)
+    {
+        var data=DrawingProjectionData(view);
+        var xs=new List<double>();var ys=new List<double>();
+        for(var i=0;i+3<data.Segments.Length;i+=4)
+        {
+            xs.Add(data.Segments[i]);xs.Add(data.Segments[i+2]);
+            ys.Add(data.Segments[i+1]);ys.Add(data.Segments[i+3]);
+        }
+        return $"GENEL: {xs.Max()-xs.Min():0.###} × {ys.Max()-ys.Min():0.###} mm";
+    }
+
+    private string ResolveHoleCallout(DrawingView view,string? data)
+    {
+        var projection=DrawingProjectionData(view);
+        var circles=DrawingBodies(view.ModelPath).SelectMany(body=>
+            SrcCad.Kernel.Occt.OcctFeatureKernel.ProjectCircles(body,
+                new[]{projection.Direction.X,projection.Direction.Y,projection.Direction.Z},
+                new[]{projection.Up.X,projection.Up.Y,projection.Up.Z})).ToArray();
+        if(circles.Length<3)return "Ø?";
+        var index=0;
+        if(int.TryParse(data,out var parsed)&&parsed>=0&&parsed*3+2<circles.Length)index=parsed;
+        return $"Ø{circles[index*3+2]*2:0.###}";
+    }
+
+    private static string ResolveBom(DrawingView view)
+    {
+        if(!string.Equals(Path.GetExtension(view.ModelPath),".scasm",StringComparison.OrdinalIgnoreCase))return "BOM";
+        var assembly=AssemblyDocumentFile.Load(view.ModelPath);
+        var groups=assembly.Components.Where(c=>!c.Suppressed)
+            .GroupBy(c=>Path.GetFileNameWithoutExtension(c.SourcePath),StringComparer.OrdinalIgnoreCase)
+            .OrderBy(g=>g.Key).ToArray();
+        return groups.Length==0?"BOM\n(Boş)":"BOM\n"+string.Join("\n",groups.Select((g,i)=>$"{i+1}. {g.Key}   Adet: {g.Count()}"));
     }
 
     private void NewDrawing_Click(object sender,RoutedEventArgs e)
@@ -500,7 +564,8 @@ public partial class MainWindow
             var x=(circles[0]-data.Cx)*view.Scale+view.Position.X;
             var y=(circles[1]-data.Cy)*view.Scale+view.Position.Y;
             var text=$"Ø{circles[2]*2:0.###}";
-            var note=new DrawingAnnotation(Guid.NewGuid(),view.SheetId,view.Id,new Point2d(x+20,y+20),text);
+            var note=new DrawingAnnotation(Guid.NewGuid(),view.SheetId,view.Id,new Point2d(x+20,y+20),text,
+                DrawingAnnotationKind.HoleCallout,"0");
             SetDrawingDocument(_drawingDocument with{Annotations=_drawingDocument.Annotations.Append(note).ToArray()});
             RefreshDrawingTree(note.Id);RenderDrawing();Status("Delik çağrısı eklendi: "+text);
         }
@@ -523,7 +588,8 @@ public partial class MainWindow
             }
             var width=(xs.Max()-xs.Min());var height=(ys.Max()-ys.Min());
             var note=new DrawingAnnotation(Guid.NewGuid(),view.SheetId,view.Id,
-                new Point2d(view.Position.X,view.Position.Y+65),$"GENEL: {width:0.###} × {height:0.###} mm");
+                new Point2d(view.Position.X,view.Position.Y+65),$"GENEL: {width:0.###} × {height:0.###} mm",
+                DrawingAnnotationKind.OverallSize);
             SetDrawingDocument(_drawingDocument with{Annotations=_drawingDocument.Annotations.Append(note).ToArray()});
             RefreshDrawingTree(note.Id);RenderDrawing();Status("Model izdüşümünden genel ölçüler eklendi.");
         }
@@ -557,7 +623,8 @@ public partial class MainWindow
         {
             var sheet=_drawingDocument.Sheets[0];
             var text="BOM\n"+string.Join("\n",lines);
-            var note=new DrawingAnnotation(Guid.NewGuid(),sheet.Id,view.Id,new Point2d(sheet.Width-120,30),text);
+            var note=new DrawingAnnotation(Guid.NewGuid(),sheet.Id,view.Id,new Point2d(sheet.Width-120,30),text,
+                DrawingAnnotationKind.BillOfMaterials);
             SetDrawingDocument(_drawingDocument with{Annotations=_drawingDocument.Annotations.Append(note).ToArray()});
             RefreshDrawingTree(note.Id);RenderDrawing();
         }
@@ -572,7 +639,8 @@ public partial class MainWindow
         var sheet=_drawingDocument.Sheets[0];
         var number=_drawingDocument.Annotations.Count(a=>a.Text.StartsWith("BALON ",StringComparison.Ordinal))+1;
         var note=new DrawingAnnotation(Guid.NewGuid(),sheet.Id,view.Id,
-            new Point2d(view.Position.X+35,view.Position.Y+35),"BALON "+number);
+            new Point2d(view.Position.X+35,view.Position.Y+35),"BALON "+number,
+            DrawingAnnotationKind.Balloon,number.ToString(System.Globalization.CultureInfo.InvariantCulture));
         SetDrawingDocument(_drawingDocument with{Annotations=_drawingDocument.Annotations.Append(note).ToArray()});
         RefreshDrawingTree(note.Id);RenderDrawing();Status("Balon "+number+" eklendi.");
     }
