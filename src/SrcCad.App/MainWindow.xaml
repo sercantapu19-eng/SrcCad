@@ -196,8 +196,8 @@
                     <Button Style="{StaticResource CadCommandButton}" Content="Delik Çağrısı" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Merkez İşareti" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Not" Click="DrawingAddNote_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Malzeme Listesi" Click="CadCommandPlaceholder_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Balon" Click="CadCommandPlaceholder_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Malzeme Listesi" Click="DrawingBom_Click" ToolTip=".scasm görünüşünden gerçek bileşen adetleriyle BOM oluşturur."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Balon" Click="DrawingBalloon_Click"/>
                 </WrapPanel>
             </TabItem>
             <TabItem Header="ÖLÇÜM / İNCELEME">
