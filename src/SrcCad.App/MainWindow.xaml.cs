@@ -329,6 +329,8 @@ public partial class MainWindow : Window
             var selected = _viewer.SelectDetected(toggle);
             UpdateActiveEdgeFeatureSelection();
             UpdateActiveHoleSelection();
+            UpdateActiveHoleWizardSelection();
+            UpdateActiveDomeSelection();
             UpdateActiveShellSelection();
             UpdateActiveDraftSelection();
             UpdateActiveEdgeFlangeSelection();
