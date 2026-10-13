@@ -1755,6 +1755,79 @@ public partial class MainWindow : Window
         ActivateSketchCommand(new PolygonSketchCommand(_sketch,sides));
     }
 
+    private bool PromptSketchNumber(string title,string unit,double initial,Func<double,bool> valid,out double value)
+    {
+        var result=initial;
+        var dialog=new DimensionEditDialog(title,initial,unit,text=>
+        {
+            if(!DimensionNumbers.TryParseScalar(text,out var parsed)||!valid(parsed))return "Geçerli bir değer girin.";
+            result=parsed;return null;
+        }){Owner=this};
+        var ok=dialog.ShowDialog()==true;value=result;return ok;
+    }
+
+    private void ApplySketchTransform(Func<IReadOnlyList<int>> transform,string success)
+    {
+        if(_sketch is null||!_inSketch)return;
+        var before=_sketch.CaptureSnapshot();
+        try
+        {
+            var created=transform();
+            _sketchUndo.Push(before);_sketchRedo.Clear();
+            _selectedSketchEntities.Clear();
+            foreach(var id in created)_selectedSketchEntities.Add(id);
+            MarkSourceSketchDirty();RenderSketch();UpdateSketchPropertyPanel();RefreshCommandState();Status(success);
+        }
+        catch(Exception ex)
+        {
+            _sketch.RestoreSnapshot(before);RenderSketch();Status(ex.Message);
+        }
+    }
+
+    private void OffsetSketch_Click(object sender,RoutedEventArgs e)
+    {
+        if(_sketch is null||_selectedSketchEntities.Count==0){Status("Ofset için çizgi veya daire seçin.");return;}
+        if(!PromptSketchNumber("Ofset Mesafesi","mm",10,v=>Math.Abs(v)>1e-9,out var distance))return;
+        var ids=_selectedSketchEntities.ToArray();
+        ApplySketchTransform(()=>_sketch.OffsetEntities(ids,distance),$"Seçili geometri {distance:0.###} mm ofsetlendi.");
+    }
+
+    private void MirrorSketch_Click(object sender,RoutedEventArgs e)
+    {
+        if(_sketch is null)return;
+        var axes=_selectedSketchEntities.Select(id=>_sketch.Entity(id)).OfType<SketchLine>().Where(l=>l.Construction).ToArray();
+        if(axes.Length!=1){Status("Aynala için aynalanacak geometriyle birlikte tam bir Merkez Çizgisi seçin.");return;}
+        var source=_selectedSketchEntities.Where(id=>id!=axes[0].Id).ToArray();
+        ApplySketchTransform(()=>_sketch.MirrorEntities(source,axes[0].Id),"Seçili çizim geometrisi merkez çizgisine göre aynalandı.");
+    }
+
+    private void LinearSketchPattern_Click(object sender,RoutedEventArgs e)
+    {
+        if(_sketch is null||_selectedSketchEntities.Count==0){Status("Doğrusal dizilim için geometri seçin.");return;}
+        if(!PromptSketchNumber("Dizilim Adedi","adet",3,v=>v>=2&&v<=500&&Math.Abs(v-Math.Round(v))<1e-9,out var countValue))return;
+        if(!PromptSketchNumber("Dizilim Aralığı","mm",20,v=>v>1e-9,out var spacing))return;
+        var axis=_selectedSketchEntities.Select(id=>_sketch.Entity(id)).OfType<SketchLine>().FirstOrDefault(l=>l.Construction);
+        double dx=1,dy=0;
+        var ids=_selectedSketchEntities.AsEnumerable();
+        if(axis is not null)
+        {
+            var a=_sketch.Point(axis.StartPointId).Position;var b=_sketch.Point(axis.EndPointId).Position;
+            dx=b.X-a.X;dy=b.Y-a.Y;ids=ids.Where(id=>id!=axis.Id);
+        }
+        var source=ids.ToArray();var count=(int)Math.Round(countValue);
+        ApplySketchTransform(()=>_sketch.LinearPatternEntities(source,dx,dy,spacing,count),$"{count} adet doğrusal çizim dizilimi oluşturuldu.");
+    }
+
+    private void CircularSketchPattern_Click(object sender,RoutedEventArgs e)
+    {
+        if(_sketch is null||_selectedSketchEntities.Count==0){Status("Dairesel dizilim için geometri seçin.");return;}
+        if(!PromptSketchNumber("Dizilim Adedi","adet",4,v=>v>=2&&v<=500&&Math.Abs(v-Math.Round(v))<1e-9,out var countValue))return;
+        if(!PromptSketchNumber("Toplam Açı","°",360,v=>v>1e-9&&v<=360,out var angle))return;
+        var center=_selectedSketchPoints.Count==1?_sketch.Point(_selectedSketchPoints.Single()).Position:_sketch.Point(0).Position;
+        var count=(int)Math.Round(countValue);var source=_selectedSketchEntities.ToArray();
+        ApplySketchTransform(()=>_sketch.CircularPatternEntities(source,center,angle,count),$"{count} adet dairesel çizim dizilimi oluşturuldu.");
+    }
+
     private bool RebuildExtrusion(double depth)
     {
         if (_sketch is null || !double.IsFinite(depth) || Math.Abs(depth) < 1e-9) return false;
