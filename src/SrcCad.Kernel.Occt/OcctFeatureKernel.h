@@ -37,6 +37,14 @@ namespace SrcCad::Kernel::Occt
         static System::String^ Mirror(System::String^ baseBody, array<double>^ planeFrame, bool keepOriginal);
         static System::String^ LinearPattern(System::String^ baseBody, array<double>^ direction, double spacing, int count);
         static System::String^ CircularPattern(System::String^ baseBody, array<double>^ axis, double angleDegrees, int count);
+        static System::String^ PatternOffsets(System::String^ baseBody,array<double>^ offsets);
+        static System::String^ Boolean(System::String^ bodyA,System::String^ bodyB,int operation);
+        static System::String^ MoveCopy(System::String^ baseBody,array<double>^ transform6,bool keepOriginal);
+        static System::String^ SplitToPlane(System::String^ baseBody,array<double>^ planeFrame);
+        static System::String^ Dome(System::String^ baseBody,System::String^ faceReference,double height);
+        static System::String^ HoleWizard(System::String^ baseBody,System::String^ faceReference,
+            double centerX,double centerY,double centerZ,double diameter,double depth,int type,
+            double counterDiameter,double counterDepth,bool reverse);
         static System::String^ EdgeFlange(System::String^ baseBody, array<System::String^>^ edgeReferences,
             double length, double angleDegrees, double thickness, double bendRadius, bool reverse);
         static System::String^ Hem(System::String^ baseBody,array<System::String^>^ edgeReferences,
