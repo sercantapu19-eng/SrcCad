@@ -68,6 +68,7 @@ namespace SrcCad::Kernel::Occt
         static array<double>^ Bounds(System::String^ body);
         static array<System::String^>^ EdgeReferences(System::String^ body);
         static array<System::String^>^ FaceReferences(System::String^ body);
+        static array<double>^ FaceFrame(System::String^ body,System::String^ faceReference);
         // volume, solid count, face count, edge count
         static array<double>^ Inspect(System::String^ body);
     };
