@@ -238,6 +238,7 @@
                     <Button Style="{StaticResource CadCommandButton}" Content="Not" Click="DrawingAddNote_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Malzeme Listesi" Click="DrawingBom_Click" ToolTip=".scasm görünüşünden gerçek bileşen adetleriyle BOM oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Balon" Click="DrawingBalloon_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="DXF Aktar" Click="DrawingExportDxf_Click" ToolTip="Aktif .scdrw sayfasını gerçek görünüş çizgileri ve notlarıyla ASCII DXF olarak dışa aktarır."/>
                 </WrapPanel>
             </TabItem>
             <TabItem Header="ÖLÇÜM / İNCELEME">
