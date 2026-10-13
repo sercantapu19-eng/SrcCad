@@ -68,6 +68,7 @@
 #include <BRepAlgoAPI_Cut.hxx>
 #include <BRepAlgoAPI_Fuse.hxx>
 #include <BRepAlgoAPI_Common.hxx>
+#include <BRepAlgoAPI_Section.hxx>
 #include <BRepFilletAPI_MakeFillet.hxx>
 #include <BRepFilletAPI_MakeChamfer.hxx>
 #include <BRepOffsetAPI_MakeThickSolid.hxx>
@@ -1766,44 +1767,99 @@ namespace SrcCad::Kernel::Occt
 
     array<double>^ OcctFeatureKernel::ProjectEdges(String^ body,array<double>^ direction,array<double>^ up)
     {
+        try{return projectShapeEdges(decodeFeature(body),direction,up);}
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
+    static void projectionBasis(array<double>^ direction,array<double>^ up,gp_Vec& d,gp_Vec& u,gp_Vec& right)
+    {
         if(direction==nullptr||direction->Length!=3||up==nullptr||up->Length!=3)
             throw gcnew ArgumentException("Projection requires direction and up vectors.");
-        for each(double v in direction)if(!std::isfinite(v))throw gcnew ArgumentException("Invalid projection direction.");
-        for each(double v in up)if(!std::isfinite(v))throw gcnew ArgumentException("Invalid projection up vector.");
+        for each(double value in direction)if(!std::isfinite(value))throw gcnew ArgumentException("Invalid projection direction.");
+        for each(double value in up)if(!std::isfinite(value))throw gcnew ArgumentException("Invalid projection up vector.");
+        d=gp_Vec(direction[0],direction[1],direction[2]);
+        u=gp_Vec(up[0],up[1],up[2]);
+        if(d.Magnitude()<=1e-12||u.Magnitude()<=1e-12)throw gcnew ArgumentException("Projection vectors cannot be zero.");
+        d.Normalize();u-=d.Multiplied(u.Dot(d));
+        if(u.Magnitude()<=1e-12)throw gcnew ArgumentException("Projection up vector cannot be parallel to direction.");
+        u.Normalize();right=u.Crossed(d);
+        if(right.Magnitude()<=1e-12)throw gcnew ArgumentException("Projection basis is invalid.");
+        right.Normalize();
+    }
+
+    static array<double>^ projectShapeEdges(const TopoDS_Shape& shape,array<double>^ direction,array<double>^ up)
+    {
+        gp_Vec d,u,right;projectionBasis(direction,up,d,u,right);
+        auto values=gcnew System::Collections::Generic::List<double>();
+        for(TopExp_Explorer ex(shape,TopAbs_EDGE);ex.More();ex.Next())
+        {
+            TopoDS_Edge edge=TopoDS::Edge(ex.Current());
+            BRepAdaptor_Curve curve(edge);
+            double first=curve.FirstParameter(),last=curve.LastParameter();
+            if(!std::isfinite(first)||!std::isfinite(last)||std::abs(last-first)<=1e-14)continue;
+            int segments=curve.GetType()==GeomAbs_Line?1:24;
+            gp_Pnt previous=curve.Value(first);
+            for(int i=1;i<=segments;i++)
+            {
+                const double t=first+(last-first)*(double(i)/segments);
+                gp_Pnt current=curve.Value(t);
+                gp_Vec pa(gp_Pnt(0,0,0),previous),pb(gp_Pnt(0,0,0),current);
+                values->Add(pa.Dot(right));values->Add(pa.Dot(u));
+                values->Add(pb.Dot(right));values->Add(pb.Dot(u));
+                previous=current;
+            }
+        }
+        return values->ToArray();
+    }
+
+    array<double>^ OcctFeatureKernel::Bounds(String^ body)
+    {
         try
         {
-            TopoDS_Shape shape=decodeFeature(body);
-            gp_Vec d(direction[0],direction[1],direction[2]);
-            gp_Vec u(up[0],up[1],up[2]);
-            if(d.Magnitude()<=1e-12||u.Magnitude()<=1e-12)throw gcnew ArgumentException("Projection vectors cannot be zero.");
-            d.Normalize();
-            u-=d.Multiplied(u.Dot(d));
-            if(u.Magnitude()<=1e-12)throw gcnew ArgumentException("Projection up vector cannot be parallel to direction.");
-            u.Normalize();
-            gp_Vec right=u.Crossed(d);
-            if(right.Magnitude()<=1e-12)throw gcnew ArgumentException("Projection basis is invalid.");
-            right.Normalize();
+            TopoDS_Shape shape=decodeFeature(body);Bnd_Box box;BRepBndLib::Add(shape,box);
+            if(box.IsVoid())return gcnew array<double>(0);
+            double xmin,ymin,zmin,xmax,ymax,zmax;box.Get(xmin,ymin,zmin,xmax,ymax,zmax);
+            return gcnew array<double>{xmin,ymin,zmin,xmax,ymax,zmax};
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
 
+    array<double>^ OcctFeatureKernel::ProjectCircles(String^ body,array<double>^ direction,array<double>^ up)
+    {
+        try
+        {
+            TopoDS_Shape shape=decodeFeature(body);gp_Vec d,u,right;projectionBasis(direction,up,d,u,right);
             auto values=gcnew System::Collections::Generic::List<double>();
             for(TopExp_Explorer ex(shape,TopAbs_EDGE);ex.More();ex.Next())
             {
-                TopoDS_Edge edge=TopoDS::Edge(ex.Current());
-                BRepAdaptor_Curve curve(edge);
-                double first=curve.FirstParameter(),last=curve.LastParameter();
-                if(!std::isfinite(first)||!std::isfinite(last)||std::abs(last-first)<=1e-14)continue;
-                int segments=curve.GetType()==GeomAbs_Line?1:24;
-                gp_Pnt previous=curve.Value(first);
-                for(int i=1;i<=segments;i++)
-                {
-                    const double t=first+(last-first)*(double(i)/segments);
-                    gp_Pnt current=curve.Value(t);
-                    gp_Vec pa(gp_Pnt(0,0,0),previous),pb(gp_Pnt(0,0,0),current);
-                    values->Add(pa.Dot(right));values->Add(pa.Dot(u));
-                    values->Add(pb.Dot(right));values->Add(pb.Dot(u));
-                    previous=current;
-                }
+                BRepAdaptor_Curve curve(TopoDS::Edge(ex.Current()));
+                if(curve.GetType()!=GeomAbs_Circle)continue;
+                gp_Circ circle=curve.Circle();
+                gp_Dir normal=circle.Axis().Direction();
+                if(std::abs(std::abs(gp_Vec(normal).Dot(d))-1.0)>1e-4)continue;
+                gp_Pnt center=circle.Location();gp_Vec c(gp_Pnt(0,0,0),center);
+                values->Add(c.Dot(right));values->Add(c.Dot(u));values->Add(circle.Radius());
             }
             return values->ToArray();
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
+    array<double>^ OcctFeatureKernel::SectionEdges(String^ body,array<double>^ planeOrigin,array<double>^ planeNormal,
+        array<double>^ direction,array<double>^ up)
+    {
+        if(planeOrigin==nullptr||planeOrigin->Length!=3||planeNormal==nullptr||planeNormal->Length!=3)
+            throw gcnew ArgumentException("Section plane requires origin and normal.");
+        for each(double value in planeOrigin)if(!std::isfinite(value))throw gcnew ArgumentException("Invalid section origin.");
+        for each(double value in planeNormal)if(!std::isfinite(value))throw gcnew ArgumentException("Invalid section normal.");
+        try
+        {
+            TopoDS_Shape shape=decodeFeature(body);
+            gp_Dir normal(planeNormal[0],planeNormal[1],planeNormal[2]);
+            gp_Pln plane(gp_Pnt(planeOrigin[0],planeOrigin[1],planeOrigin[2]),normal);
+            BRepAlgoAPI_Section section(shape,plane,false);section.ComputePCurveOn1(false);section.Approximation(true);section.Build();
+            if(!section.IsDone())throw gcnew InvalidOperationException("OCCT section operation failed.");
+            return projectShapeEdges(section.Shape(),direction,up);
         }
         catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
     }
