@@ -489,6 +489,8 @@ public sealed partial class SketchModel
         {
             SketchLine l => l.StartPointId == pointId || l.EndPointId == pointId,
             SketchCircle c => c.CenterPointId == pointId,
+            SketchArc a => a.CenterPointId==pointId||a.StartPointId==pointId||a.EndPointId==pointId,
+            SketchEllipse e => e.CenterPointId==pointId,
             _ => false
         }).Select(e => e.Id).ToList();
 
@@ -513,6 +515,12 @@ public sealed partial class SketchModel
                     break;
                 case SketchCircle circle:
                     used.Add(circle.CenterPointId);
+                    break;
+                case SketchArc arc:
+                    used.Add(arc.CenterPointId);used.Add(arc.StartPointId);used.Add(arc.EndPointId);
+                    break;
+                case SketchEllipse ellipse:
+                    used.Add(ellipse.CenterPointId);
                     break;
             }
         }
