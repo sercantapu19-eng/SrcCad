@@ -2888,5 +2888,8 @@ public partial class MainWindow
         SheetMetalBasePanel.Visibility=Visibility.Collapsed;
         SheetMetalConvertPanel.Visibility=Visibility.Collapsed;
         EdgeFlangePanel.Visibility=Visibility.Collapsed;EndCapPanel.Visibility=Visibility.Collapsed;
+        SpatialSketchPanel.Visibility=Visibility.Collapsed;StructuralTrimPanel.Visibility=Visibility.Collapsed;SheetBendPanel.Visibility=Visibility.Collapsed;
+        BodyBooleanPanel.Visibility=Visibility.Collapsed;MoveCopyBodyPanel.Visibility=Visibility.Collapsed;SplitBodyPanel.Visibility=Visibility.Collapsed;
+        SketchPatternPanel.Visibility=Visibility.Collapsed;DomePanel.Visibility=Visibility.Collapsed;HoleWizardPanel.Visibility=Visibility.Collapsed;
     }
 }
