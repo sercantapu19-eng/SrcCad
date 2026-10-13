@@ -188,6 +188,7 @@
                     <Button Style="{StaticResource CadCommandButton}" Content="Doğrusal Dizilim" Click="LinearSketchPattern_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Dairesel Dizilim" Click="CircularSketchPattern_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadDimensionIcon}" Content="Akıllı Ölçü" Click="SmartDimension_Click" x:Name="SmartDimensionButton"/>
+                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadDimensionIcon}" Content="Yarıçap Ölçü" Click="RadiusSketchDimension_Click" ToolTip="Bir daire seçin; sürücü R ölçüsü oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadRelationIcon}" Content="İlişkiler" Click="ShowSketchRelations_Click"/>
                     <Separator Margin="8,2"/>
                     <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadExitSketchIcon}" Content="Çizimden Çık" Click="ExitSketch_Click" x:Name="ExitSketchButton"/>
