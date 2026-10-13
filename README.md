@@ -7,8 +7,8 @@
 > montaj mate çözümü; teknik resim ilişkili ölçüleri; STEP/IGES ve DXF akışları kaynakta bulunuyor.
 >
 > **Tamamlandı iddiası için zorunlu kabul kapısı:** Windows makinede `VERIFY_ALL.bat`.
-> Bu komut Debug + Release x64 solution build, managed regresyon ve native C++/CLI + OCCT kabul testlerini birlikte çalıştırır.
-> Sonuç `logs\verify-all.log` dosyasına yazılır. Bu kapı gerçek Windows ortamında PASS vermeden proje "%100 tamamlandı" kabul edilmez.
+> Bu komut Debug + Release x64 solution build, managed regresyon, native C++/CLI + OCCT kabul testleri ve Release Windows UI interaction regresyonunu birlikte çalıştırır.
+> Sonuç `logs\verify-all.log` dosyasına; UI sonucu ayrıca `logs\windows-interaction.json` dosyasına yazılır. Bu kapı gerçek Windows ortamında PASS vermeden proje "%100 tamamlandı" kabul edilmez.
 >
 > `BASLAT.bat` günlük Release derleme + managed regresyon + uygulama başlatma akışıdır.
 > `VERIFY_ALL.bat` ise yayın/teslim öncesi tam kabul kapısıdır.
