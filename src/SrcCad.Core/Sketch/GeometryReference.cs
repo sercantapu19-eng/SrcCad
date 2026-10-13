@@ -77,6 +77,27 @@ public sealed partial class SketchModel
     }
     public bool ApplyReferenceRelation(SketchRelationType type, IReadOnlyList<GeometryReference> selection)
     {
+        if(type==SketchRelationType.Symmetric && selection.Count==3)
+        {
+            var points=selection.Where(r=>r.IsPointLike).ToArray();
+            var axes=selection.Where(r=>r.IsLine).ToArray();
+            if(points.Length!=2||axes.Length!=1||points[0]==points[1])return false;
+            if(Entity(axes[0].Id) is not SketchLine axis||!axis.Construction)return false;
+            var before=CaptureSnapshot();
+            try
+            {
+                _=ResolvePoint(points[0]);_=ResolvePoint(points[1]);
+                if(Relations.Any(r=>r.Type==SketchRelationType.Symmetric&&r.ReferenceC==axes[0]&&
+                    ((r.ReferenceA==points[0]&&r.ReferenceB==points[1])||(r.ReferenceA==points[1]&&r.ReferenceB==points[0]))))
+                    return true;
+                Relations.Add(new SketchRelation(_nextRelationId++,SketchRelationType.Symmetric,
+                    ReferenceA:points[0],ReferenceB:points[1],ReferenceC:axes[0]));
+                if(SolveNumerically()&&ConstraintsSatisfied())return true;
+            }
+            catch(ArgumentException){}
+            catch(KeyNotFoundException){}
+            RestoreSnapshot(before);return false;
+        }
         if(selection.Count==2 && selection.All(r=>r.IsLine) && type is SketchRelationType.Horizontal or SketchRelationType.Vertical)
         {
             var before=CaptureSnapshot();
