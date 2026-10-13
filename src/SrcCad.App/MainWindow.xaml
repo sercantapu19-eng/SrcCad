@@ -90,12 +90,22 @@
                     <Button Style="{StaticResource CadCommandButton}" Content="Radyus" Click="Fillet_Click" x:Name="FilletButton" ToolTip="Kenarları seçin; gerçek OCCT 3B radyus oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Pah" Click="Chamfer_Click" x:Name="ChamferButton" ToolTip="Kenarları seçin; gerçek OCCT 3B pah oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Delik" Click="Hole_Click" x:Name="HoleButton" ToolTip="Düzlemsel yüz seçin; tıklanan konumda gerçek parametrik delik oluşturur."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Delik Sihirbazı" Click="HoleWizard_Click" x:Name="HoleWizardButton" ToolTip="Basit, havşalı veya silindirik havşalı gerçek parametrik delik oluşturur."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Kubbe" Click="Dome_Click" x:Name="DomeButton" ToolTip="Seçili düzlemsel yüze gerçek küresel kubbe/çökertme uygular."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Kabuk" Click="Shell_Click" x:Name="ShellButton" ToolTip="Açılacak yüzleri seçin; kalınlıkla gerçek içi boş katı oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Draft" Click="Draft_Click" x:Name="DraftButton" ToolTip="Seçili yüzlere, aktif referans düzlemine göre gerçek parametrik draft açısı uygular."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Nervür" Click="Rib_Click" x:Name="RibButton" ToolTip="Katıdan sonra oluşturulan açık çizgi sketch'ini kalınlaştırıp gerçek B-Rep nervür olarak birleştirir."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Doğrusal Dizilim" Click="LinearPattern_Click" x:Name="LinearPatternButton" ToolTip="Seçili düzlem/yüzün X yönünde parametrik gövde dizilimi oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Dairesel Dizilim" Click="CircularPattern_Click" x:Name="CircularPatternButton" ToolTip="Seçili düzlem/yüzün normal ekseni etrafında parametrik gövde dizilimi oluşturur."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Çizim Güdümlü Dizilim" Click="SketchPattern_Click" ToolTip="Bir sketch'teki noktaları gerçek 3B gövde kopya konumları olarak kullanır."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Aynala" Click="Mirror_Click" x:Name="MirrorButton" ToolTip="Düzlemsel yüz veya Ön/Üst/Sağ Düzlem seçin; katıyı gerçek 3B ayna dönüşümüyle çoğaltır."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Gövde İşlemleri ▾" Click="CommandFamily_Click">
+                        <Button.ContextMenu><ContextMenu>
+                            <MenuItem Header="Birleştir / Çıkar / Ortak" Click="BodyBoolean_Click"/>
+                            <MenuItem Header="Gövdeyi Taşı / Kopyala" Click="MoveCopyBody_Click"/>
+                            <MenuItem Header="Gövdeyi Böl" Click="SplitBody_Click"/>
+                        </ContextMenu></Button.ContextMenu>
+                    </Button>
                     <Button Style="{StaticResource CadCommandButton}" Content="Referans Geometri ▾" Click="CommandFamily_Click" x:Name="ReferenceGeometryButton">
                         <Button.ContextMenu><ContextMenu>
                             <MenuItem Header="Düzlem (Ofset)" Click="ReferencePlane_Click"/>
@@ -373,6 +383,75 @@
                                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                     <Button Content="✓" Width="52" Height="34" Click="SpatialSketchOk_Click"/>
                                     <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="SpatialSketchCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="BodyBooleanPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Gövde Boolean" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <TextBlock Text="Gövde A"/><ComboBox x:Name="BooleanBodyA" SelectionChanged="BodyBooleanParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock Text="Gövde B"/><ComboBox x:Name="BooleanBodyB" SelectionChanged="BodyBooleanParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock Text="İşlem"/><ComboBox x:Name="BooleanOperation" SelectionChanged="BodyBooleanParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock x:Name="BodyBooleanError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="BodyBooleanOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="AdvancedBodyCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="MoveCopyBodyPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Gövdeyi Taşı / Kopyala" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <TextBlock Text="Taşıma X / Y / Z (mm)"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,8">
+                                    <TextBox x:Name="MoveBodyX" Width="70" TextChanged="MoveCopyBodyParameterChanged"/>
+                                    <TextBox x:Name="MoveBodyY" Width="70" Margin="4,0,0,0" TextChanged="MoveCopyBodyParameterChanged"/>
+                                    <TextBox x:Name="MoveBodyZ" Width="70" Margin="4,0,0,0" TextChanged="MoveCopyBodyParameterChanged"/>
+                                </StackPanel>
+                                <TextBlock Text="Döndürme Rx / Ry / Rz (°)"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,8">
+                                    <TextBox x:Name="MoveBodyRx" Width="70" TextChanged="MoveCopyBodyParameterChanged"/>
+                                    <TextBox x:Name="MoveBodyRy" Width="70" Margin="4,0,0,0" TextChanged="MoveCopyBodyParameterChanged"/>
+                                    <TextBox x:Name="MoveBodyRz" Width="70" Margin="4,0,0,0" TextChanged="MoveCopyBodyParameterChanged"/>
+                                </StackPanel>
+                                <CheckBox x:Name="MoveBodyKeepOriginal" Content="Orijinal Gövdeyi Koru (Kopyala)" Checked="MoveCopyBodyParameterChanged" Unchecked="MoveCopyBodyParameterChanged" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="MoveCopyBodyError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="✓" Width="52" Height="34" Click="MoveCopyBodyOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="AdvancedBodyCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="DomePanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Kubbe" FontWeight="Bold"/>
+                                <TextBlock Text="Yükseklik (mm)" Margin="0,6,0,0"/>
+                                <TextBox x:Name="DomeHeight" TextChanged="DomeParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock x:Name="DomeSelectionText" Text="Düzlemsel yüz seçin." TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="DomeError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="✓" Width="52" Height="34" Click="DomeOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="AdvancedBodyCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="HoleWizardPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Delik Sihirbazı" FontWeight="Bold"/>
+                                <TextBlock Text="Tip" Margin="0,6,0,0"/>
+                                <ComboBox x:Name="HoleWizardTypeBox" SelectionChanged="HoleWizardParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock Text="Delik Çapı / Derinliği (mm)"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,8">
+                                    <TextBox x:Name="HoleWizardDiameter" Width="100" TextChanged="HoleWizardParameterChanged"/>
+                                    <TextBox x:Name="HoleWizardDepth" Width="100" Margin="6,0,0,0" TextChanged="HoleWizardParameterChanged"/>
+                                </StackPanel>
+                                <TextBlock Text="Havşa Çapı / Derinliği (mm)"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,8">
+                                    <TextBox x:Name="HoleWizardCounterDiameter" Width="100" TextChanged="HoleWizardParameterChanged"/>
+                                    <TextBox x:Name="HoleWizardCounterDepth" Width="100" Margin="6,0,0,0" TextChanged="HoleWizardParameterChanged"/>
+                                </StackPanel>
+                                <CheckBox x:Name="HoleWizardReverse" Content="Yönü Ters Çevir" Checked="HoleWizardParameterChanged" Unchecked="HoleWizardParameterChanged" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="HoleWizardSelectionText" Text="Düzlemsel yüz seçin ve delik merkezini tıklayın." TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="HoleWizardError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="✓" Width="52" Height="34" Click="HoleWizardOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="AdvancedBodyCancel_Click"/>
                                 </StackPanel>
                             </StackPanel>
 
