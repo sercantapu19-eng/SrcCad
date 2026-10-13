@@ -207,6 +207,21 @@ public partial class MainWindow
             var menu=new ContextMenu();
             void AddAction(string title,Action action){var entry=new MenuItem{Header=title};entry.Click+=(_,_)=>action();menu.Items.Add(entry);}
             AddAction(feature.Kind==FeatureKind.Sketch?"Çizimi Düzenle":"Özelliği Düzenle",()=>EditGraphFeature(feature.Id));
+            if(feature.Parameters is ReferencePlaneFeatureParameters referencePlane)
+            {
+                AddAction("Bu Düzlemde Çizim Başlat",()=>
+                {
+                    item.IsSelected=true;
+                    _selectedPlane=ReferencePlaneFrame(referencePlane,feature.Name);
+                    NewProfileSketch_Click(this,new RoutedEventArgs());
+                });
+                AddAction("Dik Bak",()=>
+                {
+                    item.IsSelected=true;
+                    _selectedPlane=ReferencePlaneFrame(referencePlane,feature.Name);
+                    NormalToSelectedSupport();
+                });
+            }
             AddAction(feature.Suppressed?"Baskılamayı Kaldır":"Baskıla",()=>CommitGraphDocument(ReplaceGraphNode(feature with{Suppressed=!feature.Suppressed})));
             AddAction("Sil",()=>DeleteGraphFeature(feature.Id));
             item.ContextMenu=menu;PartNode.Items.Add(item);_partNodes.Add(item);if(select==feature.Id)item.IsSelected=true;
