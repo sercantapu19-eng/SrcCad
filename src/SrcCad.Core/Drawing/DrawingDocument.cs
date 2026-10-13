@@ -84,6 +84,15 @@ public static class DrawingDocumentFile
     private sealed record Envelope(int SchemaVersion,string Units,DrawingDocument Document);
     private static readonly JsonSerializerOptions Options=new(){WriteIndented=true,MaxDepth=64};
 
+    public static string ResolveModelPath(string drawingPath,string modelPath)
+    {
+        if(string.IsNullOrWhiteSpace(drawingPath))throw new ArgumentException("Drawing path is required.",nameof(drawingPath));
+        if(string.IsNullOrWhiteSpace(modelPath))throw new ArgumentException("Drawing model path is required.",nameof(modelPath));
+        if(Path.IsPathRooted(modelPath))return Path.GetFullPath(modelPath);
+        var directory=Path.GetDirectoryName(Path.GetFullPath(drawingPath))??Environment.CurrentDirectory;
+        return Path.GetFullPath(Path.Combine(directory,modelPath));
+    }
+
     private static bool TryAnnotationData(string? data,char type,int count,out double[] values)
     {
         values=Array.Empty<double>();
