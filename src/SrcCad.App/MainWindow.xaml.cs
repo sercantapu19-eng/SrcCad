@@ -2042,6 +2042,30 @@ public partial class MainWindow : Window
     private void FeatureTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
         if(_partSession is not null)RefreshCommandState();
+        if(e.NewValue is TreeViewItem graphItem&&graphItem.Tag is Guid graphId&&
+           _partSession?.Document.Features.FirstOrDefault(f=>f.Id==graphId) is FeatureNode graphNode)
+        {
+            switch(graphNode.Parameters)
+            {
+                case ReferencePlaneFeatureParameters referencePlane:
+                    _selectedPlane=ReferencePlaneFrame(referencePlane,graphNode.Name);
+                    _viewer.ClearSelection();
+                    PropertyTitle.Text=graphNode.Name;
+                    PropertyInfo.Text=$"Referans düzlem • {referencePlane.BasePlane.Name} • Ofset {referencePlane.Offset:0.###} mm";
+                    Status(graphNode.Name+" seçildi • Çizim/Dik Bak/Aynala/Draft için kullanılabilir.");
+                    return;
+                case ReferenceAxisFeatureParameters axis:
+                    PropertyTitle.Text=graphNode.Name;
+                    PropertyInfo.Text=$"Referans ekseni • O({axis.Origin.X:0.###},{axis.Origin.Y:0.###},{axis.Origin.Z:0.###}) • Yön({axis.Direction.X:0.###},{axis.Direction.Y:0.###},{axis.Direction.Z:0.###})";
+                    Status(graphNode.Name+" seçildi • Dairesel Dizilim ekseni olarak kullanılabilir.");
+                    return;
+                case ReferencePointFeatureParameters point:
+                    PropertyTitle.Text=graphNode.Name;
+                    PropertyInfo.Text=$"Referans noktası • X={point.Position.X:0.###}, Y={point.Position.Y:0.###}, Z={point.Position.Z:0.###}";
+                    Status(graphNode.Name+" seçildi.");
+                    return;
+            }
+        }
         if (e.NewValue is not TreeViewItem item || item.Tag is not string tag) return;
         switch (tag)
         {
@@ -2066,6 +2090,13 @@ public partial class MainWindow : Window
             _viewer.FitAll();
             Status("Seçili yüzeye dik bakış • ekran yönü yüz kenarına hizalandı.");
             return true;
+        }
+
+        if(SelectedGraphNode?.Parameters is ReferencePlaneFeatureParameters referencePlane)
+        {
+            var plane=ReferencePlaneFrame(referencePlane,SelectedGraphNode.Name);
+            _viewer.SetNormalView(plane.Normal.X,plane.Normal.Y,plane.Normal.Z,plane.V.X,plane.V.Y,plane.V.Z);
+            _viewer.FitAll();Status(plane.Name+" • dik bakış");return true;
         }
 
         if (FeatureTree.SelectedItem is TreeViewItem item && item.Tag is string tag && tag.StartsWith("plane:",StringComparison.Ordinal))
@@ -2230,6 +2261,7 @@ public partial class MainWindow : Window
         MirrorButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
         LinearPatternButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
         CircularPatternButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
+        ReferenceGeometryButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&(_sketch is not null||_partSession is not null);
         if(_partSession is not null)
         {
             ExtrudeButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&!_hasSolid&&SelectedGraphId is Guid sketchId&&SelectedGraphNode?.Kind==SrcCad.Core.Features.FeatureKind.Sketch;

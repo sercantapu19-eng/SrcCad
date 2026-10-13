@@ -668,6 +668,123 @@ public partial class MainWindow
 
     private void ShellFeatureCancel_Click(object sender,RoutedEventArgs e)=>EndGraphFeature();
 
+    private static PlaneFrame ReferencePlaneFrame(ReferencePlaneFeatureParameters parameters,string name="Referans Düzlem")
+        => (parameters.BasePlane with
+        {
+            Name=name,
+            Origin=parameters.BasePlane.Origin+parameters.BasePlane.Normal*parameters.Offset
+        }).Validate();
+
+    private void ReferencePlane_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession())return;
+        BeginReferenceGeometryFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Düzlem"),
+            new ReferencePlaneFeatureParameters(_selectedPlane,20)));
+    }
+
+    private void ReferenceAxis_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession())return;
+        BeginReferenceGeometryFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Eksen"),
+            new ReferenceAxisFeatureParameters(_selectedPlane.Origin,_selectedPlane.Normal)));
+    }
+
+    private void ReferencePoint_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession())return;
+        BeginReferenceGeometryFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Nokta"),
+            new ReferencePointFeatureParameters(_selectedPlane.Origin)));
+    }
+
+    private void BeginReferenceGeometryFeature(FeatureNode node)
+    {
+        _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;
+        ReferenceGeometryTypeText.Text=node.Name;
+        ReferencePlaneEditor.Visibility=Visibility.Collapsed;
+        ReferenceAxisEditor.Visibility=Visibility.Collapsed;
+        ReferencePointEditor.Visibility=Visibility.Collapsed;
+        ReferenceGeometryError.Text="";
+        switch(node.Parameters)
+        {
+            case ReferencePlaneFeatureParameters plane:
+                ReferencePlaneEditor.Visibility=Visibility.Visible;
+                ReferencePlaneBaseText.Text=plane.BasePlane.Name;
+                ReferencePlaneOffset.Text=plane.Offset.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+                PropertyInfo.Text="Parametrik ofset düzlem • Çizim, Aynala ve Draft referansı.";
+                break;
+            case ReferenceAxisFeatureParameters axis:
+                ReferenceAxisEditor.Visibility=Visibility.Visible;
+                ReferenceAxisX.Text=axis.Origin.X.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+                ReferenceAxisY.Text=axis.Origin.Y.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+                ReferenceAxisZ.Text=axis.Origin.Z.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+                ReferenceAxisDx.Text=axis.Direction.X.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+                ReferenceAxisDy.Text=axis.Direction.Y.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+                ReferenceAxisDz.Text=axis.Direction.Z.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+                PropertyInfo.Text="Parametrik referans ekseni • Dairesel Dizilim ekseni.";
+                break;
+            case ReferencePointFeatureParameters point:
+                ReferencePointEditor.Visibility=Visibility.Visible;
+                ReferencePointX.Text=point.Position.X.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+                ReferencePointY.Text=point.Position.Y.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+                ReferencePointZ.Text=point.Position.Z.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+                PropertyInfo.Text="Parametrik 3B referans noktası.";
+                break;
+            default:throw new InvalidOperationException("Unsupported reference geometry.");
+        }
+        ReferenceGeometryPanel.Visibility=Visibility.Visible;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;
+        HoleFeaturePanel.Visibility=Visibility.Collapsed;RevolveFeaturePanel.Visibility=Visibility.Collapsed;
+        ShellFeaturePanel.Visibility=Visibility.Collapsed;DraftFeaturePanel.Visibility=Visibility.Collapsed;
+        RibFeaturePanel.Visibility=Visibility.Collapsed;MirrorFeaturePanel.Visibility=Visibility.Collapsed;PatternFeaturePanel.Visibility=Visibility.Collapsed;
+        PropertyTitle.Text=node.Name;ManagerTabs.SelectedItem=PropertyManagerTab;
+        _loadingGraphParameters=false;RefreshCommandState();
+    }
+
+    private static bool TryReferenceScalar(string text,out double value)
+    {
+        if(DimensionNumbers.TryParseScalar(text,out value)&&double.IsFinite(value))return true;
+        value=0;return false;
+    }
+
+    private FeatureDocument? ReferenceGeometryCandidate()
+    {
+        if(_partSession is null||_graphFeatureEdit is null)return null;
+        FeatureParameters? parameters=_graphFeatureEdit.Parameters switch
+        {
+            ReferencePlaneFeatureParameters plane when TryReferenceScalar(ReferencePlaneOffset.Text,out var offset)
+                => plane with{Offset=offset},
+            ReferenceAxisFeatureParameters when
+                TryReferenceScalar(ReferenceAxisX.Text,out var ax)&&TryReferenceScalar(ReferenceAxisY.Text,out var ay)&&TryReferenceScalar(ReferenceAxisZ.Text,out var az)&&
+                TryReferenceScalar(ReferenceAxisDx.Text,out var dx)&&TryReferenceScalar(ReferenceAxisDy.Text,out var dy)&&TryReferenceScalar(ReferenceAxisDz.Text,out var dz)&&
+                new Vector3d(dx,dy,dz).Length>1e-9
+                => new ReferenceAxisFeatureParameters(new Vector3d(ax,ay,az),new Vector3d(dx,dy,dz).Normalized()),
+            ReferencePointFeatureParameters when
+                TryReferenceScalar(ReferencePointX.Text,out var px)&&TryReferenceScalar(ReferencePointY.Text,out var py)&&TryReferenceScalar(ReferencePointZ.Text,out var pz)
+                => new ReferencePointFeatureParameters(new Vector3d(px,py,pz)),
+            _=>null
+        };
+        return parameters is null?null:ReplaceGraphNode(_graphFeatureEdit with{Parameters=parameters});
+    }
+
+    private void ReferenceGeometryParameterChanged(object sender,RoutedEventArgs e)
+    {
+        if(_loadingGraphParameters)return;
+        ReferenceGeometryError.Text=ReferenceGeometryCandidate() is null?"Geçerli, sonlu referans değerleri girin.":"";
+    }
+
+    private void ReferenceGeometryOk_Click(object sender,RoutedEventArgs e)
+    {
+        var candidate=ReferenceGeometryCandidate();
+        if(candidate is null||_partSession is null){ReferenceGeometryError.Text="Geçerli referans geometri değerleri gerekiyor.";return;}
+        if(!_partSession.TryCommit(candidate)){ReferenceGeometryError.Text=GraphError();return;}
+        var id=_graphFeatureEdit!.Id;
+        var committed=candidate.Node(id);
+        if(committed.Parameters is ReferencePlaneFeatureParameters plane)_selectedPlane=ReferencePlaneFrame(plane,committed.Name);
+        EndGraphFeature();RefreshPartTree(id);Status(committed.Name+" oluşturuldu.");
+    }
+
+    private void ReferenceGeometryCancel_Click(object sender,RoutedEventArgs e)=>EndGraphFeature();
+
     private void Draft_Click(object sender,RoutedEventArgs e)
     {
         if(_inSketch||_extrudeCommandActive||!EnsurePartSession())return;
@@ -1024,8 +1141,15 @@ public partial class MainWindow
         var baseNode=CurrentSolidFeature();
         if(baseNode is null){Status("Dairesel Dizilim için mevcut katı gerekiyor.");return;}
         var frame=CurrentPatternFrame();
+        var axisOrigin=frame.Origin;
+        var axisDirection=frame.Normal;
+        if(SelectedGraphNode?.Parameters is ReferenceAxisFeatureParameters referenceAxis)
+        {
+            axisOrigin=referenceAxis.Origin;
+            axisDirection=referenceAxis.Direction.Normalized();
+        }
         BeginPatternFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Dairesel Dizilim"),
-            new CircularPatternFeatureParameters(baseNode.Id,frame.Origin,frame.Normal,360,4)));
+            new CircularPatternFeatureParameters(baseNode.Id,axisOrigin,axisDirection,360,4)));
     }
 
     private void BeginPatternFeature(FeatureNode node)
@@ -1129,6 +1253,7 @@ public partial class MainWindow
         if(node.Parameters is RibFeatureParameters){BeginRibFeature(node);return;}
         if(node.Parameters is MirrorFeatureParameters){BeginMirrorFeature(node);return;}
         if(node.Parameters is LinearPatternFeatureParameters or CircularPatternFeatureParameters){BeginPatternFeature(node);return;}
+        if(node.Parameters is ReferencePlaneFeatureParameters or ReferenceAxisFeatureParameters or ReferencePointFeatureParameters){BeginReferenceGeometryFeature(node);return;}
         _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;_depthWheel.Reset();
         var cut=node.Parameters as CutFeatureParameters;
         var depth=cut?.Depth??Math.Abs(((ExtrudeFeatureParameters)node.Parameters).Depth);
@@ -1173,7 +1298,7 @@ public partial class MainWindow
     {
         _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.0);
         _graphFeatureEdit=null;_extrudeCommandActive=false;
-        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;RevolveFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;DraftFeaturePanel.Visibility=Visibility.Collapsed;RibFeaturePanel.Visibility=Visibility.Collapsed;MirrorFeaturePanel.Visibility=Visibility.Collapsed;PatternFeaturePanel.Visibility=Visibility.Collapsed;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;RevolveFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;DraftFeaturePanel.Visibility=Visibility.Collapsed;RibFeaturePanel.Visibility=Visibility.Collapsed;ReferenceGeometryPanel.Visibility=Visibility.Collapsed;MirrorFeaturePanel.Visibility=Visibility.Collapsed;PatternFeaturePanel.Visibility=Visibility.Collapsed;
         _viewer.ClearSelection();_viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Face);
         ManagerTabs.SelectedItem=FeatureManagerTab;RefreshCommandState();
     }
@@ -1198,6 +1323,7 @@ public partial class MainWindow
         ShellFeaturePanel.Visibility=Visibility.Collapsed;
         DraftFeaturePanel.Visibility=Visibility.Collapsed;
         RibFeaturePanel.Visibility=Visibility.Collapsed;
+        ReferenceGeometryPanel.Visibility=Visibility.Collapsed;
         MirrorFeaturePanel.Visibility=Visibility.Collapsed;
         PatternFeaturePanel.Visibility=Visibility.Collapsed;
     }

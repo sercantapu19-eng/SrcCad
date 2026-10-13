@@ -72,7 +72,13 @@
                     <Button Style="{StaticResource CadCommandButton}" Content="Doğrusal Dizilim" Click="LinearPattern_Click" x:Name="LinearPatternButton" ToolTip="Seçili düzlem/yüzün X yönünde parametrik gövde dizilimi oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Dairesel Dizilim" Click="CircularPattern_Click" x:Name="CircularPatternButton" ToolTip="Seçili düzlem/yüzün normal ekseni etrafında parametrik gövde dizilimi oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Aynala" Click="Mirror_Click" x:Name="MirrorButton" ToolTip="Düzlemsel yüz veya Ön/Üst/Sağ Düzlem seçin; katıyı gerçek 3B ayna dönüşümüyle çoğaltır."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Referans Geometri" Click="CadCommandPlaceholder_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Referans Geometri ▾" Click="CommandFamily_Click" x:Name="ReferenceGeometryButton">
+                        <Button.ContextMenu><ContextMenu>
+                            <MenuItem Header="Düzlem (Ofset)" Click="ReferencePlane_Click"/>
+                            <MenuItem Header="Eksen" Click="ReferenceAxis_Click"/>
+                            <MenuItem Header="Nokta" Click="ReferencePoint_Click"/>
+                        </ContextMenu></Button.ContextMenu>
+                    </Button>
                     <Separator Margin="8,2"/>
                     <Button Style="{StaticResource CommandButton}" Content="Yeni Parça" Click="NewPart_Click"/>
                 </WrapPanel>
@@ -343,6 +349,43 @@
                                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                     <Button Content="✓" Width="52" Height="34" Click="RibFeatureOk_Click"/>
                                     <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="RibFeatureCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="ReferenceGeometryPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock x:Name="ReferenceGeometryTypeText" Text="Referans Geometri" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <StackPanel x:Name="ReferencePlaneEditor" Visibility="Collapsed">
+                                    <TextBlock Text="Taban Düzlem"/>
+                                    <TextBlock x:Name="ReferencePlaneBaseText" TextWrapping="Wrap" Margin="0,4,0,8"/>
+                                    <TextBlock Text="Ofset (mm)"/>
+                                    <TextBox x:Name="ReferencePlaneOffset" TextChanged="ReferenceGeometryParameterChanged" Margin="0,4,0,8"/>
+                                </StackPanel>
+                                <StackPanel x:Name="ReferenceAxisEditor" Visibility="Collapsed">
+                                    <TextBlock Text="Başlangıç Noktası X / Y / Z (mm)"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,8">
+                                        <TextBox x:Name="ReferenceAxisX" Width="70" TextChanged="ReferenceGeometryParameterChanged"/>
+                                        <TextBox x:Name="ReferenceAxisY" Width="70" Margin="4,0,0,0" TextChanged="ReferenceGeometryParameterChanged"/>
+                                        <TextBox x:Name="ReferenceAxisZ" Width="70" Margin="4,0,0,0" TextChanged="ReferenceGeometryParameterChanged"/>
+                                    </StackPanel>
+                                    <TextBlock Text="Yön X / Y / Z"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,8">
+                                        <TextBox x:Name="ReferenceAxisDx" Width="70" TextChanged="ReferenceGeometryParameterChanged"/>
+                                        <TextBox x:Name="ReferenceAxisDy" Width="70" Margin="4,0,0,0" TextChanged="ReferenceGeometryParameterChanged"/>
+                                        <TextBox x:Name="ReferenceAxisDz" Width="70" Margin="4,0,0,0" TextChanged="ReferenceGeometryParameterChanged"/>
+                                    </StackPanel>
+                                </StackPanel>
+                                <StackPanel x:Name="ReferencePointEditor" Visibility="Collapsed">
+                                    <TextBlock Text="Nokta X / Y / Z (mm)"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,8">
+                                        <TextBox x:Name="ReferencePointX" Width="70" TextChanged="ReferenceGeometryParameterChanged"/>
+                                        <TextBox x:Name="ReferencePointY" Width="70" Margin="4,0,0,0" TextChanged="ReferenceGeometryParameterChanged"/>
+                                        <TextBox x:Name="ReferencePointZ" Width="70" Margin="4,0,0,0" TextChanged="ReferenceGeometryParameterChanged"/>
+                                    </StackPanel>
+                                </StackPanel>
+                                <TextBlock x:Name="ReferenceGeometryError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="ReferenceGeometryOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="ReferenceGeometryCancel_Click"/>
                                 </StackPanel>
                             </StackPanel>
 
