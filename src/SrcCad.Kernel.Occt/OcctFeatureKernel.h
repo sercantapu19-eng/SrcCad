@@ -39,6 +39,12 @@ namespace SrcCad::Kernel::Occt
         static System::String^ CircularPattern(System::String^ baseBody, array<double>^ axis, double angleDegrees, int count);
         static System::String^ EdgeFlange(System::String^ baseBody, array<System::String^>^ edgeReferences,
             double length, double angleDegrees, double thickness, double bendRadius, bool reverse);
+        static System::String^ Hem(System::String^ baseBody,array<System::String^>^ edgeReferences,
+            double width,double thickness,double bendRadius,bool reverse);
+        static System::String^ Jog(System::String^ baseBody,array<System::String^>^ edgeReferences,
+            double height,double offset,double thickness,bool reverse);
+        static System::String^ Rip(System::String^ baseBody,array<System::String^>^ edgeReferences,double gap);
+        static System::String^ CornerRelief(System::String^ baseBody,array<System::String^>^ edgeReferences,double radius);
         static System::String^ EndCap(System::String^ baseBody,System::String^ faceReference,double thickness,bool reverse);
         static System::String^ WeldBead(System::String^ baseBody,array<System::String^>^ edgeReferences,double radius);
         static System::String^ Transform(System::String^ body, array<double>^ transform6);
