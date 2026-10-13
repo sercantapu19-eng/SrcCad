@@ -3285,15 +3285,24 @@ public partial class MainWindow
         GraphDirection2Label.Visibility=extrusionVisibility;
         GraphDirection2Depth.Visibility=extrusionVisibility;
         GraphMergeResult.Visibility=extrusionVisibility;
+        var upToFaceVisibility=extrude?.BaseFeatureId is Guid?extrusionVisibility:Visibility.Collapsed;
+        GraphUpToFace.Visibility=upToFaceVisibility;
+        GraphCaptureUpToFace.Visibility=upToFaceVisibility;
+        GraphUpToFaceTarget.Visibility=upToFaceVisibility;
         GraphMidPlane.IsChecked=extrude?.MidPlane==true;
         GraphDirection2Enabled.IsChecked=extrude is {Direction2Depth:>1e-9};
         GraphDirection2Depth.Text=(extrude is {Direction2Depth:>1e-9}?extrude.Direction2Depth:10)
             .ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
         GraphMergeResult.IsChecked=extrude?.MergeResult??true;
         GraphMergeResult.IsEnabled=extrude?.BaseFeatureId is Guid;
-        GraphDirection2Enabled.IsEnabled=extrude is not null&&extrude.MidPlane==false;
-        GraphDirection2Depth.IsEnabled=extrude is not null&&extrude.MidPlane==false&&extrude.Direction2Depth>1e-9;
-        GraphReverse.IsEnabled=extrude?.MidPlane!=true;
+        GraphUpToFace.IsChecked=extrude?.UpToFace==true;
+        GraphUpToFaceTarget.Text=extrude?.UpToFace==true&&node.References is {Length:1}
+            ?"Hedef yüz: "+node.References[0].SemanticName
+            :"Hedef yüz seçilmedi";
+        GraphDirection2Enabled.IsEnabled=extrude is not null&&extrude.MidPlane==false&&extrude.UpToFace==false;
+        GraphDirection2Depth.IsEnabled=extrude is not null&&extrude.MidPlane==false&&extrude.UpToFace==false&&extrude.Direction2Depth>1e-9;
+        GraphMidPlane.IsEnabled=extrude?.UpToFace!=true;
+        GraphReverse.IsEnabled=extrude?.MidPlane!=true&&extrude?.UpToFace!=true;
         _loadingGraphParameters=false;
         GraphFeaturePanel.Visibility=Visibility.Visible;PropertyTitle.Text=node.Name;
         PropertyInfo.Text="Gerçek B-Rep önizleme • ✓ tek transaction • Esc iptal";
@@ -3307,20 +3316,26 @@ public partial class MainWindow
         FeatureParameters parameters;
         if(node.Parameters is ExtrudeFeatureParameters extrude)
         {
-            var midPlane=GraphMidPlane.IsChecked==true;
+            var upToFace=extrude.BaseFeatureId is Guid&&GraphUpToFace.IsChecked==true;
+            var midPlane=!upToFace&&GraphMidPlane.IsChecked==true;
             double direction2=0;
-            if(!midPlane&&GraphDirection2Enabled.IsChecked==true)
+            if(!upToFace&&!midPlane&&GraphDirection2Enabled.IsChecked==true)
             {
                 if(!DimensionNumbers.TryParse(GraphDirection2Depth.Text,SketchDimensionType.LineLength,out direction2,out _)||direction2<=1e-9)
                     return null;
             }
+            if(upToFace&&(node.References is not {Length:1}||
+                !FeatureReferenceCatalog.ArePersistentFaces(node.References,extrude.BaseFeatureId!.Value,1,1)))
+                return null;
             parameters=extrude with
             {
-                Depth=midPlane?depth:(GraphReverse.IsChecked==true?-depth:depth),
+                Depth=upToFace?Math.Abs(depth):(midPlane?depth:(GraphReverse.IsChecked==true?-depth:depth)),
                 MidPlane=midPlane,
-                Direction2Depth=midPlane?0:direction2,
-                MergeResult=extrude.BaseFeatureId is null||GraphMergeResult.IsChecked==true
+                Direction2Depth=upToFace||midPlane?0:direction2,
+                MergeResult=extrude.BaseFeatureId is null||GraphMergeResult.IsChecked==true,
+                UpToFace=upToFace
             };
+            node=node with{References=upToFace?node.References:null};
         }
         else parameters=node.Parameters switch
         {
@@ -3333,13 +3348,45 @@ public partial class MainWindow
     private void GraphParameterChanged(object sender,RoutedEventArgs e)
     {
         if(_loadingGraphParameters)return;
-        var isExtrude=_graphFeatureEdit?.Parameters is ExtrudeFeatureParameters;
-        var midPlane=isExtrude&&GraphMidPlane.IsChecked==true;
-        GraphDirection2Enabled.IsEnabled=isExtrude&&!midPlane;
-        GraphDirection2Depth.IsEnabled=isExtrude&&!midPlane&&GraphDirection2Enabled.IsChecked==true;
-        GraphReverse.IsEnabled=!midPlane;
+        var extrude=_graphFeatureEdit?.Parameters as ExtrudeFeatureParameters;
+        var isExtrude=extrude is not null;
+        var upToFace=isExtrude&&extrude!.BaseFeatureId is Guid&&GraphUpToFace.IsChecked==true;
+        var midPlane=isExtrude&&!upToFace&&GraphMidPlane.IsChecked==true;
+        GraphMidPlane.IsEnabled=isExtrude&&!upToFace;
+        GraphDirection2Enabled.IsEnabled=isExtrude&&!midPlane&&!upToFace;
+        GraphDirection2Depth.IsEnabled=isExtrude&&!midPlane&&!upToFace&&GraphDirection2Enabled.IsChecked==true;
+        GraphReverse.IsEnabled=!midPlane&&!upToFace;
+        if(upToFace&&_graphFeatureEdit?.References is not {Length:1})
+        {
+            _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();
+            _viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Face);
+            GraphFeatureError.Text="Yüzeye Kadar için base gövdeden düzlemsel bir hedef yüz seçin.";
+            return;
+        }
         UpdateGraphPreview();
     }
+    private void GraphCaptureUpToFace_Click(object sender,RoutedEventArgs e)
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not ExtrudeFeatureParameters extrude||
+           extrude.BaseFeatureId is not Guid baseId)
+        {
+            Status("Yüzeye Kadar yalnız mevcut katı üzerine eklenen Boss-Ekstrüzyon için kullanılabilir.");
+            return;
+        }
+        var reference=SelectedFaceReferences(baseId).FirstOrDefault(r=>
+            r.SemanticName.StartsWith("F;",StringComparison.Ordinal));
+        if(reference is null)
+        {
+            GraphFeatureError.Text="Base gövdeden tek bir düzlemsel yüz seçin.";
+            return;
+        }
+        _graphFeatureEdit=_graphFeatureEdit with{References=new[]{reference}};
+        GraphUpToFace.IsChecked=true;
+        GraphUpToFaceTarget.Text="Hedef yüz: "+reference.SemanticName;
+        GraphFeatureError.Text="";
+        UpdateGraphPreview();
+    }
+
     private void UpdateGraphPreview()
     {
         if(_partSession is null||_graphFeatureEdit is null)return;
