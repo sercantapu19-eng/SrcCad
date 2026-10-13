@@ -16,8 +16,54 @@ public partial class MainWindow
     private readonly Dictionary<Guid,string> _assemblyBodies=new();
     private TreeViewItem? _assemblyRoot;
     private Guid? _assemblyEditingComponentId;
+    private readonly Stack<AssemblyDocument> _assemblyUndo=new();
+    private readonly Stack<AssemblyDocument> _assemblyRedo=new();
 
     private bool InAssemblyMode=>_assemblyDocument is not null;
+
+    private void SetAssemblyDocument(AssemblyDocument next,bool record=true)
+    {
+        var safe=AssemblyDocumentFile.Clone(next);
+        if(record&&_assemblyDocument is not null)
+        {
+            _assemblyUndo.Push(AssemblyDocumentFile.Clone(_assemblyDocument));
+            _assemblyRedo.Clear();
+        }
+        _assemblyDocument=safe;
+    }
+
+    private void ResetAssemblyHistory()
+    {
+        _assemblyUndo.Clear();_assemblyRedo.Clear();
+    }
+
+    private void RestoreAssemblyDocument(AssemblyDocument document)
+    {
+        _assemblyDocument=AssemblyDocumentFile.Clone(document);
+        _assemblyBodies.Clear();
+        foreach(var component in _assemblyDocument.Components)
+        {
+            try{_assemblyBodies[component.Id]=RebuildAssemblyComponent(component.SourcePath);}
+            catch(Exception ex){Status(component.Name+" geri yüklenemedi: "+ex.Message);}
+        }
+        RefreshAssemblyTree();RenderAssembly();
+    }
+
+    internal void UndoAssembly()
+    {
+        if(_assemblyDocument is null||_assemblyUndo.Count==0){Status("Montajda geri alınacak işlem yok.");return;}
+        _assemblyRedo.Push(AssemblyDocumentFile.Clone(_assemblyDocument));
+        RestoreAssemblyDocument(_assemblyUndo.Pop());
+        Status("Montaj işlemi geri alındı.");
+    }
+
+    internal void RedoAssembly()
+    {
+        if(_assemblyDocument is null||_assemblyRedo.Count==0){Status("Montajda yinelenecek işlem yok.");return;}
+        _assemblyUndo.Push(AssemblyDocumentFile.Clone(_assemblyDocument));
+        RestoreAssemblyDocument(_assemblyRedo.Pop());
+        Status("Montaj işlemi yinelendi.");
+    }
 
     private void ExitAssemblyMode()
     {
@@ -26,6 +72,7 @@ public partial class MainWindow
         _assemblyDocument=null;
         _assemblyPath=null;
         _assemblyBodies.Clear();
+        ResetAssemblyHistory();
         _assemblyEditingComponentId=null;
         PartNode.Visibility=Visibility.Visible;
         AssemblyMovePanel.Visibility=Visibility.Collapsed;
@@ -103,6 +150,7 @@ public partial class MainWindow
     {
         NewPart_Click(sender,e);
         _assemblyDocument=new AssemblyDocument(Guid.NewGuid(),Array.Empty<AssemblyComponent>(),Array.Empty<AssemblyMate>());
+        ResetAssemblyHistory();
         _assemblyPath=null;
         PartNode.Visibility=Visibility.Collapsed;
         RefreshAssemblyTree();
@@ -129,7 +177,7 @@ public partial class MainWindow
                 var body=RebuildAssemblyComponent(file);
                 var id=Guid.NewGuid();
                 var component=new AssemblyComponent(id,Path.GetFileNameWithoutExtension(file),Path.GetFullPath(file),RigidTransform.Identity);
-                _assemblyDocument=_assemblyDocument.AddComponent(component);
+                SetAssemblyDocument(_assemblyDocument.AddComponent(component));
                 _assemblyBodies[id]=body;
                 last=id;
             }
@@ -166,6 +214,7 @@ public partial class MainWindow
         {
             NewAssembly_Click(sender,e);
             _assemblyDocument=AssemblyDocumentFile.Load(dialog.FileName);
+            ResetAssemblyHistory();
             _assemblyPath=dialog.FileName;
             _assemblyBodies.Clear();
             foreach(var component in _assemblyDocument.Components.Where(c=>!c.Suppressed))
@@ -219,7 +268,7 @@ public partial class MainWindow
         {Status("Montaj konum değerleri geçersiz.");return;}
         var component=_assemblyDocument.Component(id);
         var updated=component with{Transform=new RigidTransform(new Vector3d(x,y,z),new Vector3d(rx,ry,rz)).Validate()};
-        _assemblyDocument=_assemblyDocument with{Components=_assemblyDocument.Components.Select(c=>c.Id==id?updated:c).ToArray()};
+        SetAssemblyDocument(_assemblyDocument with{Components=_assemblyDocument.Components.Select(c=>c.Id==id?updated:c).ToArray()});
         AssemblyMovePanel.Visibility=Visibility.Collapsed;
         RefreshAssemblyTree(id);RenderAssembly(false);Status(component.Name+" konumu güncellendi.");
     }
@@ -233,14 +282,14 @@ public partial class MainWindow
     {
         if(_assemblyDocument is null)return;
         var component=_assemblyDocument.Component(id);
-        _assemblyDocument=_assemblyDocument with{Components=_assemblyDocument.Components.Select(c=>c.Id==id?c with{Fixed=!c.Fixed}:c).ToArray()};
+        SetAssemblyDocument(_assemblyDocument with{Components=_assemblyDocument.Components.Select(c=>c.Id==id?c with{Fixed=!c.Fixed}:c).ToArray()});
         RefreshAssemblyTree(id);
     }
 
     private void RemoveAssemblyComponent(Guid id)
     {
         if(_assemblyDocument is null)return;
-        _assemblyDocument=_assemblyDocument.RemoveComponent(id);
+        SetAssemblyDocument(_assemblyDocument.RemoveComponent(id));
         _assemblyBodies.Remove(id);RefreshAssemblyTree();RenderAssembly();Status("Bileşen montajdan kaldırıldı.");
     }
 
@@ -288,11 +337,11 @@ public partial class MainWindow
         var mate=new AssemblyMate(Guid.NewGuid(),"İlişki"+(_assemblyDocument.Mates.Length+1),type,
             new AssemblyReference(aId,TopologyKind.Body,"BODY"),
             new AssemblyReference(bId,TopologyKind.Body,"BODY"),value);
-        _assemblyDocument=_assemblyDocument with
+        SetAssemblyDocument(_assemblyDocument with
         {
             Components=_assemblyDocument.Components.Select(c=>c.Id==bId?c with{Transform=bt.Validate()}:c).ToArray(),
             Mates=_assemblyDocument.Mates.Append(mate).ToArray()
-        };
+        });
         AssemblyMatePanel.Visibility=Visibility.Collapsed;RefreshAssemblyTree(bId);RenderAssembly(false);
         Status(mate.Name+" uygulandı.");
     }
@@ -364,7 +413,7 @@ public partial class MainWindow
             list.Add(clone);
             _assemblyBodies[clone.Id]=_assemblyBodies[seed.Id];
         }
-        _assemblyDocument=_assemblyDocument with{Components=list.ToArray()};
+        SetAssemblyDocument(_assemblyDocument with{Components=list.ToArray()});
         AssemblyPatternPanel.Visibility=Visibility.Collapsed;RefreshAssemblyTree();RenderAssembly();
         Status((circular?"Dairesel":"Doğrusal")+" bileşen dizilimi oluşturuldu.");
     }
@@ -383,7 +432,7 @@ public partial class MainWindow
         {
             Id=Guid.NewGuid(),Name=seed.Name+"_Ayna",Fixed=false,MirrorPlane=_selectedPlane
         };
-        _assemblyDocument=_assemblyDocument.AddComponent(clone);
+        SetAssemblyDocument(_assemblyDocument.AddComponent(clone));
         _assemblyBodies[clone.Id]=_assemblyBodies[seed.Id];
         RefreshAssemblyTree(clone.Id);RenderAssembly();
         Status(seed.Name+" • "+_selectedPlane.Name+" düzlemine göre aynalandı.");
