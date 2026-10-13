@@ -7,7 +7,7 @@ using SrcCad.Core.Persistence;
 
 namespace SrcCad.Core.Features;
 
-public enum FeatureKind { Sketch, SpatialSketch, Extrude, Boundary, BoundaryCut, ExtrudedCut, Fillet, Chamfer, Hole, Revolve, RevolvedCut, Sweep, SweptCut, Loft, LoftedCut, Shell, Draft, Rib, Mirror, LinearPattern, CircularPattern, SketchPattern, BodyBoolean, MoveCopyBody, SplitBody, Dome, HoleWizard, ReferencePlane, ReferenceAxis, ReferencePoint, SheetMetalBase, SheetMetalCut, SheetMetalEdgeFlange, SheetMetalMiterFlange, SheetMetalConvert, SheetMetalHem, SheetMetalJog, SheetMetalRip, SheetMetalCornerRelief, SheetMetalBend, SheetMetalFlatten, StructuralMember, StructuralTrim, EndCap, WeldBead }
+public enum FeatureKind { ImportedBody, Sketch, SpatialSketch, Extrude, Boundary, BoundaryCut, ExtrudedCut, Fillet, Chamfer, Hole, Revolve, RevolvedCut, Sweep, SweptCut, Loft, LoftedCut, Shell, Draft, Rib, Mirror, LinearPattern, CircularPattern, SketchPattern, BodyBoolean, MoveCopyBody, SplitBody, Dome, HoleWizard, ReferencePlane, ReferenceAxis, ReferencePoint, SheetMetalBase, SheetMetalCut, SheetMetalEdgeFlange, SheetMetalMiterFlange, SheetMetalConvert, SheetMetalHem, SheetMetalJog, SheetMetalRip, SheetMetalCornerRelief, SheetMetalBend, SheetMetalFlatten, StructuralMember, StructuralTrim, EndCap, WeldBead }
 public enum RebuildState { Clean, Dirty, Suppressed, Blocked, Failed }
 public enum ExtrusionTermination { Blind, ThroughAll }
 public enum BodyBooleanOperation { Add, Subtract, Common }
@@ -17,6 +17,7 @@ public enum TopologyKind { Body, Face, Edge, Vertex }
 public sealed record FeatureReference(Guid ProducerId, TopologyKind Kind, string SemanticName);
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
+[JsonDerivedType(typeof(ImportedBodyFeatureParameters), "imported-body")]
 [JsonDerivedType(typeof(SketchFeatureParameters), "sketch")]
 [JsonDerivedType(typeof(SpatialSketchFeatureParameters), "spatial-sketch")]
 [JsonDerivedType(typeof(ExtrudeFeatureParameters), "extrude")]
@@ -63,6 +64,7 @@ public sealed record FeatureReference(Guid ProducerId, TopologyKind Kind, string
 [JsonDerivedType(typeof(EndCapFeatureParameters), "end-cap")]
 [JsonDerivedType(typeof(WeldBeadFeatureParameters), "weld-bead")]
 public abstract record FeatureParameters;
+public sealed record ImportedBodyFeatureParameters(string Format,string BRep) : FeatureParameters;
 public sealed record SketchFeatureParameters(PlaneFrame Plane, SketchSnapshot Sketch) : FeatureParameters;
 public sealed record SpatialSketchFeatureParameters(Vector3d[] Points,bool Closed=false) : FeatureParameters;
 public sealed record ExtrudeFeatureParameters(Guid SketchId, double Depth) : FeatureParameters;
@@ -119,7 +121,8 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
     bool Suppressed = false, FeatureReference[]? References = null)
 {
     [JsonIgnore] public FeatureKind Kind => Parameters switch
-    { SketchFeatureParameters => FeatureKind.Sketch, SpatialSketchFeatureParameters => FeatureKind.SpatialSketch,
+    { ImportedBodyFeatureParameters => FeatureKind.ImportedBody,
+      SketchFeatureParameters => FeatureKind.Sketch, SpatialSketchFeatureParameters => FeatureKind.SpatialSketch,
       ExtrudeFeatureParameters => FeatureKind.Extrude, BoundaryFeatureParameters => FeatureKind.Boundary,
       BoundaryCutFeatureParameters => FeatureKind.BoundaryCut,
       CutFeatureParameters => FeatureKind.ExtrudedCut, FilletFeatureParameters => FeatureKind.Fillet,
@@ -150,6 +153,7 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
       _ => throw new InvalidDataException("Unsupported feature") };
     [JsonIgnore] public Guid[] Dependencies => (Parameters switch
     {
+        ImportedBodyFeatureParameters => Array.Empty<Guid>(),
         SpatialSketchFeatureParameters => Array.Empty<Guid>(),
         ExtrudeFeatureParameters e => new[] { e.SketchId },
         BoundaryFeatureParameters b => (b.BaseFeatureId is Guid baseId?new[]{baseId}.Concat(b.ProfileSketchIds):b.ProfileSketchIds).ToArray(),
@@ -250,7 +254,7 @@ public static class FeatureDocumentFile
     {Validate(document);return JsonSerializer.Serialize(new Envelope(2,"mm",document),Options);}
     public static FeatureDocument Deserialize(string json)
     {
-        if(json.Length>16*1024*1024)throw new InvalidDataException("Part file exceeds size limit.");
+        if(json.Length>96*1024*1024)throw new InvalidDataException("Part file exceeds size limit.");
         using var parsed=JsonDocument.Parse(json);
         if(parsed.RootElement.GetProperty("SchemaVersion").GetInt32()==1)return FromLegacy(PartFile.Deserialize(json));
         var envelope=JsonSerializer.Deserialize<Envelope>(json,Options)??throw new InvalidDataException("Empty document.");
@@ -274,7 +278,7 @@ public static class FeatureDocumentFile
     }
     public static FeatureDocument Load(string path)
     {
-        if(new FileInfo(path).Length>16*1024*1024)throw new InvalidDataException("Part file exceeds size limit.");
+        if(new FileInfo(path).Length>96*1024*1024)throw new InvalidDataException("Part file exceeds size limit.");
         return Deserialize(File.ReadAllText(path));
     }
     public static string Fingerprint(FeatureNode node)=>JsonSerializer.Serialize(node,Options);
@@ -294,6 +298,12 @@ public static class FeatureDocumentFile
             }
             switch(node.Parameters)
             {
+                case ImportedBodyFeatureParameters imported:
+                    if(string.IsNullOrWhiteSpace(imported.Format)||
+                       imported.Format is not ("STEP" or "IGES" or "BREP")||
+                       string.IsNullOrWhiteSpace(imported.BRep)||imported.BRep.Length>64*1024*1024)
+                        throw new InvalidDataException("Invalid imported body.");
+                    break;
                 case SketchFeatureParameters s: _=PartFile.Serialize(new(s.Plane,s.Sketch,null));break;
                 case SpatialSketchFeatureParameters s:
                     if(s.Points is null||s.Points.Length<2||(s.Closed&&s.Points.Length<3)||
