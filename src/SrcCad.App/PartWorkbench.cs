@@ -2410,24 +2410,29 @@ public partial class MainWindow
         }
     }
 
-    private void UpdateInspectMeasureFromSelection()
+    private void UpdateInspectMeasureFromSelection(bool hoverPreview=false)
     {
         if(!_inspectMeasureMode)return;
         var measure=_viewer.SelectedTopologyMeasure();
+        if(measure.Length==0)
+            measure=_viewer.DetectedTopologyMeasure();
         var details=FormatTopologyMeasure(measure,out var compact);
         PropertyTitle.Text="Ölç";
         if(details is null)
         {
-            PropertyInfo.Text="Tek bir kenar, dairesel kenar, yüz veya köşe seçin.";
-            MeasureStatusText.Text="ÖLÇ: seçim bekleniyor";
-            Status("Ölç aktif • tek geometri seçin.");
+            if(!hoverPreview)
+            {
+                PropertyInfo.Text="Tek bir kenar, dairesel kenar, yüz veya köşe seçin.";
+                MeasureStatusText.Text="ÖLÇ: seçim bekleniyor";
+                Status("Ölç aktif • tek geometri seçin.");
+            }
             return;
         }
 
         PropertyInfo.Text=details;
-        MeasureStatusText.Text=compact;
+        MeasureStatusText.Text=(hoverPreview?"ÖNİZLEME  ":"")+compact;
         ManagerTabs.SelectedItem=PropertyManagerTab;
-        Status(compact);
+        if(!hoverPreview)Status(compact);
     }
 
     private void InspectMassProperties_Click(object sender,RoutedEventArgs e)
