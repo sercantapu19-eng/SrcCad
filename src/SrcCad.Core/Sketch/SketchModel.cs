@@ -501,6 +501,11 @@ public sealed partial class SketchModel
 
         Dimensions[index] = dim with { Value = value };
         var ok = dim.ReferenceA is not null || EnforceDimension(Dimensions[index]);
+        if(!ok)
+        {
+            RestoreSnapshot(before);
+            return false;
+        }
         // A direct geometric move can be blocked while the general solver can
         // still satisfy the full system by moving other free parameters.
         SolveRelations();
