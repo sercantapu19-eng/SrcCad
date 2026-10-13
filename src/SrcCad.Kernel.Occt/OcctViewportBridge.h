@@ -67,6 +67,8 @@ namespace SrcCad::Kernel::Occt
         cli::array<System::String^>^ SelectedEdgeReferences();
         System::String^ SelectedFaceReference();
         cli::array<System::String^>^ SelectedFaceReferences();
+        System::String^ SelectedAssemblyComponentId();
+        System::String^ SelectedAssemblyFaceReference();
         cli::array<double>^ SelectedTopologyMeasure();
         bool TryGetSelectedPlanarFace([System::Runtime::InteropServices::Out] CadPlane3D% plane);
         void SetCommittedSolidTransparency(double transparency);
@@ -144,6 +146,9 @@ namespace SrcCad::Kernel::Occt
         bool PublishFeatureBody(System::String^ body);
         void ClearAssemblyBodies();
         bool AddAssemblyBody(System::String^ body,
+                             double tx, double ty, double tz,
+                             double rxDegrees, double ryDegrees, double rzDegrees);
+        bool AddAssemblyBody(System::String^ body,System::String^ componentId,
                              double tx, double ty, double tz,
                              double rxDegrees, double ryDegrees, double rzDegrees);
         bool CommitExtrusion();
