@@ -25,7 +25,7 @@ public sealed record AssemblyComponent(
     PlaneFrame? MirrorPlane=null,
     Vector3d? ExplodeOffset=null);
 
-public enum MateType { Coincident, Parallel, Perpendicular, Concentric, Distance, Angle }
+public enum MateType { Coincident, Parallel, Perpendicular, Concentric, Distance, Angle, Tangent }
 
 public sealed record AssemblyReference(Guid ComponentId,TopologyKind Kind,string SemanticName);
 
@@ -189,7 +189,11 @@ public static class AssemblyMateSolver
         Vector3d localOriginA,
         Vector3d? localDirectionA,
         Vector3d localOriginB,
-        Vector3d? localDirectionB)
+        Vector3d? localDirectionB,
+        bool cylindricalA=false,
+        double radiusA=0,
+        bool cylindricalB=false,
+        double radiusB=0)
     {
         AssemblyDocumentFile.Validate(document);
         if(mate.Suppressed)return document;
@@ -223,6 +227,11 @@ public static class AssemblyMateSolver
                     break;
                 case MateType.Perpendicular:
                     desired=PerpendicularTarget(aDir,bDir);
+                    break;
+                case MateType.Tangent:
+                    if(cylindricalA&&cylindricalB)desired=aDir;
+                    else if(cylindricalA!=cylindricalB)desired=PerpendicularTarget(aDir,bDir);
+                    else throw new InvalidOperationException("Teğet ilişki için en az bir silindirik yüz gerekiyor.");
                     break;
                 case MateType.Angle:
                 {
@@ -263,6 +272,44 @@ public static class AssemblyMateSolver
                 var along=Vector3d.Dot(currentBOrigin-aOrigin,axis);
                 var desiredOrigin=aOrigin+axis*along;
                 transform=transform with{Translation=desiredOrigin-rotatedBOrigin};
+                break;
+            }
+            case MateType.Tangent:
+            {
+                if(cylindricalA&&cylindricalB)
+                {
+                    if(radiusA<=1e-9||radiusB<=1e-9)throw new InvalidOperationException("Silindirik teğet ilişkide yarıçap bulunamadı.");
+                    var axis=WorldDirection(a,localDirectionA!.Value);
+                    var delta=currentBOrigin-aOrigin;
+                    var radial=delta-axis*Vector3d.Dot(delta,axis);
+                    if(radial.Length<=1e-9)
+                    {
+                        var helper=Math.Abs(axis.X)<0.8?Vector3d.UnitX:Vector3d.UnitY;
+                        radial=Vector3d.Cross(axis,helper).Normalized();
+                    }
+                    else radial=radial.Normalized();
+                    var desiredOrigin=aOrigin+axis*Vector3d.Dot(delta,axis)+radial*(radiusA+radiusB);
+                    transform=transform with{Translation=desiredOrigin-rotatedBOrigin};
+                }
+                else if(!cylindricalA&&cylindricalB)
+                {
+                    if(radiusB<=1e-9)throw new InvalidOperationException("Silindirik teğet ilişkide yarıçap bulunamadı.");
+                    var planeNormal=WorldDirection(a,localDirectionA!.Value);
+                    var signed=Vector3d.Dot(currentBOrigin-aOrigin,planeNormal);
+                    var sign=Math.Abs(signed)>1e-9?Math.Sign(signed):1.0;
+                    var target=sign*radiusB;
+                    transform=transform with{Translation=transform.Translation+planeNormal*(target-signed)};
+                }
+                else if(cylindricalA&&!cylindricalB)
+                {
+                    if(radiusA<=1e-9)throw new InvalidOperationException("Silindirik teğet ilişkide yarıçap bulunamadı.");
+                    var planeNormal=WorldDirection(b,localDirectionB!.Value);
+                    var signed=Vector3d.Dot(aOrigin-currentBOrigin,planeNormal);
+                    var sign=Math.Abs(signed)>1e-9?Math.Sign(signed):1.0;
+                    var target=sign*radiusA;
+                    transform=transform with{Translation=transform.Translation+planeNormal*(signed-target)};
+                }
+                else throw new InvalidOperationException("Teğet ilişki için düzlem-silindir veya silindir-silindir referansı gerekir.");
                 break;
             }
         }
