@@ -141,31 +141,22 @@ public partial class MainWindow
     private void DeleteDrawingView(Guid id)
     {
         if(_drawingDocument is null)return;
-        var descendants=new HashSet<Guid>{id};
-        bool changed;
-        do
-        {
-            changed=false;
-            foreach(var view in _drawingDocument.Views)
-                if(view.ParentViewId is Guid parent&&descendants.Contains(parent)&&descendants.Add(view.Id))changed=true;
-        }while(changed);
-
-        var next=_drawingDocument with
-        {
-            Views=_drawingDocument.Views.Where(v=>!descendants.Contains(v.Id)).ToArray(),
-            Annotations=_drawingDocument.Annotations.Where(a=>a.ViewId is not Guid viewId||!descendants.Contains(viewId)).ToArray()
-        };
-        SetDrawingDocument(next);
+        var before=_drawingDocument.Views.Length;
+        SetDrawingDocument(_drawingDocument.RemoveView(id,true));
+        var removed=before-_drawingDocument.Views.Length;
         RefreshDrawingTree();RenderDrawing();
-        Status(descendants.Count==1?"Görünüş silindi.":$"{descendants.Count} bağlı görünüş silindi.");
+        Status(removed==1?"Görünüş silindi.":$"{removed} bağlı görünüş silindi.");
     }
 
     private void DeleteDrawingAnnotation(Guid id)
     {
         if(_drawingDocument is null)return;
-        var next=_drawingDocument with{Annotations=_drawingDocument.Annotations.Where(a=>a.Id!=id).ToArray()};
-        if(next.Annotations.Length==_drawingDocument.Annotations.Length)return;
-        SetDrawingDocument(next);RefreshDrawingTree();RenderDrawing();Status("Teknik resim notu/ölçüsü silindi.");
+        try
+        {
+            SetDrawingDocument(_drawingDocument.RemoveAnnotation(id));
+            RefreshDrawingTree();RenderDrawing();Status("Teknik resim notu/ölçüsü silindi.");
+        }
+        catch(InvalidOperationException){Status("Silinecek teknik resim notu bulunamadı.");}
     }
 
     private void RenderDrawing()
