@@ -11,13 +11,16 @@ internal static class DrawingDocumentTests
         var sheet=new DrawingSheet(Guid.NewGuid(),"A3",420,297,DrawingProjectionStandard.FirstAngle);
         var front=new DrawingView(Guid.NewGuid(),"Ön","C:\\Models\\Body.scpart",DrawingViewType.Front,sheet.Id,new Point2d(120,150),1.0);
         var top=new DrawingView(Guid.NewGuid(),"Üst","C:\\Models\\Body.scpart",DrawingViewType.Projected,sheet.Id,new Point2d(120,70),1.0,front.Id);
-        var note=new DrawingAnnotation(Guid.NewGuid(),sheet.Id,front.Id,new Point2d(20,20),"SRC CAD");
+        var note=new DrawingAnnotation(Guid.NewGuid(),sheet.Id,front.Id,new Point2d(20,20),"GENEL: 40 × 30 mm",
+            DrawingAnnotationKind.OverallSize,"projection");
         var doc=new DrawingDocument(Guid.NewGuid(),new[]{sheet},new[]{front,top},new[]{note});
         var clone=DrawingDocumentFile.Clone(doc);
 
         Check(clone.Sheets.Length==1&&clone.Sheets[0].Width==420,"drawing sheet roundtrip");
         Check(clone.Views.Length==2&&clone.View(top.Id).ParentViewId==front.Id,"projected drawing view roundtrip");
-        Check(clone.Annotations.Single().Text=="SRC CAD","drawing annotation roundtrip");
+        Check(clone.Annotations.Single().Text=="GENEL: 40 × 30 mm","drawing annotation roundtrip");
+        Check(clone.Annotations.Single().Kind==DrawingAnnotationKind.OverallSize&&clone.Annotations.Single().Data=="projection",
+            "associative annotation kind/data roundtrip");
 
         var removedView=clone.RemoveView(front.Id,true);
         Check(removedView.Views.Length==0&&removedView.Annotations.Length==0,
