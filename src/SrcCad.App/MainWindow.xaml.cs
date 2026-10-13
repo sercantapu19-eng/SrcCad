@@ -148,6 +148,22 @@ public partial class MainWindow : Window
     private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
         => e.Handled = HandleWindowKey(e.Key, Keyboard.Modifiers.HasFlag(ModifierKeys.Control), nativeViewport: false);
 
+    private void UndoActiveDocument_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch){UndoSketch();return;}
+        if(InDrawingMode){UndoDrawing();return;}
+        if(InAssemblyMode){UndoAssembly();return;}
+        UndoFeature();
+    }
+
+    private void RedoActiveDocument_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch){RedoSketch();return;}
+        if(InDrawingMode){RedoDrawing();return;}
+        if(InAssemblyMode){RedoAssembly();return;}
+        RedoFeature();
+    }
+
     private bool HandleWindowKey(Key key, bool control, bool nativeViewport)
     {
         _lastKeyRoute = $"{(nativeViewport ? "HWND" : "WPF")} {key} Ctrl={control} undo={_sketchUndo.Count} redo={_sketchRedo.Count}";
@@ -169,14 +185,18 @@ public partial class MainWindow : Window
         if (!_inSketch && !_extrudeCommandActive &&
             control && key == Key.Z)
         {
-            UndoFeature();
+            if(InDrawingMode)UndoDrawing();
+            else if(InAssemblyMode)UndoAssembly();
+            else UndoFeature();
             return true;
         }
 
         if (!_inSketch && !_extrudeCommandActive &&
             control && key == Key.Y)
         {
-            RedoFeature();
+            if(InDrawingMode)RedoDrawing();
+            else if(InAssemblyMode)RedoAssembly();
+            else RedoFeature();
             return true;
         }
 
