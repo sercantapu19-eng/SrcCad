@@ -452,8 +452,8 @@ public static class FeatureDocumentFile
                     break;
                 case RibFeatureParameters r:
                     if(document.Node(r.BaseFeatureId).Kind==FeatureKind.Sketch||
-                       document.Node(r.SketchId).Parameters is not SketchFeatureParameters rs||
-                       !rs.Sketch.Entities.OfType<SketchLine>().Any(line=>!line.Construction)||
+                       document.Node(r.SketchId).Parameters is not SketchFeatureParameters ribSketch||
+                       !ribSketch.Sketch.Entities.OfType<SketchLine>().Any(line=>!line.Construction)||
                        !double.IsFinite(r.Thickness)||r.Thickness<=1e-9||
                        !double.IsFinite(r.Depth)||r.Depth<=1e-9)
                         throw new InvalidDataException("Invalid rib.");
