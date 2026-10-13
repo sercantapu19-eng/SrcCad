@@ -2226,6 +2226,7 @@ public partial class MainWindow : Window
         RevolveCutButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
         ShellButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
         DraftButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
+        RibButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid&&_partSession is not null&&RibSketchCandidate() is not null;
         MirrorButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
         LinearPatternButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
         CircularPatternButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;

@@ -68,7 +68,7 @@
                     <Button Style="{StaticResource CadCommandButton}" Content="Delik" Click="Hole_Click" x:Name="HoleButton" ToolTip="Düzlemsel yüz seçin; tıklanan konumda gerçek parametrik delik oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Kabuk" Click="Shell_Click" x:Name="ShellButton" ToolTip="Açılacak yüzleri seçin; kalınlıkla gerçek içi boş katı oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Draft" Click="Draft_Click" x:Name="DraftButton" ToolTip="Seçili yüzlere, aktif referans düzlemine göre gerçek parametrik draft açısı uygular."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Nervür" Click="CadCommandPlaceholder_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Nervür" Click="Rib_Click" x:Name="RibButton" ToolTip="Katıdan sonra oluşturulan açık çizgi sketch'ini kalınlaştırıp gerçek B-Rep nervür olarak birleştirir."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Doğrusal Dizilim" Click="LinearPattern_Click" x:Name="LinearPatternButton" ToolTip="Seçili düzlem/yüzün X yönünde parametrik gövde dizilimi oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Dairesel Dizilim" Click="CircularPattern_Click" x:Name="CircularPatternButton" ToolTip="Seçili düzlem/yüzün normal ekseni etrafında parametrik gövde dizilimi oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Aynala" Click="Mirror_Click" x:Name="MirrorButton" ToolTip="Düzlemsel yüz veya Ön/Üst/Sağ Düzlem seçin; katıyı gerçek 3B ayna dönüşümüyle çoğaltır."/>
@@ -327,6 +327,22 @@
                                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                     <Button Content="✓" Width="52" Height="34" Click="DraftFeatureOk_Click"/>
                                     <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="DraftFeatureCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="RibFeaturePanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Nervür Kalınlığı (mm)" FontWeight="Bold"/>
+                                <TextBox x:Name="RibThickness" TextChanged="RibFeatureParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock Text="Yükseklik / Derinlik (mm)" FontWeight="Bold"/>
+                                <TextBox x:Name="RibDepth" TextChanged="RibFeatureParameterChanged" Margin="0,4,0,8"/>
+                                <CheckBox x:Name="RibReverse" Content="Yönü Ters Çevir" Checked="RibFeatureParameterChanged" Unchecked="RibFeatureParameterChanged" Margin="0,0,0,8"/>
+                                <TextBlock Text="Kaynak Çizim" FontWeight="Bold"/>
+                                <TextBlock x:Name="RibSketchText" Text="Açık çizgi sketch'i seçilmedi." TextWrapping="Wrap" Margin="0,4,0,8"/>
+                                <TextBlock Text="Sketch en az bir normal (construction olmayan) çizgi içermeli ve nervür taban katıya temas etmelidir." Foreground="#5F6B76" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="RibFeatureError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="RibFeatureOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="RibFeatureCancel_Click"/>
                                 </StackPanel>
                             </StackPanel>
 

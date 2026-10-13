@@ -762,6 +762,97 @@ public partial class MainWindow
 
     private void DraftFeatureCancel_Click(object sender,RoutedEventArgs e)=>EndGraphFeature();
 
+    private static bool HasRibLines(FeatureNode node)
+        => node.Parameters is SketchFeatureParameters sketch&&sketch.Sketch.Entities.OfType<SketchLine>().Any(line=>!line.Construction);
+
+    private FeatureNode? RibSketchCandidate()
+    {
+        if(_partSession is null)return null;
+        if(SelectedGraphNode is {Kind:FeatureKind.Sketch} selected&&HasRibLines(selected))return selected;
+        var ordered=_partSession.Document.Ordered();
+        var lastBody=-1;
+        for(var i=0;i<ordered.Length;i++)if(_partSession.Output(ordered[i].Id)?.BRep is not null)lastBody=i;
+        if(lastBody<0)return null;
+        return ordered.Skip(lastBody+1).LastOrDefault(node=>node.Kind==FeatureKind.Sketch&&HasRibLines(node));
+    }
+
+    private void Rib_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession())return;
+        var baseNode=CurrentSolidFeature();
+        if(baseNode is null){Status("Nervür için mevcut katı gerekiyor.");return;}
+        var sketch=RibSketchCandidate();
+        if(sketch is null)
+        {Status("Nervür için katıdan sonra açık çizgi içeren bir Çizim oluşturun veya FeatureManager'dan seçin.");return;}
+        BeginRibFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Nervür"),
+            new RibFeatureParameters(baseNode.Id,sketch.Id,3,10,false)));
+    }
+
+    private void BeginRibFeature(FeatureNode node)
+    {
+        if(node.Parameters is not RibFeatureParameters rib)throw new InvalidOperationException("Unsupported rib feature.");
+        _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;
+        RibThickness.Text=rib.Thickness.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        RibDepth.Text=rib.Depth.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        RibReverse.IsChecked=rib.Reverse;
+        RibSketchText.Text=_partSession?.Document.Node(rib.SketchId).Name??"Çizim";
+        RibFeatureError.Text="";
+        RibFeaturePanel.Visibility=Visibility.Visible;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;
+        HoleFeaturePanel.Visibility=Visibility.Collapsed;RevolveFeaturePanel.Visibility=Visibility.Collapsed;
+        ShellFeaturePanel.Visibility=Visibility.Collapsed;DraftFeaturePanel.Visibility=Visibility.Collapsed;
+        MirrorFeaturePanel.Visibility=Visibility.Collapsed;PatternFeaturePanel.Visibility=Visibility.Collapsed;
+        PropertyTitle.Text=node.Name;
+        PropertyInfo.Text="Gerçek OCCT nervür • açık sketch çizgileri • kalınlık/derinlik • canlı B-Rep fuse önizleme";
+        ManagerTabs.SelectedItem=PropertyManagerTab;
+        _loadingGraphParameters=false;
+        UpdateRibFeaturePreview();RefreshCommandState();
+    }
+
+    private FeatureDocument? RibFeatureCandidate()
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not RibFeatureParameters rib||
+           !DimensionNumbers.TryParse(RibThickness.Text,SketchDimensionType.LineLength,out var thickness,out _)||
+           !DimensionNumbers.TryParse(RibDepth.Text,SketchDimensionType.LineLength,out var depth,out _)||
+           thickness<=1e-9||depth<=1e-9)return null;
+        return ReplaceGraphNode(_graphFeatureEdit with
+        {
+            Parameters=rib with{Thickness=thickness,Depth=depth,Reverse=RibReverse.IsChecked==true}
+        });
+    }
+
+    private void RibFeatureParameterChanged(object sender,RoutedEventArgs e)
+    {
+        if(!_loadingGraphParameters)UpdateRibFeaturePreview();
+    }
+
+    private void UpdateRibFeaturePreview()
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not RibFeatureParameters)return;
+        var candidate=RibFeatureCandidate();
+        if(candidate is null)
+        {
+            _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();
+            RibFeatureError.Text="Pozitif kalınlık ve derinlik girin.";return;
+        }
+        var preview=_partSession.Preview(candidate);
+        var body=preview.Success?LastBody(candidate,id=>preview.Outputs.GetValueOrDefault(id)):null;
+        if(body is not null&&_viewer.PreviewFeatureBody(body)){RibFeatureError.Text="";return;}
+        _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();
+        RibFeatureError.Text=preview.Report.Nodes.LastOrDefault(n=>n.State==RebuildState.Failed)?.Error??preview.Report.Error??"Nervür önizlemesi oluşturulamadı.";
+    }
+
+    private void RibFeatureOk_Click(object sender,RoutedEventArgs e)
+    {
+        var candidate=RibFeatureCandidate();
+        if(candidate is null||_partSession is null){RibFeatureError.Text="Geçerli nervür parametreleri gerekiyor.";return;}
+        if(!_partSession.TryCommit(candidate)){RibFeatureError.Text=GraphError();return;}
+        var id=_graphFeatureEdit!.Id;EndGraphFeature();RefreshPartTree(id);
+        Status("Parametrik nervür onaylandı; model yeniden oluşturuldu.");
+    }
+
+    private void RibFeatureCancel_Click(object sender,RoutedEventArgs e)=>EndGraphFeature();
+
     private string? CurrentBodyBRep()
     {
         if(!EnsurePartSession()||_partSession is null)return null;
@@ -1035,6 +1126,7 @@ public partial class MainWindow
         if(node.Parameters is RevolveFeatureParameters or RevolveCutFeatureParameters){BeginRevolveFeature(node);return;}
         if(node.Parameters is ShellFeatureParameters){BeginShellFeature(node);return;}
         if(node.Parameters is DraftFeatureParameters){BeginDraftFeature(node);return;}
+        if(node.Parameters is RibFeatureParameters){BeginRibFeature(node);return;}
         if(node.Parameters is MirrorFeatureParameters){BeginMirrorFeature(node);return;}
         if(node.Parameters is LinearPatternFeatureParameters or CircularPatternFeatureParameters){BeginPatternFeature(node);return;}
         _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;_depthWheel.Reset();
@@ -1081,7 +1173,7 @@ public partial class MainWindow
     {
         _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.0);
         _graphFeatureEdit=null;_extrudeCommandActive=false;
-        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;RevolveFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;DraftFeaturePanel.Visibility=Visibility.Collapsed;MirrorFeaturePanel.Visibility=Visibility.Collapsed;PatternFeaturePanel.Visibility=Visibility.Collapsed;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;RevolveFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;DraftFeaturePanel.Visibility=Visibility.Collapsed;RibFeaturePanel.Visibility=Visibility.Collapsed;MirrorFeaturePanel.Visibility=Visibility.Collapsed;PatternFeaturePanel.Visibility=Visibility.Collapsed;
         _viewer.ClearSelection();_viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Face);
         ManagerTabs.SelectedItem=FeatureManagerTab;RefreshCommandState();
     }
@@ -1105,6 +1197,7 @@ public partial class MainWindow
         RevolveFeaturePanel.Visibility=Visibility.Collapsed;
         ShellFeaturePanel.Visibility=Visibility.Collapsed;
         DraftFeaturePanel.Visibility=Visibility.Collapsed;
+        RibFeaturePanel.Visibility=Visibility.Collapsed;
         MirrorFeaturePanel.Visibility=Visibility.Collapsed;
         PatternFeaturePanel.Visibility=Visibility.Collapsed;
     }
