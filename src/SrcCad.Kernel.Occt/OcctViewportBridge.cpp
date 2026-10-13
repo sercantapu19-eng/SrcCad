@@ -1695,6 +1695,169 @@ namespace SrcCad::Kernel::Occt
         catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
     }
 
+    String^ OcctFeatureKernel::Hem(String^ baseBody,array<String^>^ edgeReferences,
+        double width,double thickness,double bendRadius,bool reverse)
+    {
+        if(!std::isfinite(width)||width<=1e-9||!std::isfinite(thickness)||thickness<=1e-9||
+           !std::isfinite(bendRadius)||bendRadius<0)throw gcnew ArgumentException("Invalid hem parameters.");
+        // A nearly closed 180-degree return flange is represented as a real
+        // B-Rep edge flange at 179 degrees; the small opening avoids singular
+        // coincident faces while preserving the folded-back hem geometry.
+        return EdgeFlange(baseBody,edgeReferences,width,179.0,thickness,bendRadius,reverse);
+    }
+
+    String^ OcctFeatureKernel::Jog(String^ baseBody,array<String^>^ edgeReferences,
+        double height,double offset,double thickness,bool reverse)
+    {
+        if(!std::isfinite(height)||height<=1e-9||!std::isfinite(offset)||offset<=1e-9||
+           !std::isfinite(thickness)||thickness<=1e-9)
+            throw gcnew ArgumentException("Invalid jog parameters.");
+        try
+        {
+            TopoDS_Shape result=decodeFeature(baseBody);
+            const double before=featureVolume(result);
+            if(edgeReferences==nullptr||edgeReferences->Length==0)throw gcnew ArgumentException("Jog requires at least one edge.");
+            for each(String^ reference in edgeReferences)
+            {
+                auto resolved=resolveEdgeReferences(result,gcnew array<String^>{reference});
+                if(resolved.empty())throw gcnew InvalidOperationException("Jog edge could not be resolved.");
+                TopoDS_Edge edge=resolved.front();
+                TopoDS_Vertex va,vb;TopExp::Vertices(edge,va,vb);
+                if(va.IsNull()||vb.IsNull())throw gcnew InvalidOperationException("Jog requires a bounded straight edge.");
+                gp_Pnt a=BRep_Tool::Pnt(va),b=BRep_Tool::Pnt(vb);
+                gp_Vec tangent(a,b);double edgeLength=tangent.Magnitude();
+                if(edgeLength<=1e-9)throw gcnew InvalidOperationException("Jog edge has zero length.");
+                GProp_GProps edgeProps;BRepGProp::LinearProperties(edge,edgeProps);
+                if(std::abs(edgeProps.Mass()-edgeLength)>std::max(1e-6,edgeLength*1e-5))
+                    throw gcnew InvalidOperationException("Jog currently requires a straight edge.");
+                gp_Dir t(tangent);
+
+                TopoDS_Face support;gp_Dir n;gp_Pnt faceCenter;
+                if(!supportFaceForEdge(result,edge,support,n,faceCenter))
+                    throw gcnew InvalidOperationException("Jog requires an adjacent planar sheet face.");
+                gp_Pnt mid((a.X()+b.X())*0.5,(a.Y()+b.Y())*0.5,(a.Z()+b.Z())*0.5);
+                gp_Vec inward(mid,faceCenter);
+                inward-=gp_Vec(n.X(),n.Y(),n.Z())*inward.Dot(gp_Vec(n.X(),n.Y(),n.Z()));
+                gp_Vec side=gp_Vec(t.X(),t.Y(),t.Z()).Crossed(gp_Vec(n.X(),n.Y(),n.Z()));
+                if(inward.Magnitude()>1e-9&&side.Dot(inward)>0)side.Reverse();
+                side.Normalize();
+                gp_Vec vertical(n.X(),n.Y(),n.Z());if(reverse)vertical.Reverse();
+
+                auto makeStrip=[&](const gp_Pnt& p0,const gp_Pnt& p1,const gp_Pnt& p2,const gp_Pnt& p3,const gp_Vec& extrusion)
+                {
+                    BRepBuilderAPI_MakePolygon poly;poly.Add(p0);poly.Add(p1);poly.Add(p2);poly.Add(p3);poly.Close();
+                    if(!poly.IsDone())throw gcnew InvalidOperationException("Jog strip profile failed.");
+                    BRepBuilderAPI_MakeFace face(poly.Wire(),true);
+                    if(!face.IsDone())throw gcnew InvalidOperationException("Jog strip face failed.");
+                    BRepPrimAPI_MakePrism prism(face.Face(),extrusion,true,true);
+                    TopoDS_Shape shape=prism.Shape();featureVolume(shape);return shape;
+                };
+
+                const double overlap=std::max(1e-5,std::min(thickness*0.05,0.05));
+                gp_Pnt wa=a.Translated(side.Multiplied(-thickness*0.5)).Translated(vertical.Multiplied(-overlap));
+                gp_Pnt wb=b.Translated(side.Multiplied(-thickness*0.5)).Translated(vertical.Multiplied(-overlap));
+                gp_Pnt wc=wb.Translated(vertical.Multiplied(height+overlap));
+                gp_Pnt wd=wa.Translated(vertical.Multiplied(height+overlap));
+                TopoDS_Shape web=makeStrip(wa,wb,wc,wd,side.Multiplied(thickness));
+
+                gp_Pnt ta=a.Translated(vertical.Multiplied(height-thickness*0.5));
+                gp_Pnt tb=b.Translated(vertical.Multiplied(height-thickness*0.5));
+                gp_Pnt tc=tb.Translated(side.Multiplied(offset+overlap));
+                gp_Pnt td=ta.Translated(side.Multiplied(offset+overlap));
+                TopoDS_Shape shelf=makeStrip(ta,tb,tc,td,vertical.Multiplied(thickness));
+
+                BRepAlgoAPI_Fuse fuseWeb(result,web);fuseWeb.Build();
+                if(!fuseWeb.IsDone())throw gcnew InvalidOperationException("Jog web fuse failed.");
+                BRepAlgoAPI_Fuse fuseShelf(fuseWeb.Shape(),shelf);fuseShelf.Build();
+                if(!fuseShelf.IsDone())throw gcnew InvalidOperationException("Jog shelf fuse failed.");
+                result=fuseShelf.Shape();featureVolume(result);
+            }
+            if(featureVolume(result)<=before+std::max(1e-8,before*1e-10))
+                throw gcnew InvalidOperationException("Jog added no material.");
+            return encodeFeature(result);
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
+    String^ OcctFeatureKernel::Rip(String^ baseBody,array<String^>^ edgeReferences,double gap)
+    {
+        if(!std::isfinite(gap)||gap<=1e-9)throw gcnew ArgumentException("Rip gap must be positive.");
+        try
+        {
+            TopoDS_Shape result=decodeFeature(baseBody);
+            const double before=featureVolume(result);
+            if(edgeReferences==nullptr||edgeReferences->Length==0)throw gcnew ArgumentException("Rip requires at least one edge.");
+            Bnd_Box bounds;BRepBndLib::Add(result,bounds);
+            double xmin,ymin,zmin,xmax,ymax,zmax;bounds.Get(xmin,ymin,zmin,xmax,ymax,zmax);
+            const double extent=std::max(10.0,gp_Pnt(xmin,ymin,zmin).Distance(gp_Pnt(xmax,ymax,zmax))*2.0);
+            auto edges=resolveEdgeReferences(result,edgeReferences);
+            for(const auto& edge:edges)
+            {
+                TopoDS_Vertex va,vb;TopExp::Vertices(edge,va,vb);
+                if(va.IsNull()||vb.IsNull())continue;
+                gp_Pnt a=BRep_Tool::Pnt(va),b=BRep_Tool::Pnt(vb);
+                gp_Vec tangent(a,b);if(tangent.Magnitude()<=1e-9)continue;
+                gp_Dir t(tangent);
+                TopoDS_Face support;gp_Dir n;gp_Pnt center;
+                if(!supportFaceForEdge(result,edge,support,n,center))continue;
+                gp_Vec side=gp_Vec(t.X(),t.Y(),t.Z()).Crossed(gp_Vec(n.X(),n.Y(),n.Z()));side.Normalize();
+                gp_Vec normal(n.X(),n.Y(),n.Z());
+                gp_Pnt p0=a.Translated(side.Multiplied(-gap*0.5)).Translated(normal.Multiplied(-extent));
+                gp_Pnt p1=b.Translated(side.Multiplied(-gap*0.5)).Translated(normal.Multiplied(-extent));
+                gp_Pnt p2=b.Translated(side.Multiplied(gap*0.5)).Translated(normal.Multiplied(-extent));
+                gp_Pnt p3=a.Translated(side.Multiplied(gap*0.5)).Translated(normal.Multiplied(-extent));
+                BRepBuilderAPI_MakePolygon poly;poly.Add(p0);poly.Add(p1);poly.Add(p2);poly.Add(p3);poly.Close();
+                BRepBuilderAPI_MakeFace face(poly.Wire(),true);
+                BRepPrimAPI_MakePrism prism(face.Face(),normal.Multiplied(extent*2),true,true);
+                BRepAlgoAPI_Cut cut(result,prism.Shape());cut.Build();
+                if(!cut.IsDone())throw gcnew InvalidOperationException("OCCT rip cut failed.");
+                result=cut.Shape();
+            }
+            const double after=featureVolume(result);
+            if(before-after<=std::max(1e-8,before*1e-10))throw gcnew InvalidOperationException("Rip removes no material.");
+            return encodeFeature(result);
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
+    String^ OcctFeatureKernel::CornerRelief(String^ baseBody,array<String^>^ edgeReferences,double radius)
+    {
+        if(!std::isfinite(radius)||radius<=1e-9)throw gcnew ArgumentException("Corner relief radius must be positive.");
+        try
+        {
+            TopoDS_Shape result=decodeFeature(baseBody);
+            const double before=featureVolume(result);
+            if(edgeReferences==nullptr||edgeReferences->Length==0)throw gcnew ArgumentException("Corner relief requires an edge.");
+            Bnd_Box bounds;BRepBndLib::Add(result,bounds);
+            double xmin,ymin,zmin,xmax,ymax,zmax;bounds.Get(xmin,ymin,zmin,xmax,ymax,zmax);
+            const double extent=std::max(10.0,gp_Pnt(xmin,ymin,zmin).Distance(gp_Pnt(xmax,ymax,zmax))*2.0);
+            auto edges=resolveEdgeReferences(result,edgeReferences);
+            std::vector<gp_Pnt> centers;
+            for(const auto& edge:edges)
+            {
+                TopoDS_Vertex va,vb;TopExp::Vertices(edge,va,vb);
+                if(va.IsNull()||vb.IsNull())continue;
+                TopoDS_Face support;gp_Dir n;gp_Pnt fc;
+                if(!supportFaceForEdge(result,edge,support,n,fc))continue;
+                for(const auto& point:{BRep_Tool::Pnt(va),BRep_Tool::Pnt(vb)})
+                {
+                    bool duplicate=false;for(const auto& c:centers)if(c.Distance(point)<1e-6){duplicate=true;break;}
+                    if(duplicate)continue;centers.push_back(point);
+                    gp_Vec normal(n.X(),n.Y(),n.Z());
+                    gp_Pnt start=point.Translated(normal.Multiplied(-extent));
+                    BRepPrimAPI_MakeCylinder cylinder(gp_Ax2(start,n),radius,extent*2);
+                    BRepAlgoAPI_Cut cut(result,cylinder.Shape());cut.Build();
+                    if(!cut.IsDone())throw gcnew InvalidOperationException("OCCT corner relief cut failed.");
+                    result=cut.Shape();
+                }
+            }
+            const double after=featureVolume(result);
+            if(before-after<=std::max(1e-8,before*1e-10))throw gcnew InvalidOperationException("Corner relief removes no material.");
+            return encodeFeature(result);
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
     String^ OcctFeatureKernel::WeldBead(String^ baseBody,array<String^>^ edgeReferences,double radius)
     {
         if(!std::isfinite(radius)||radius<=1e-9)throw gcnew ArgumentException("Weld bead radius must be positive.");
