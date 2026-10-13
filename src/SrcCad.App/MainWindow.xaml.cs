@@ -287,6 +287,7 @@ public partial class MainWindow : Window
             {
                 _inspectMeasureMode=false;
                 MeasureStatusText.Text="";
+                StatusUnitText.Text="mm";
                 _viewer.ClearSelection();
                 _viewer.SetSelectionMode(CadSelectionMode.Face);
                 Status("Ölç kapatıldı • yüz seçimi aktif.");
@@ -2462,21 +2463,21 @@ public partial class MainWindow : Window
 
     private void FaceSelection_Click(object sender, RoutedEventArgs e)
     {
-        _inspectMeasureMode=false;MeasureStatusText.Text="";
+        _inspectMeasureMode=false;MeasureStatusText.Text="";StatusUnitText.Text="mm";
         _viewer.SetSelectionMode(CadSelectionMode.Face);
         Status("Yüz seçimi aktif • mouse üstünde OCCT pre-highlight görünür.");
     }
 
     private void EdgeSelection_Click(object sender, RoutedEventArgs e)
     {
-        _inspectMeasureMode=false;MeasureStatusText.Text="";
+        _inspectMeasureMode=false;MeasureStatusText.Text="";StatusUnitText.Text="mm";
         _viewer.SetSelectionMode(CadSelectionMode.Edge);
         Status("Kenar seçimi aktif • mouse üstünde OCCT pre-highlight görünür.");
     }
 
     private void VertexSelection_Click(object sender, RoutedEventArgs e)
     {
-        _inspectMeasureMode=false;MeasureStatusText.Text="";
+        _inspectMeasureMode=false;MeasureStatusText.Text="";StatusUnitText.Text="mm";
         _viewer.SetSelectionMode(CadSelectionMode.Vertex);
         Status("Köşe seçimi aktif • mouse üstünde OCCT pre-highlight görünür.");
     }
