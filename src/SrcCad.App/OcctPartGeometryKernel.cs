@@ -9,31 +9,62 @@ namespace SrcCad.App;
 internal sealed class OcctPartGeometryKernel : IPartGeometryKernel
 {
     private sealed record Profile(double[] Outer,double[] Holes,double[] CircleHoles,double[] Circle,double[] Frame);
-    private static Profile Pack(SketchModel sketch,double depth)
+
+    private static Profile PackRegion(SketchModel sketch,SketchExtrusionRegion region,double depth)
     {
         var p=sketch.Plane;
         double[] frame={p.Origin.X,p.Origin.Y,p.Origin.Z,p.U.X,p.U.Y,p.U.Z,p.V.X,p.V.Y,p.V.Z,p.Normal.X,p.Normal.Y,p.Normal.Z,depth};
-        if(sketch.TryGetExtrusionProfile(out var loop,out var polygonHoles,out var circles))
+        var holes=new List<double>();
+        foreach(var hole in region.PolygonHoles)
         {
-            var holes=new List<double>();
-            foreach(var hole in polygonHoles){holes.Add(hole.Count);foreach(var point in hole){holes.Add(point.X);holes.Add(point.Y);}}
-            var round=circles.SelectMany(c=>new[]{sketch.Point(c.CenterPointId).Position.X,sketch.Point(c.CenterPointId).Position.Y,c.Radius}).ToArray();
-            return new(loop.SelectMany(v=>new[]{v.X,v.Y}).ToArray(),holes.ToArray(),round,Array.Empty<double>(),frame);
+            holes.Add(hole.Count);
+            foreach(var point in hole){holes.Add(point.X);holes.Add(point.Y);}
         }
-        if(sketch.TryGetSingleCircle(out var circle))
+        var round=region.CircularHoles.SelectMany(circle=>
         {
             var center=sketch.Point(circle.CenterPointId).Position;
-            return new(Array.Empty<double>(),Array.Empty<double>(),Array.Empty<double>(),new[]{center.X,center.Y,circle.Radius},frame);
+            return new[]{center.X,center.Y,circle.Radius};
+        }).ToArray();
+
+        if(region.OuterCircle is SketchCircle outerCircle)
+        {
+            var center=sketch.Point(outerCircle.CenterPointId).Position;
+            return new(Array.Empty<double>(),holes.ToArray(),round,new[]{center.X,center.Y,outerCircle.Radius},frame);
         }
-        throw new InvalidOperationException("Feature requires a valid closed sketch profile.");
+
+        if(region.OuterPolygon is null||region.OuterPolygon.Count<3)
+            throw new InvalidOperationException("Feature region has no valid outer profile.");
+        return new(region.OuterPolygon.SelectMany(v=>new[]{v.X,v.Y}).ToArray(),holes.ToArray(),round,Array.Empty<double>(),frame);
     }
+
+    private static Profile[] PackRegions(SketchModel sketch,double depth)
+    {
+        if(!sketch.TryGetExtrusionRegions(out var regions)||regions.Count==0)
+            throw new InvalidOperationException("Feature requires one or more valid closed sketch regions.");
+        return regions.Select(region=>PackRegion(sketch,region,depth)).ToArray();
+    }
+
+    private static Profile Pack(SketchModel sketch,double depth)
+    {
+        var regions=PackRegions(sketch,depth);
+        if(regions.Length!=1)
+            throw new InvalidOperationException("Sweep/loft/revolve requires one connected profile region.");
+        return regions[0];
+    }
+
     public string Extrude(SketchModel source,double depth)
     {
-        var p=Pack(source,depth);return OcctFeatureKernel.Extrude(p.Outer,p.Holes,p.CircleHoles,p.Circle,p.Frame);
+        var regions=PackRegions(source,depth);
+        var bodies=regions.Select(p=>OcctFeatureKernel.Extrude(p.Outer,p.Holes,p.CircleHoles,p.Circle,p.Frame)).ToArray();
+        return bodies.Length==1?bodies[0]:OcctFeatureKernel.Compound(bodies);
     }
+
     public string Cut(string baseBody,SketchModel source,double depth,ExtrusionTermination termination)
     {
-        var p=Pack(source,depth);return OcctFeatureKernel.Cut(baseBody,p.Outer,p.Holes,p.CircleHoles,p.Circle,p.Frame,termination==ExtrusionTermination.ThroughAll);
+        var current=baseBody;
+        foreach(var p in PackRegions(source,depth))
+            current=OcctFeatureKernel.Cut(current,p.Outer,p.Holes,p.CircleHoles,p.Circle,p.Frame,termination==ExtrusionTermination.ThroughAll);
+        return current;
     }
     public string Fillet(string baseBody,IReadOnlyList<string> edgeReferences,double radius)
         => OcctFeatureKernel.Fillet(baseBody,edgeReferences.ToArray(),radius);
