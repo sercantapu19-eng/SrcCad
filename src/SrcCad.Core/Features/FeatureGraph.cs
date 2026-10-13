@@ -7,7 +7,7 @@ using SrcCad.Core.Persistence;
 
 namespace SrcCad.Core.Features;
 
-public enum FeatureKind { Sketch, Extrude, ExtrudedCut, Fillet, Chamfer, Hole, Revolve, RevolvedCut, Sweep, SweptCut, Loft, LoftedCut, Shell, Draft, Rib, Mirror, LinearPattern, CircularPattern, ReferencePlane, ReferenceAxis, ReferencePoint, SheetMetalBase, SheetMetalCut, SheetMetalEdgeFlange, SheetMetalConvert, StructuralMember }
+public enum FeatureKind { Sketch, Extrude, ExtrudedCut, Fillet, Chamfer, Hole, Revolve, RevolvedCut, Sweep, SweptCut, Loft, LoftedCut, Shell, Draft, Rib, Mirror, LinearPattern, CircularPattern, ReferencePlane, ReferenceAxis, ReferencePoint, SheetMetalBase, SheetMetalCut, SheetMetalEdgeFlange, SheetMetalConvert, StructuralMember, EndCap }
 public enum RebuildState { Clean, Dirty, Suppressed, Blocked, Failed }
 public enum ExtrusionTermination { Blind, ThroughAll }
 public enum TopologyKind { Body, Face, Edge, Vertex }
@@ -41,6 +41,7 @@ public sealed record FeatureReference(Guid ProducerId, TopologyKind Kind, string
 [JsonDerivedType(typeof(SheetMetalEdgeFlangeFeatureParameters), "sheet-metal-edge-flange")]
 [JsonDerivedType(typeof(SheetMetalConvertFeatureParameters), "sheet-metal-convert")]
 [JsonDerivedType(typeof(StructuralMemberFeatureParameters), "structural-member")]
+[JsonDerivedType(typeof(EndCapFeatureParameters), "end-cap")]
 public abstract record FeatureParameters;
 public sealed record SketchFeatureParameters(PlaneFrame Plane, SketchSnapshot Sketch) : FeatureParameters;
 public sealed record ExtrudeFeatureParameters(Guid SketchId, double Depth) : FeatureParameters;
@@ -72,6 +73,7 @@ public sealed record SheetMetalEdgeFlangeFeatureParameters(Guid BaseFeatureId, d
     double Thickness, double BendRadius, bool Reverse = false) : FeatureParameters;
 public sealed record SheetMetalConvertFeatureParameters(Guid BaseFeatureId,double Thickness,double BendRadius,double KFactor) : FeatureParameters;
 public sealed record StructuralMemberFeatureParameters(Guid ProfileSketchId, Guid PathSketchId) : FeatureParameters;
+public sealed record EndCapFeatureParameters(Guid BaseFeatureId,double Thickness,bool Reverse=false) : FeatureParameters;
 public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Parameters,
     bool Suppressed = false, FeatureReference[]? References = null)
 {
@@ -89,7 +91,7 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
       ReferencePointFeatureParameters => FeatureKind.ReferencePoint, SheetMetalBaseFeatureParameters => FeatureKind.SheetMetalBase,
       SheetMetalCutFeatureParameters => FeatureKind.SheetMetalCut, SheetMetalEdgeFlangeFeatureParameters => FeatureKind.SheetMetalEdgeFlange,
       SheetMetalConvertFeatureParameters => FeatureKind.SheetMetalConvert,
-      StructuralMemberFeatureParameters => FeatureKind.StructuralMember,
+      StructuralMemberFeatureParameters => FeatureKind.StructuralMember, EndCapFeatureParameters => FeatureKind.EndCap,
       _ => throw new InvalidDataException("Unsupported feature") };
     [JsonIgnore] public Guid[] Dependencies => (Parameters switch
     {
@@ -118,6 +120,7 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
         SheetMetalEdgeFlangeFeatureParameters s => new[] { s.BaseFeatureId },
         SheetMetalConvertFeatureParameters s => new[] { s.BaseFeatureId },
         StructuralMemberFeatureParameters s => new[] { s.ProfileSketchId,s.PathSketchId },
+        EndCapFeatureParameters e => new[] { e.BaseFeatureId },
         _ => Array.Empty<Guid>()
     }).Concat((References ?? Array.Empty<FeatureReference>()).Select(r=>r.ProducerId)).Distinct().ToArray();
 }
@@ -348,6 +351,12 @@ public static class FeatureDocumentFile
                        document.Node(s.ProfileSketchId).Kind!=FeatureKind.Sketch||
                        document.Node(s.PathSketchId).Kind!=FeatureKind.Sketch)
                         throw new InvalidDataException("Invalid structural member.");
+                    break;
+                case EndCapFeatureParameters e:
+                    if(document.Node(e.BaseFeatureId).Kind==FeatureKind.Sketch||!double.IsFinite(e.Thickness)||e.Thickness<=1e-9||
+                       node.References is null||node.References.Length!=1||node.References[0].Kind!=TopologyKind.Face||
+                       node.References[0].ProducerId!=e.BaseFeatureId)
+                        throw new InvalidDataException("Invalid end cap.");
                     break;
                 default:throw new InvalidDataException("Unsupported feature parameters.");
             }
