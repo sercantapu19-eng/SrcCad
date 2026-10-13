@@ -59,6 +59,21 @@ public sealed record PartFile(int SchemaVersion, string Units, ExtrusionState Mo
             {
                 case SketchLine l when s.Points.ContainsKey(l.StartPointId)&&s.Points.ContainsKey(l.EndPointId):break;
                 case SketchCircle c when s.Points.ContainsKey(c.CenterPointId)&&double.IsFinite(c.Radius)&&c.Radius>1e-9:break;
+                case SketchArc a when s.Points.ContainsKey(a.CenterPointId)&&s.Points.ContainsKey(a.StartPointId)&&s.Points.ContainsKey(a.EndPointId):
+                {
+                    if(a.StartPointId==a.EndPointId)throw new InvalidDataException("Yay başlangıç ve bitiş noktaları farklı olmalı.");
+                    var center=s.Points[a.CenterPointId].Position;
+                    var start=s.Points[a.StartPointId].Position;
+                    var end=s.Points[a.EndPointId].Position;
+                    var ra=SrcCad.Core.Geometry.Point2d.Distance(center,start);
+                    var rb=SrcCad.Core.Geometry.Point2d.Distance(center,end);
+                    if(ra<=1e-9||!double.IsFinite(ra)||!double.IsFinite(rb)||Math.Abs(ra-rb)>Math.Max(1e-6,ra*1e-5))
+                        throw new InvalidDataException("Geçersiz yay geometrisi.");
+                    break;
+                }
+                case SketchEllipse e when s.Points.ContainsKey(e.CenterPointId)&&
+                    double.IsFinite(e.RadiusX)&&double.IsFinite(e.RadiusY)&&double.IsFinite(e.RotationRadians)&&
+                    e.RadiusX>1e-9&&e.RadiusY>1e-9:break;
                 default:throw new InvalidDataException("Geçersiz geometri veya nokta referansı.");
             }
         var model=new SketchModel(frame);model.RestoreSnapshot(s);
