@@ -197,7 +197,18 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
         _ => Array.Empty<Guid>()
     }).Concat((References ?? Array.Empty<FeatureReference>()).Select(r=>r.ProducerId)).Distinct().ToArray();
 }
-public sealed record FeatureDocument(Guid Id, FeatureNode[] Features)
+public sealed record PartProperties(string MaterialName,double DensityGPerCm3)
+{
+    public static PartProperties Default { get; }=new("Belirli değil",0);
+    public PartProperties Validate()
+    {
+        if(string.IsNullOrWhiteSpace(MaterialName)||!double.IsFinite(DensityGPerCm3)||DensityGPerCm3<0||DensityGPerCm3>100)
+            throw new InvalidDataException("Invalid part material properties.");
+        return this;
+    }
+}
+
+public sealed record FeatureDocument(Guid Id, FeatureNode[] Features, PartProperties? Properties=null)
 {
     public FeatureNode Node(Guid id) => Features.Single(f=>f.Id==id);
     public Guid[] Children(Guid id) => Features.Where(f=>f.Dependencies.Contains(id)).Select(f=>f.Id).ToArray();
@@ -270,6 +281,7 @@ public static class FeatureDocumentFile
     public static void Validate(FeatureDocument document)
     {
         if(document is null)throw new InvalidDataException("Missing document.");
+        _=(document.Properties??PartProperties.Default).Validate();
         foreach(var node in document.Ordered())
         {
             if(string.IsNullOrWhiteSpace(node.Name))throw new InvalidDataException("Feature name required.");
