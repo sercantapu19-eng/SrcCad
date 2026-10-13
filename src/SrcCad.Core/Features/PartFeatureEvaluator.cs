@@ -79,6 +79,7 @@ public sealed class PartFeatureEvaluator(IPartGeometryKernel kernel) : IFeatureE
         }
         return node.Parameters switch
         {
+            ImportedBodyFeatureParameters imported => new(null,imported.BRep),
             SketchFeatureParameters s => new(PartFile.Serialize(new(s.Plane,s.Sketch,null)),null),
             SpatialSketchFeatureParameters s => new(null,null,JsonSerializer.Serialize(s.Points)),
             ExtrudeFeatureParameters e => new(null,kernel.Extrude(Sketch(e.SketchId),e.Depth)),
