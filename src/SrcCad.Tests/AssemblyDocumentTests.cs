@@ -13,8 +13,8 @@ internal static class AssemblyDocumentTests
         var b=new AssemblyComponent(Guid.NewGuid(),"Kapak","C:\\Models\\Cover.scpart",
             new RigidTransform(new Vector3d(100,20,30),new Vector3d(0,0,90)));
         var mate=new AssemblyMate(Guid.NewGuid(),"Eşmerkez1",MateType.Concentric,
-            new AssemblyReference(a.Id,TopologyKind.Face,"F;100;0;0;0;0;0;1"),
-            new AssemblyReference(b.Id,TopologyKind.Face,"F;100;0;0;0;0;0;1"));
+            new AssemblyReference(a.Id,TopologyKind.Face,"C;100;0;0;0;1;0;0;5"),
+            new AssemblyReference(b.Id,TopologyKind.Face,"C;100;0;0;0;1;0;0;5"));
         var doc=new AssemblyDocument(Guid.NewGuid(),new[]{a,b},new[]{mate});
         var clone=AssemblyDocumentFile.Clone(doc);
 
