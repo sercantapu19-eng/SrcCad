@@ -91,125 +91,172 @@
 
         <TabControl Grid.Row="2" x:Name="CommandTabs" Background="#F5F7F9" BorderBrush="#C8D1D9">
             <TabItem Header="UNSURLAR" x:Name="FeaturesTab">
-                <WrapPanel Margin="8">
-                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadSketchIcon}" Content="Çizim" Click="StartSketch_Click" x:Name="StartSketchButton" ToolTip="Düzlem veya düzlemsel yüz seçin; Çizim yeni sketch'i doğrudan o destek üzerinde açar."/>
-                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadExtrudeIcon}" Content="Ekstrüzyon" Click="Extrude_Click" x:Name="ExtrudeButton" IsEnabled="False"/>
-                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadSketchIcon}" Content="Yeni Çizim" Click="NewProfileSketch_Click" x:Name="NewProfileSketchButton" IsEnabled="False" Visibility="Collapsed"/>
-                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadCutIcon}" Content="Ekstrüzyon Kes" Click="Cut_Click" x:Name="CutButton" IsEnabled="False" ToolTip="Bir yüz/düzlemde Çizim oluşturun; çizimden çıkınca bu komut seçili profili katıdan keser."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Döndürme" Click="Revolve_Click" x:Name="RevolveButton" ToolTip="Kapalı profil + tek merkez çizgisi ekseni ile gerçek OCCT döndürme oluşturur."/>
-                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadCutIcon}" Content="Döndürerek Kes" Click="RevolveCut_Click" x:Name="RevolveCutButton" ToolTip="Kapalı profil + tek merkez çizgisi ekseni ile mevcut katıdan döndürerek keser."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Süpürme ▾" Click="CommandFamily_Click" x:Name="SweepButton">
-                        <Button.ContextMenu><ContextMenu>
-                            <MenuItem Header="Süpürme (Boss)" Click="SweepBoss_Click"/>
-                            <MenuItem Header="Süpürerek Kes" Click="SweepCut_Click"/>
-                        </ContextMenu></Button.ContextMenu>
-                    </Button>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Loft ▾" Click="CommandFamily_Click" x:Name="LoftButton">
-                        <Button.ContextMenu><ContextMenu>
-                            <MenuItem Header="Loft (Boss)" Click="LoftBoss_Click"/>
-                            <MenuItem Header="Loft Kes" Click="LoftCut_Click"/>
-                        </ContextMenu></Button.ContextMenu>
-                    </Button>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Sınır ▾" Click="CommandFamily_Click">
-                        <Button.ContextMenu><ContextMenu>
-                            <MenuItem Header="Sınır (Boss)" Click="BoundaryBoss_Click"/>
-                            <MenuItem Header="Sınır Kes" Click="BoundaryCut_Click"/>
-                        </ContextMenu></Button.ContextMenu>
-                    </Button>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Radyus" Click="Fillet_Click" x:Name="FilletButton" ToolTip="Kenarları seçin; gerçek OCCT 3B radyus oluşturur."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Pah" Click="Chamfer_Click" x:Name="ChamferButton" ToolTip="Kenarları seçin; gerçek OCCT 3B pah oluşturur."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Delik" Click="Hole_Click" x:Name="HoleButton" ToolTip="Düzlemsel yüz seçin; tıklanan konumda gerçek parametrik delik oluşturur."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Delik Sihirbazı" Click="HoleWizard_Click" x:Name="HoleWizardButton" ToolTip="Basit, havşalı veya silindirik havşalı gerçek parametrik delik oluşturur."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Kubbe" Click="Dome_Click" x:Name="DomeButton" ToolTip="Seçili düzlemsel yüze gerçek küresel kubbe/çökertme uygular."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Kabuk" Click="Shell_Click" x:Name="ShellButton" ToolTip="Açılacak yüzleri seçin; kalınlıkla gerçek içi boş katı oluşturur."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Draft" Click="Draft_Click" x:Name="DraftButton" ToolTip="Seçili yüzlere, aktif referans düzlemine göre gerçek parametrik draft açısı uygular."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Nervür" Click="Rib_Click" x:Name="RibButton" ToolTip="Katıdan sonra oluşturulan açık çizgi sketch'ini kalınlaştırıp gerçek B-Rep nervür olarak birleştirir."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Doğrusal Dizilim" Click="LinearPattern_Click" x:Name="LinearPatternButton" ToolTip="Seçili düzlem/yüzün X yönünde parametrik gövde dizilimi oluşturur."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Dairesel Dizilim" Click="CircularPattern_Click" x:Name="CircularPatternButton" ToolTip="Seçili düzlem/yüzün normal ekseni etrafında parametrik gövde dizilimi oluşturur."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Çizim Güdümlü Dizilim" Click="SketchPattern_Click" ToolTip="Bir sketch'teki noktaları gerçek 3B gövde kopya konumları olarak kullanır."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Aynala" Click="Mirror_Click" x:Name="MirrorButton" ToolTip="Düzlemsel yüz veya Ön/Üst/Sağ Düzlem seçin; katıyı gerçek 3B ayna dönüşümüyle çoğaltır."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Gövde İşlemleri ▾" Click="CommandFamily_Click">
-                        <Button.ContextMenu><ContextMenu>
-                            <MenuItem Header="Birleştir / Çıkar / Ortak" Click="BodyBoolean_Click"/>
-                            <MenuItem Header="Gövdeyi Taşı / Kopyala" Click="MoveCopyBody_Click"/>
-                            <MenuItem Header="Gövdeyi Böl" Click="SplitBody_Click"/>
-                        </ContextMenu></Button.ContextMenu>
-                    </Button>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Referans Geometri ▾" Click="CommandFamily_Click" x:Name="ReferenceGeometryButton">
-                        <Button.ContextMenu><ContextMenu>
-                            <MenuItem Header="Düzlem (Ofset)" Click="ReferencePlane_Click"/>
-                            <MenuItem Header="Eksen" Click="ReferenceAxis_Click"/>
-                            <MenuItem Header="Nokta" Click="ReferencePoint_Click"/>
-                        </ContextMenu></Button.ContextMenu>
-                    </Button>
-                    <Separator Margin="8,2"/>
-                    <Button Style="{StaticResource CommandButton}" Content="Yeni Parça" Click="NewPart_Click"/>
-                </WrapPanel>
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                    <StackPanel Orientation="Horizontal" Margin="6">
+                        <GroupBox Header="Başlangıç" Margin="0,0,6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadSketchIcon}" Content="Çizim" Click="StartSketch_Click" x:Name="StartSketchButton" ToolTip="Düzlem veya düzlemsel yüz seçin; Çizim yeni sketch'i doğrudan o destek üzerinde açar."/>
+                                <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadSketchIcon}" Content="Yeni Çizim" Click="NewProfileSketch_Click" x:Name="NewProfileSketchButton" IsEnabled="False" Visibility="Collapsed"/>
+                                <Button Style="{StaticResource CommandButton}" Content="Yeni Parça" Click="NewPart_Click" Margin="4"/>
+                            </StackPanel>
+                        </GroupBox>
+                        <GroupBox Header="Katı Oluştur" Margin="0,0,6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadExtrudeIcon}" Content="Ekstrüzyon" Click="Extrude_Click" x:Name="ExtrudeButton" IsEnabled="False"/>
+                                <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadCutIcon}" Content="Ekstrüzyon Kes" Click="Cut_Click" x:Name="CutButton" IsEnabled="False"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Döndürme" Click="Revolve_Click" x:Name="RevolveButton"/>
+                                <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadCutIcon}" Content="Döndürerek Kes" Click="RevolveCut_Click" x:Name="RevolveCutButton"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Süpürme ▾" Click="CommandFamily_Click" x:Name="SweepButton">
+                                    <Button.ContextMenu><ContextMenu>
+                                        <MenuItem Header="Süpürme (Boss)" Click="SweepBoss_Click"/>
+                                        <MenuItem Header="Süpürerek Kes" Click="SweepCut_Click"/>
+                                    </ContextMenu></Button.ContextMenu>
+                                </Button>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Loft ▾" Click="CommandFamily_Click" x:Name="LoftButton">
+                                    <Button.ContextMenu><ContextMenu>
+                                        <MenuItem Header="Loft (Boss)" Click="LoftBoss_Click"/>
+                                        <MenuItem Header="Loft Kes" Click="LoftCut_Click"/>
+                                    </ContextMenu></Button.ContextMenu>
+                                </Button>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Sınır ▾" Click="CommandFamily_Click">
+                                    <Button.ContextMenu><ContextMenu>
+                                        <MenuItem Header="Sınır (Boss)" Click="BoundaryBoss_Click"/>
+                                        <MenuItem Header="Sınır Kes" Click="BoundaryCut_Click"/>
+                                    </ContextMenu></Button.ContextMenu>
+                                </Button>
+                            </StackPanel>
+                        </GroupBox>
+                        <GroupBox Header="Detay Özellikleri" Margin="0,0,6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource CadCommandButton}" Content="Radyus" Click="Fillet_Click" x:Name="FilletButton"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Pah" Click="Chamfer_Click" x:Name="ChamferButton"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Delik" Click="Hole_Click" x:Name="HoleButton"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Delik Sihirbazı" Click="HoleWizard_Click" x:Name="HoleWizardButton"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Kubbe" Click="Dome_Click" x:Name="DomeButton"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Kabuk" Click="Shell_Click" x:Name="ShellButton"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Draft" Click="Draft_Click" x:Name="DraftButton"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Nervür" Click="Rib_Click" x:Name="RibButton"/>
+                            </StackPanel>
+                        </GroupBox>
+                        <GroupBox Header="Dizilim / Gövde / Referans">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource CadCommandButton}" Content="Doğrusal Dizilim" Click="LinearPattern_Click" x:Name="LinearPatternButton"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Dairesel Dizilim" Click="CircularPattern_Click" x:Name="CircularPatternButton"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Çizim Güdümlü Dizilim" Click="SketchPattern_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Aynala" Click="Mirror_Click" x:Name="MirrorButton"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Gövde İşlemleri ▾" Click="CommandFamily_Click">
+                                    <Button.ContextMenu><ContextMenu>
+                                        <MenuItem Header="Birleştir / Çıkar / Ortak" Click="BodyBoolean_Click"/>
+                                        <MenuItem Header="Gövdeyi Taşı / Kopyala" Click="MoveCopyBody_Click"/>
+                                        <MenuItem Header="Gövdeyi Böl" Click="SplitBody_Click"/>
+                                    </ContextMenu></Button.ContextMenu>
+                                </Button>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Referans Geometri ▾" Click="CommandFamily_Click" x:Name="ReferenceGeometryButton">
+                                    <Button.ContextMenu><ContextMenu>
+                                        <MenuItem Header="Düzlem (Ofset)" Click="ReferencePlane_Click"/>
+                                        <MenuItem Header="Eksen" Click="ReferenceAxis_Click"/>
+                                        <MenuItem Header="Nokta" Click="ReferencePoint_Click"/>
+                                    </ContextMenu></Button.ContextMenu>
+                                </Button>
+                            </StackPanel>
+                        </GroupBox>
+                    </StackPanel>
+                </ScrollViewer>
             </TabItem>
             <TabItem Header="ÇİZİM" x:Name="SketchTab">
-                <WrapPanel Margin="8">
-                    <Button Style="{StaticResource CadCommandButton}" Content="Seç (Esc)" Tag="{StaticResource CadSelectIcon}" Click="SelectTool_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Nokta" Click="Point_Click" ToolTip="Tek tıkla kalıcı çizim noktası oluşturur; mevcut noktalara ve Origin'e snap olur."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Çizgi ▾" Tag="{StaticResource CadLineIcon}" Click="CommandFamily_Click" x:Name="LineButton">
-                        <Button.ContextMenu><ContextMenu>
-                            <MenuItem Header="Çizgi" Click="Line_Click"/>
-                            <MenuItem Header="Merkez Çizgisi" Click="Centerline_Click"/>
-                        </ContextMenu></Button.ContextMenu>
-                    </Button>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Dikdörtgen ▾" Tag="{StaticResource CadRectangleIcon}" Click="CommandFamily_Click">
-                        <Button.ContextMenu><ContextMenu>
-                            <MenuItem Header="Köşe Dikdörtgen" Click="CornerRectangle_Click"/>
-                            <MenuItem Header="Merkez Dikdörtgen" Click="CenterRectangle_Click"/>
-                            <MenuItem Header="3 Noktalı Köşe Dikdörtgen" Click="ThreePointRectangle_Click"/>
-                        </ContextMenu></Button.ContextMenu>
-                    </Button>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Daire ▾" Tag="{StaticResource CadCircleIcon}" Click="CommandFamily_Click">
-                        <Button.ContextMenu><ContextMenu>
-                            <MenuItem Header="Merkez-Yarıçap Dairesi" Click="Circle_Click"/>
-                            <MenuItem Header="3 Nokta Dairesi" Click="ThreePointCircle_Click"/>
-                        </ContextMenu></Button.ContextMenu>
-                    </Button>
-                    <Separator Margin="8,2"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Yay ▾" Click="CommandFamily_Click">
-                        <Button.ContextMenu><ContextMenu>
-                            <MenuItem Header="Merkez Yay" Click="Arc_Click"/>
-                            <MenuItem Header="3 Nokta Yay" Click="ThreePointArc_Click"/>
-                        </ContextMenu></Button.ContextMenu>
-                    </Button>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Slot" Click="Slot_Click" ToolTip="İki merkez noktası ve genişlikle gerçek çizgi+yay kapalı slot oluşturur."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Çokgen" Click="Polygon_Click" ToolTip="Kenar sayısını girin; merkez ve çevre noktasıyla düzenli çokgen oluşturun."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Elips" Click="Ellipse_Click" ToolTip="Merkez, ana eksen ve ikinci eksen ile gerçek parametrik elips oluşturur."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Çizim Radyusu" Click="SketchFillet_Click" ToolTip="Ortak köşeli iki çizgiyi seçin; gerçek teğet yay radyusu oluşturur."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Çizim Pahı" Click="SketchChamfer_Click" ToolTip="Ortak köşeli iki çizgiyi seçin; iki çizgiyi kırpıp gerçek pah çizgisi oluşturur."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Çizgi Kırp" Tag="{StaticResource CadTrimIcon}" Click="Trim_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Uzat" Click="ExtendSketch_Click" ToolTip="Seçili çizgileri en yakın çizgi/daire sınırına kadar uzatır."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Ofset" Click="OffsetSketch_Click" ToolTip="Seçili çizgi/daireleri girilen mesafede gerçek geometri olarak ofsetler."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Aynala" Click="MirrorSketch_Click" ToolTip="Seçili geometri + Merkez Çizgisi ile parametrik çizim kopyası oluşturur."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Doğrusal Dizilim" Click="LinearSketchPattern_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Dairesel Dizilim" Click="CircularSketchPattern_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadDimensionIcon}" Content="Akıllı Ölçü" Click="SmartDimension_Click" x:Name="SmartDimensionButton"/>
-                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadDimensionIcon}" Content="Yarıçap Ölçü" Click="RadiusSketchDimension_Click" ToolTip="Bir daire seçin; sürücü R ölçüsü oluşturur."/>
-                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadRelationIcon}" Content="İlişkiler" Click="ShowSketchRelations_Click"/>
-                    <Separator Margin="8,2"/>
-                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadExitSketchIcon}" Content="Çizimden Çık" Click="ExitSketch_Click" x:Name="ExitSketchButton"/>
-                    <Button x:Name="CancelSourceSketchEditButton" Style="{StaticResource CommandButton}" Content="Düzenlemeyi&#x0a;İptal Et" Click="CancelSourceSketchEdit_Click" Visibility="Collapsed"/>
-                </WrapPanel>
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                    <StackPanel Orientation="Horizontal" Margin="6">
+                        <GroupBox Header="Çizim Kontrolü" Margin="0,0,6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadExitSketchIcon}" Content="Çizimden Çık" Click="ExitSketch_Click" x:Name="ExitSketchButton"/>
+                                <Button x:Name="CancelSourceSketchEditButton" Style="{StaticResource CommandButton}" Content="Düzenlemeyi&#x0a;İptal Et" Click="CancelSourceSketchEdit_Click" Visibility="Collapsed" Margin="4"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Seç (Esc)" Tag="{StaticResource CadSelectIcon}" Click="SelectTool_Click"/>
+                            </StackPanel>
+                        </GroupBox>
+                        <GroupBox Header="Geometri" Margin="0,0,6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource CadCommandButton}" Content="Nokta" Click="Point_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Çizgi ▾" Tag="{StaticResource CadLineIcon}" Click="CommandFamily_Click" x:Name="LineButton">
+                                    <Button.ContextMenu><ContextMenu>
+                                        <MenuItem Header="Çizgi" Click="Line_Click"/>
+                                        <MenuItem Header="Merkez Çizgisi" Click="Centerline_Click"/>
+                                    </ContextMenu></Button.ContextMenu>
+                                </Button>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Dikdörtgen ▾" Tag="{StaticResource CadRectangleIcon}" Click="CommandFamily_Click">
+                                    <Button.ContextMenu><ContextMenu>
+                                        <MenuItem Header="Köşe Dikdörtgen" Click="CornerRectangle_Click"/>
+                                        <MenuItem Header="Merkez Dikdörtgen" Click="CenterRectangle_Click"/>
+                                        <MenuItem Header="3 Noktalı Köşe Dikdörtgen" Click="ThreePointRectangle_Click"/>
+                                    </ContextMenu></Button.ContextMenu>
+                                </Button>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Daire ▾" Tag="{StaticResource CadCircleIcon}" Click="CommandFamily_Click">
+                                    <Button.ContextMenu><ContextMenu>
+                                        <MenuItem Header="Merkez-Yarıçap Dairesi" Click="Circle_Click"/>
+                                        <MenuItem Header="3 Nokta Dairesi" Click="ThreePointCircle_Click"/>
+                                    </ContextMenu></Button.ContextMenu>
+                                </Button>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Yay ▾" Click="CommandFamily_Click">
+                                    <Button.ContextMenu><ContextMenu>
+                                        <MenuItem Header="Merkez Yay" Click="Arc_Click"/>
+                                        <MenuItem Header="3 Nokta Yay" Click="ThreePointArc_Click"/>
+                                    </ContextMenu></Button.ContextMenu>
+                                </Button>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Slot" Click="Slot_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Çokgen" Click="Polygon_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Elips" Click="Ellipse_Click"/>
+                            </StackPanel>
+                        </GroupBox>
+                        <GroupBox Header="Düzenle" Margin="0,0,6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource CadCommandButton}" Content="Çizim Radyusu" Click="SketchFillet_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Çizim Pahı" Click="SketchChamfer_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Çizgi Kırp" Tag="{StaticResource CadTrimIcon}" Click="Trim_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Uzat" Click="ExtendSketch_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Ofset" Click="OffsetSketch_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Aynala" Click="MirrorSketch_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Doğrusal Dizilim" Click="LinearSketchPattern_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Dairesel Dizilim" Click="CircularSketchPattern_Click"/>
+                            </StackPanel>
+                        </GroupBox>
+                        <GroupBox Header="Ölçü / İlişki">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadDimensionIcon}" Content="Akıllı Ölçü" Click="SmartDimension_Click" x:Name="SmartDimensionButton"/>
+                                <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadDimensionIcon}" Content="Yarıçap Ölçü" Click="RadiusSketchDimension_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadRelationIcon}" Content="İlişkiler" Click="ShowSketchRelations_Click"/>
+                            </StackPanel>
+                        </GroupBox>
+                    </StackPanel>
+                </ScrollViewer>
             </TabItem>
             <TabItem Header="SAC LEVHA">
-                <WrapPanel Margin="8">
-                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadExtrudeIcon}" Content="Taban Flanş" Click="BaseFlange_Click" x:Name="BaseFlangeButton" ToolTip="Kapalı çizimden gerçek sac gövdesi oluşturur; kalınlık, büküm yarıçapı ve K-faktörü parametriktir."/>
-                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadExtrudeIcon}" Content="Kenar Flanşı" Click="EdgeFlange_Click" x:Name="EdgeFlangeButton" ToolTip="Sacın doğrusal kenarlarını seçin; uzunluk, açı, kalınlık ve büküm yarıçapıyla gerçek flanş oluşturur."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Gönye Flanşı" Click="MiterFlange_Click" ToolTip="En az iki bağlı sac kenarı seçin; aynı feature içinde çoklu gerçek flanş B-Rep'i oluşturur."/>
-                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadCutIcon}" Content="Sac Kes" Click="SheetCut_Click" x:Name="SheetCutButton" ToolTip="Sac yüzünde oluşturulan kapalı çizimi gerçek Through-All kesme olarak uygular."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Hem" Click="Hem_Click" ToolTip="Sac kenarını seçin; gerçek geri-kıvrılmış hem B-Rep oluşturur."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Jog" Click="Jog_Click" ToolTip="Sac kenarını seçin; yükseklik ve ofsetle gerçek Z-step jog oluşturur."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Çizilmiş Büküm" Click="SketchedBend_Click" ToolTip="Tek çizgili sketch'i büküm ekseni olarak kullanıp gerçek sac bükümü oluşturur."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Açınım" Click="Unfold_Click" ToolTip="Tüm aktif parametrik bükümleri ters sırada açarak gerçek düz sac gövdesi oluşturur."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Katla" Click="Fold_Click" ToolTip="Son çoklu açınımın büküm setini parametrik sırada yeniden uygular."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Yırtık" Click="Rip_Click" ToolTip="Seçili sac kenarı boyunca parametrik boşluk keser."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Köşe Rölyefi" Click="CornerRelief_Click" ToolTip="Seçili kenar uçlarında gerçek dairesel köşe rahatlatması keser."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Sac'a Dönüştür" Click="ConvertToSheetMetal_Click" x:Name="ConvertToSheetMetalButton" ToolTip="Mevcut katıya sac kalınlığı, büküm yarıçapı ve K-faktörü meta verisini parametrik feature olarak bağlar."/>
-                </WrapPanel>
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                    <StackPanel Orientation="Horizontal" Margin="6">
+                        <GroupBox Header="Sac Başlangıç" Margin="0,0,6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadExtrudeIcon}" Content="Sac Oluştur" Click="BaseFlange_Click" x:Name="BaseFlangeButton" ToolTip="Kapalı çizimden Taban Flanş oluşturarak yeni sac levha parçası başlatır."/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Sac'a Dönüştür" Click="ConvertToSheetMetal_Click" x:Name="ConvertToSheetMetalButton"/>
+                            </StackPanel>
+                        </GroupBox>
+                        <GroupBox Header="Flanş / Büküm" Margin="0,0,6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadExtrudeIcon}" Content="Kenar Flanşı" Click="EdgeFlange_Click" x:Name="EdgeFlangeButton"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Gönye Flanşı" Click="MiterFlange_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Hem" Click="Hem_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Jog" Click="Jog_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Çizilmiş Büküm" Click="SketchedBend_Click"/>
+                            </StackPanel>
+                        </GroupBox>
+                        <GroupBox Header="Kes / Açınım">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadCutIcon}" Content="Sac Kes" Click="SheetCut_Click" x:Name="SheetCutButton"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Yırtık" Click="Rip_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Köşe Rölyefi" Click="CornerRelief_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Açınım" Click="Unfold_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Katla" Click="Fold_Click"/>
+                            </StackPanel>
+                        </GroupBox>
+                    </StackPanel>
+                </ScrollViewer>
             </TabItem>
             <TabItem Header="PROFİLLER">
                 <WrapPanel Margin="8">
