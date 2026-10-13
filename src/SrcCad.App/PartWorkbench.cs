@@ -1370,6 +1370,81 @@ public partial class MainWindow
         }
     }
 
+    private void InspectDraftAnalysis_Click(object sender,RoutedEventArgs e)
+    {
+        var refs=_viewer.SelectedFaceReferences();
+        PropertyTitle.Text="Draft Analizi";
+        if(refs.Length==0)
+        {
+            PropertyInfo.Text="Draft analizi için bir veya daha fazla düzlemsel yüz seçin. Çekme yönü aktif düzlemin normalidir.";
+            ManagerTabs.SelectedItem=PropertyManagerTab;Status("Draft analizi için yüz seçin.");return;
+        }
+        var pull=_selectedPlane.Normal.Normalized();
+        var rows=new List<string>();var index=1;
+        foreach(var reference in refs)
+        {
+            var parts=reference.Split(';');
+            if(parts.Length<8||
+               !double.TryParse(parts[5],System.Globalization.NumberStyles.Float,System.Globalization.CultureInfo.InvariantCulture,out var nx)||
+               !double.TryParse(parts[6],System.Globalization.NumberStyles.Float,System.Globalization.CultureInfo.InvariantCulture,out var ny)||
+               !double.TryParse(parts[7],System.Globalization.NumberStyles.Float,System.Globalization.CultureInfo.InvariantCulture,out var nz))continue;
+            var normal=new Vector3d(nx,ny,nz).Normalized();
+            var dot=Math.Clamp(Vector3d.Dot(normal,pull),-1,1);
+            var normalAngle=Math.Acos(Math.Abs(dot))*180/Math.PI;
+            var draft=90-normalAngle;
+            rows.Add($"{index++}. Draft: {draft:0.###}° • Normal/çekme: {normalAngle:0.###}° • {(dot>=0?"Pozitif":"Negatif")} yön");
+        }
+        PropertyInfo.Text=rows.Count==0?"Seçili yüzlerin draft normali çözülemedi.":$"Çekme yönü: {_selectedPlane.Name}\n\n"+string.Join("\n",rows);
+        ManagerTabs.SelectedItem=PropertyManagerTab;Status($"{rows.Count} yüz için draft açısı hesaplandı.");
+    }
+
+    private void InspectInterference_Click(object sender,RoutedEventArgs e)
+    {
+        var dialog=new Microsoft.Win32.OpenFileDialog
+        {
+            Title="Çakışma için iki SrcCad parçası seçin",
+            Filter="SrcCad Parça (*.scpart)|*.scpart",
+            Multiselect=true
+        };
+        if(dialog.ShowDialog(this)!=true)return;
+        if(dialog.FileNames.Length!=2){Status("Çakışma kontrolü için tam iki .scpart seçin.");return;}
+        try
+        {
+            var a=RebuildAssemblyComponent(dialog.FileNames[0]);var b=RebuildAssemblyComponent(dialog.FileNames[1]);
+            var volume=SrcCad.Kernel.Occt.OcctFeatureKernel.CommonVolume(a,new double[6],b,new double[6]);
+            PropertyTitle.Text="Çakışma";
+            PropertyInfo.Text=volume>1e-8
+                ?$"Çakışma var. Ortak hacim: {volume:0.###} mm³"
+                :"Aynı koordinat sisteminde ortak katı hacmi bulunmadı.";
+            ManagerTabs.SelectedItem=PropertyManagerTab;Status(volume>1e-8?"Çakışma bulundu.":"Çakışma bulunmadı.");
+        }
+        catch(Exception ex){PropertyInfo.Text="Çakışma kontrolü başarısız: "+ex.Message;ManagerTabs.SelectedItem=PropertyManagerTab;}
+    }
+
+    private void InspectCompare_Click(object sender,RoutedEventArgs e)
+    {
+        var dialog=new Microsoft.Win32.OpenFileDialog
+        {
+            Title="Karşılaştırmak için iki SrcCad parçası seçin",
+            Filter="SrcCad Parça (*.scpart)|*.scpart",
+            Multiselect=true
+        };
+        if(dialog.ShowDialog(this)!=true)return;
+        if(dialog.FileNames.Length!=2){Status("Karşılaştırma için tam iki .scpart seçin.");return;}
+        try
+        {
+            var a=SrcCad.Kernel.Occt.OcctFeatureKernel.Inspect(RebuildAssemblyComponent(dialog.FileNames[0]));
+            var b=SrcCad.Kernel.Occt.OcctFeatureKernel.Inspect(RebuildAssemblyComponent(dialog.FileNames[1]));
+            PropertyTitle.Text="Geometri Karşılaştır";
+            PropertyInfo.Text=$"A: {Path.GetFileName(dialog.FileNames[0])}\nB: {Path.GetFileName(dialog.FileNames[1])}\n\n"+
+                $"Hacim A/B: {a[0]:0.###} / {b[0]:0.###} mm³  Δ={(b[0]-a[0]):0.###}\n"+
+                $"Katı A/B: {a[1]:0} / {b[1]:0}\nYüz A/B: {a[2]:0} / {b[2]:0}  Δ={(b[2]-a[2]):0}\n"+
+                $"Kenar A/B: {a[3]:0} / {b[3]:0}  Δ={(b[3]-a[3]):0}";
+            ManagerTabs.SelectedItem=PropertyManagerTab;Status("İki model gerçek B-Rep topolojisiyle karşılaştırıldı.");
+        }
+        catch(Exception ex){PropertyInfo.Text="Karşılaştırma başarısız: "+ex.Message;ManagerTabs.SelectedItem=PropertyManagerTab;}
+    }
+
     private bool TryResolveMirrorPlane(out PlaneFrame plane)
     {
         plane=_selectedPlane;
