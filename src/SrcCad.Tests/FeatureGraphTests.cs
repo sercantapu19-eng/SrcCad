@@ -39,6 +39,11 @@ internal static class FeatureGraphTests
                 SheetMetalBaseFeatureParameters p=>p.Thickness,
                 SheetMetalCutFeatureParameters p=>p.Depth,
                 SheetMetalEdgeFlangeFeatureParameters p=>p.Length,
+                SheetMetalMiterFlangeFeatureParameters p=>p.Length,
+                SheetMetalConvertFeatureParameters p=>p.Thickness,
+                StructuralMemberFeatureParameters=>1,
+                EndCapFeatureParameters p=>p.Thickness,
+                WeldBeadFeatureParameters p=>p.Radius,
                 _=>1
             };
             return new(own+dependencies.Values.Sum(x=>x.Value));
@@ -220,6 +225,18 @@ internal static class FeatureGraphTests
         Check(edgeFlangeClone.Node(edgeFlangeNode.Id).Kind==FeatureKind.SheetMetalEdgeFlange&&
               ((SheetMetalEdgeFlangeFeatureParameters)edgeFlangeClone.Node(edgeFlangeNode.Id).Parameters).AngleDegrees==90,
             "sheet metal edge flange metadata and persistent edge reference roundtrip");
+        var miterNode=new FeatureNode(Guid.NewGuid(),"Gönye Flanşı1",
+            new SheetMetalMiterFlangeFeatureParameters(sheetBaseNode.Id,25,90,2,2),
+            References:new[]{
+                new FeatureReference(sheetBaseNode.Id,TopologyKind.Edge,"E;40;20;0;0"),
+                new FeatureReference(sheetBaseNode.Id,TopologyKind.Edge,"E;30;40;0;0")});
+        var miterDoc=new FeatureDocument(Guid.NewGuid(),new[]{source,sheetBaseNode,miterNode});
+        Check(FeatureDocumentFile.Clone(miterDoc).Node(miterNode.Id).Kind==FeatureKind.SheetMetalMiterFlange,
+            "miter flange multi-edge references roundtrip");
+        var convertNode=new FeatureNode(Guid.NewGuid(),"Sac'a Dönüştür1",new SheetMetalConvertFeatureParameters(boss.Id,2,2,0.45));
+        var convertDoc=initial with{Features=initial.Features.Append(convertNode).ToArray()};
+        Check(((SheetMetalConvertFeatureParameters)FeatureDocumentFile.Clone(convertDoc).Node(convertNode.Id).Parameters).KFactor==0.45,
+            "convert-to-sheet-metal metadata roundtrip");
 
         var memberProfile=new SketchModel(StandardPlanes.Front);memberProfile.AddCornerRectangle(new(-5,-5),new(5,5),.001);
         var memberPath=new SketchModel(StandardPlanes.Top);
@@ -233,6 +250,14 @@ internal static class FeatureGraphTests
             "structural member profile/path dependency roundtrip");
         Check(memberClone.Descendants(profileNode.Id).Contains(memberNode.Id)&&memberClone.Descendants(pathNode.Id).Contains(memberNode.Id),
             "structural member depends on profile and path sketches");
+        var endCapNode=new FeatureNode(Guid.NewGuid(),"Uç Kapağı1",new EndCapFeatureParameters(boss.Id,3),
+            References:new[]{new FeatureReference(boss.Id,TopologyKind.Face,"F;1200;20;15;20;0;0;1")});
+        var weldNode=new FeatureNode(Guid.NewGuid(),"Kaynak Dikişi1",new WeldBeadFeatureParameters(endCapNode.Id,2),
+            References:new[]{new FeatureReference(endCapNode.Id,TopologyKind.Edge,"E;40;20;0;0")});
+        var weldDoc=initial with{Features=initial.Features.Concat(new[]{endCapNode,weldNode}).ToArray()};
+        var weldClone=FeatureDocumentFile.Clone(weldDoc);
+        Check(weldClone.Node(endCapNode.Id).Kind==FeatureKind.EndCap&&weldClone.Node(weldNode.Id).Kind==FeatureKind.WeldBead,
+            "end-cap and weld-bead persistent topology graph roundtrip");
 
         var external=session.Document;((IDictionary<int,SketchPoint>)((SketchFeatureParameters)external.Node(source.Id).Parameters).Sketch.Points).Clear();
         Check(((SketchFeatureParameters)session.Document.Node(source.Id).Parameters).Sketch.Points.Count>0,"external snapshot cannot mutate committed document");
