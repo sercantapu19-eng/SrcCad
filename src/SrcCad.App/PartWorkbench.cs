@@ -3207,7 +3207,24 @@ public partial class MainWindow
 
     private void BeginGraphExtrude()
     {
-        if(_inSketch||_extrudeCommandActive||_partSession is null||SelectedGraphId is not Guid id||_partSession.Document.Node(id).Kind!=FeatureKind.Sketch)return;
+        if(_inSketch||_extrudeCommandActive||_partSession is null)return;
+        Guid? sketchId=null;
+        if(SelectedGraphId is Guid selectedId&&_partSession.Document.Node(selectedId).Kind==FeatureKind.Sketch)
+        {
+            try
+            {
+                var selectedModel=GraphSketchModel(_partSession.Document.Node(selectedId));
+                if(selectedModel.TryGetExtrusionRegions(out var selectedRegions)&&selectedRegions.Count>0)
+                    sketchId=selectedId;
+            }
+            catch{}
+        }
+        sketchId??=ClosedProfileSketches().LastOrDefault()?.Id;
+        if(sketchId is not Guid id)
+        {
+            Status("Ekstrüzyon için geçerli kapalı bir Çizim seçin.");
+            return;
+        }
         BeginGraphFeature(new(Guid.NewGuid(),NextGraphName("Ekstrüzyon"),new ExtrudeFeatureParameters(id,20)));
     }
     private void EditGraphFeature(Guid id)
