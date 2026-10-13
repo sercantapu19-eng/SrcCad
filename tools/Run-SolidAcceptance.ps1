@@ -59,7 +59,7 @@ try {
         '^FEATURE GRAPH: [1-9][0-9]* PASS ',
         '^NATIVE ANGLE EDITING: 12/12 PASS$',
         '^NATIVE DELETION HISTORY: 9/9 PASS$',
-        '^NATIVE FEATURE GRAPH: [1-9][0-9]*/[1-9][0-9]* PASS,
+        '^NATIVE FEATURE GRAPH: [1-9][0-9]* PASS',
         '^TRIM INTERACTION: [1-9][0-9]* PASS ',
         '^PARALLEL DIMENSIONS: [1-9][0-9]* PASS ',
         '^GENERAL CONSTRAINTS: [1-9][0-9]* PASS ',
