@@ -188,6 +188,14 @@ public partial class MainWindow
         DrawingViewPanel.Visibility=Visibility.Collapsed;_drawingEditingViewId=null;ManagerTabs.SelectedItem=FeatureManagerTab;
     }
 
+    internal bool DeleteSelectedDrawingTreeItem()
+    {
+        if(_drawingDocument is null||FeatureTree.SelectedItem is not TreeViewItem item||item.Tag is not Guid id)return false;
+        if(_drawingDocument.Views.Any(v=>v.Id==id)){DeleteDrawingView(id);return true;}
+        if(_drawingDocument.Annotations.Any(a=>a.Id==id)){DeleteDrawingAnnotation(id);return true;}
+        return false;
+    }
+
     private void DeleteDrawingView(Guid id)
     {
         if(_drawingDocument is null)return;
