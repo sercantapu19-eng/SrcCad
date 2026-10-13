@@ -2306,7 +2306,23 @@ namespace SrcCad::Kernel::Occt
         catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
     }
 
-    static TopoDS_Shape transformedFeatureBody(String^ body,array<double>^ transform6);
+    static TopoDS_Shape transformedFeatureBody(String^ body,array<double>^ transform6)
+    {
+        if(transform6==nullptr||transform6->Length!=6)throw gcnew ArgumentException("Transform requires X/Y/Z and Rx/Ry/Rz.");
+        for each(double value in transform6)if(!std::isfinite(value))throw gcnew ArgumentException("Invalid transform value.");
+        TopoDS_Shape shape=decodeFeature(body);
+        shape=rotateShapeDegrees(shape,gp_Ax1(gp_Pnt(0,0,0),gp_Dir(1,0,0)),transform6[3]);
+        shape=rotateShapeDegrees(shape,gp_Ax1(gp_Pnt(0,0,0),gp_Dir(0,1,0)),transform6[4]);
+        shape=rotateShapeDegrees(shape,gp_Ax1(gp_Pnt(0,0,0),gp_Dir(0,0,1)),transform6[5]);
+        if(std::abs(transform6[0])>1e-12||std::abs(transform6[1])>1e-12||std::abs(transform6[2])>1e-12)
+        {
+            gp_Trsf tr;tr.SetTranslation(gp_Vec(transform6[0],transform6[1],transform6[2]));
+            shape=BRepBuilderAPI_Transform(shape,tr,true).Shape();
+        }
+        if(shape.IsNull()||!BRepCheck_Analyzer(shape).IsValid())throw gcnew InvalidOperationException("Transformed body is invalid.");
+        return shape;
+    }
+
 
     String^ OcctFeatureKernel::MoveCopy(String^ baseBody,array<double>^ transform6,bool keepOriginal)
     {
@@ -2459,22 +2475,6 @@ namespace SrcCad::Kernel::Occt
         catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
     }
 
-    static TopoDS_Shape transformedFeatureBody(String^ body,array<double>^ transform6)
-    {
-        if(transform6==nullptr||transform6->Length!=6)throw gcnew ArgumentException("Transform requires X/Y/Z and Rx/Ry/Rz.");
-        for each(double value in transform6)if(!std::isfinite(value))throw gcnew ArgumentException("Invalid transform value.");
-        TopoDS_Shape shape=decodeFeature(body);
-        shape=rotateShapeDegrees(shape,gp_Ax1(gp_Pnt(0,0,0),gp_Dir(1,0,0)),transform6[3]);
-        shape=rotateShapeDegrees(shape,gp_Ax1(gp_Pnt(0,0,0),gp_Dir(0,1,0)),transform6[4]);
-        shape=rotateShapeDegrees(shape,gp_Ax1(gp_Pnt(0,0,0),gp_Dir(0,0,1)),transform6[5]);
-        if(std::abs(transform6[0])>1e-12||std::abs(transform6[1])>1e-12||std::abs(transform6[2])>1e-12)
-        {
-            gp_Trsf tr;tr.SetTranslation(gp_Vec(transform6[0],transform6[1],transform6[2]));
-            shape=BRepBuilderAPI_Transform(shape,tr,true).Shape();
-        }
-        if(shape.IsNull()||!BRepCheck_Analyzer(shape).IsValid())throw gcnew InvalidOperationException("Transformed body is invalid.");
-        return shape;
-    }
 
     String^ OcctFeatureKernel::Transform(String^ body,array<double>^ transform6)
     {
