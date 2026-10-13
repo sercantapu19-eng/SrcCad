@@ -53,7 +53,18 @@ internal static class GeneralConstraintTests
             var zd=zero.AddInferredDimension(zero.InferDimension(new[]{zero.ReferenceForPoint(0),zero.ReferenceForPoint(zp)},new(0,40))!);
             Check(zd.Type==SketchDimensionType.HorizontalDistance&&zero.SetDimensionValue(zd.Id,0),"zero X dimension on aligned points");
             Check(zero.SetDimensionValue(zd.Id,15)&&Near(zero.Point(zp).Position.X,15),"zero axis dimension can drive away from axis");
+
+            var conflict=new SketchModel(plane);
+            var cf0=conflict.CreatePointExact(new(0,0));var cf1=conflict.CreatePointExact(new(20,0));
+            conflict.SetPointFixed(cf0,true);conflict.SetPointFixed(cf1,true);
+            var cfLine=conflict.AddLine(cf0,cf1);
+            var cfDim=conflict.AddDimension(SketchDimensionType.LineLength,new(10,10),entityA:cfLine.Id);
+            var cfSnap=conflict.CaptureSnapshot();
+            conflict.RestoreSnapshot(cfSnap with{Dimensions=cfSnap.Dimensions.Select(d=>d.Id==cfDim.Id?d with{Value=25}:d).ToArray()});
+            var cfInfo=conflict.DefinitionInfo();
+            Check(cfInfo.IsConflicting&&cfInfo.Text.Contains($"Ölçü #{cfDim.Id}",StringComparison.Ordinal),
+                "conflict diagnostic names the offending dimension id");
         }
-        Console.WriteLine($"GENERAL CONSTRAINTS: {count} PASS (midpoint, point-line, tangency, persistence)");
+        Console.WriteLine($"GENERAL CONSTRAINTS: {count} PASS (midpoint, point-line, tangency, persistence, conflict ids)");
     }
 }
