@@ -365,6 +365,99 @@ public partial class MainWindow
         catch{return note.Text;}
     }
 
+    private sealed record ProjectedSegment(double X1,double Y1,double X2,double Y2)
+    {
+        public double Length=>Math.Sqrt((X2-X1)*(X2-X1)+(Y2-Y1)*(Y2-Y1));
+        public Point2d Mid=>new((X1+X2)*0.5,(Y1+Y2)*0.5);
+    }
+    private sealed record ProjectedCircle(double X,double Y,double Radius);
+
+    private static string DrawingNumber(double value)
+        => value.ToString("G17",System.Globalization.CultureInfo.InvariantCulture);
+
+    private static double PointSegmentDistance(Point2d p,Point2d a,Point2d b)
+    {
+        var dx=b.X-a.X;var dy=b.Y-a.Y;var l2=dx*dx+dy*dy;
+        if(l2<1e-18)return Point2d.Distance(p,a);
+        var t=Math.Clamp(((p.X-a.X)*dx+(p.Y-a.Y)*dy)/l2,0,1);
+        return Point2d.Distance(p,new Point2d(a.X+dx*t,a.Y+dy*t));
+    }
+
+    private static string EncodeLinearDimension(ProjectedSegment segment)
+        =>$"L;{DrawingNumber(segment.X1)};{DrawingNumber(segment.Y1)};{DrawingNumber(segment.X2)};{DrawingNumber(segment.Y2)}";
+
+    private static string EncodeDiameterDimension(ProjectedCircle circle)
+        =>$"D;{DrawingNumber(circle.X)};{DrawingNumber(circle.Y)};{DrawingNumber(circle.Radius)}";
+
+    private static bool TryDrawingData(string? data,char type,int count,out double[] values)
+    {
+        values=Array.Empty<double>();
+        if(string.IsNullOrWhiteSpace(data))return false;
+        var fields=data.Split(';');
+        if(fields.Length!=count+1||fields[0].Length!=1||fields[0][0]!=type)return false;
+        values=new double[count];
+        for(var i=0;i<count;i++)
+            if(!double.TryParse(fields[i+1],System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture,out values[i])||!double.IsFinite(values[i]))
+                return false;
+        return true;
+    }
+
+    private ProjectedSegment[] DrawingProjectedSegments(DrawingView view)
+    {
+        var data=DrawingProjectionData(view);
+        var result=new List<ProjectedSegment>();
+        for(var i=0;i+3<data.Segments.Length;i+=4)
+            result.Add(new(data.Segments[i],data.Segments[i+1],data.Segments[i+2],data.Segments[i+3]));
+        return result.ToArray();
+    }
+
+    private ProjectedCircle[] DrawingProjectedCircles(DrawingView view)
+    {
+        var data=DrawingProjectionData(view);
+        var values=DrawingBodies(view.ModelPath).SelectMany(body=>
+            SrcCad.Kernel.Occt.OcctFeatureKernel.ProjectCircles(body,
+                new[]{data.Direction.X,data.Direction.Y,data.Direction.Z},
+                new[]{data.Up.X,data.Up.Y,data.Up.Z})).ToArray();
+        var result=new List<ProjectedCircle>();
+        for(var i=0;i+2<values.Length;i+=3)result.Add(new(values[i],values[i+1],values[i+2]));
+        return result.ToArray();
+    }
+
+    private ProjectedSegment? ResolveLinearDimension(DrawingView view,string? encoded)
+    {
+        if(!TryDrawingData(encoded,'L',4,out var wanted))return null;
+        var target=new ProjectedSegment(wanted[0],wanted[1],wanted[2],wanted[3]);
+        var targetLength=Math.Max(target.Length,1e-9);var targetMid=target.Mid;
+        return DrawingProjectedSegments(view)
+            .OrderBy(segment=>
+            {
+                var lengthScore=Math.Abs(segment.Length-target.Length)/targetLength;
+                var midScore=Point2d.Distance(segment.Mid,targetMid)/Math.Max(1.0,targetLength);
+                var ax=(target.X2-target.X1)/targetLength;var ay=(target.Y2-target.Y1)/targetLength;
+                var len=Math.Max(segment.Length,1e-9);var bx=(segment.X2-segment.X1)/len;var by=(segment.Y2-segment.Y1)/len;
+                var directionScore=1-Math.Abs(ax*bx+ay*by);
+                return lengthScore+midScore+directionScore*2;
+            }).FirstOrDefault();
+    }
+
+    private ProjectedCircle? ResolveDiameterDimension(DrawingView view,string? encoded)
+    {
+        if(!TryDrawingData(encoded,'D',3,out var wanted))return null;
+        var target=new ProjectedCircle(wanted[0],wanted[1],wanted[2]);
+        return DrawingProjectedCircles(view)
+            .OrderBy(circle=>
+                Point2d.Distance(new Point2d(circle.X,circle.Y),new Point2d(target.X,target.Y))/Math.Max(1.0,target.Radius)+
+                Math.Abs(circle.Radius-target.Radius)/Math.Max(1e-9,target.Radius))
+            .FirstOrDefault();
+    }
+
+    private Point2d DrawingToSheet(DrawingView view,double x,double y)
+    {
+        var data=DrawingProjectionData(view);
+        return new Point2d((x-data.Cx)*view.Scale+view.Position.X,(y-data.Cy)*view.Scale+view.Position.Y);
+    }
+
     private string ResolveOverallSize(DrawingView view)
     {
         var data=DrawingProjectionData(view);
