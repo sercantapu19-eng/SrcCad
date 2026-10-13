@@ -15,6 +15,7 @@ internal static class PartFileTests
             var c=s.AddCircle(s.CreatePointExact(new(30,30)),5);
             var c2=s.AddCircle(s.CreatePointExact(new(70,30)),8);
             var p=s.CreatePointExact(new(10,10));var q=s.CreatePointExact(new(90,10));s.AddLine(p,q,true);
+            var independentPoint=s.CreatePointExact(new(17,47));
             var origin=s.ReferenceForPoint(0);var center=s.ReferenceForPoint(c.CenterPointId);
             s.ApplyReferenceRelation(SketchRelationType.Horizontal,new[]{center,s.ReferenceForPoint(c2.CenterPointId)});
             var d=s.AddInferredDimension(s.InferDimension(new[]{origin,center},new(-20,15))!);
@@ -23,6 +24,8 @@ internal static class PartFileTests
             var json=PartFile.Serialize(state);var reopened=PartFile.Deserialize(json);
             var loaded=new SketchModel(reopened.Plane);loaded.RestoreSnapshot(reopened.Sketch);
             Check(loaded.Relations.Last().ReferenceA==center&&loaded.Lines().Count(l=>l.Construction)==1,"semantic references and construction round-trip");
+            Check(loaded.Point(independentPoint).Position==new Point2d(17,47),
+                "independent sketch point survives save/open round-trip");
             Check(loaded.SetDimensionValue(d.Id,35)&&Math.Abs(loaded.Point(c2.CenterPointId).Position.Y-35)<1e-6,"reopened dimensions drive geometry and preserve relation");
             Check(loaded.TryGetExtrusionProfile(out _,out _,out var holes)&&holes.Count==2&&reopened.Depth==20,"reopened extrusion inputs");
             var before=loaded.CaptureSnapshot();loaded.DeleteEntity(c.Id);
