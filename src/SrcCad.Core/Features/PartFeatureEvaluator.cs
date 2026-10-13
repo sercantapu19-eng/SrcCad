@@ -66,6 +66,22 @@ public sealed class PartFeatureEvaluator(IPartGeometryKernel kernel) : IFeatureE
                 throw new InvalidOperationException("Feature requires persistent edge references.");
             return references.Select(r=>r.SemanticName).ToArray();
         }
+        string ExtrudeBody(ExtrudeFeatureParameters extrude)
+        {
+            var sketch=Sketch(extrude.SketchId);
+            if(extrude.MidPlane)
+            {
+                var half=Math.Abs(extrude.Depth)/2.0;
+                var positive=kernel.Extrude(sketch,half);
+                var negative=kernel.Extrude(sketch,-half);
+                return kernel.Boolean(positive,negative,BodyBooleanOperation.Add);
+            }
+            var first=kernel.Extrude(sketch,extrude.Depth);
+            if(extrude.Direction2Depth<=1e-9)return first;
+            var second=kernel.Extrude(sketch,-extrude.Direction2Depth);
+            return kernel.Boolean(first,second,BodyBooleanOperation.Add);
+        }
+
         string Flatten(SheetMetalFlattenFeatureParameters flatten)
         {
             var body=Base(flatten.BaseFeatureId);
@@ -82,7 +98,7 @@ public sealed class PartFeatureEvaluator(IPartGeometryKernel kernel) : IFeatureE
             ImportedBodyFeatureParameters imported => new(null,imported.BRep),
             SketchFeatureParameters s => new(PartFile.Serialize(new(s.Plane,s.Sketch,null)),null),
             SpatialSketchFeatureParameters s => new(null,null,JsonSerializer.Serialize(s.Points)),
-            ExtrudeFeatureParameters e => new(null,kernel.Extrude(Sketch(e.SketchId),e.Depth)),
+            ExtrudeFeatureParameters e => new(null,ExtrudeBody(e)),
             BoundaryFeatureParameters b => new(null,kernel.Loft(b.BaseFeatureId is Guid bb?Base(bb):null,b.ProfileSketchIds.Select(Sketch).ToArray())),
             BoundaryCutFeatureParameters b => new(null,kernel.LoftCut(Base(b.BaseFeatureId),b.ProfileSketchIds.Select(Sketch).ToArray())),
             CutFeatureParameters c => new(null,kernel.Cut(Base(c.BaseFeatureId),
