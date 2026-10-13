@@ -43,9 +43,9 @@ public partial class MainWindow
     private static double AssemblyTransformDelta(RigidTransform a,RigidTransform b)
         => (a.Translation-b.Translation).Length+(a.RotationDegrees-b.RotationDegrees).Length;
 
-    private void RebuildAssemblyMates(bool reportErrors=true)
+    private bool RebuildAssemblyMates(bool reportErrors=true)
     {
-        if(_assemblyDocument is null||_assemblyDocument.Mates.All(m=>m.Suppressed))return;
+        if(_assemblyDocument is null||_assemblyDocument.Mates.All(m=>m.Suppressed))return true;
         var stable=AssemblyDocumentFile.Clone(_assemblyDocument);
         var current=stable;
         var errors=new List<string>();
@@ -73,6 +73,7 @@ public partial class MainWindow
 
         if(reportErrors&&errors.Count>0)
             Status("Montaj rebuild uyarısı; son sağlam durum korundu: "+string.Join(" | ",errors.Take(3)));
+        return errors.Count==0;
     }
 
     private void RestoreAssemblyDocument(AssemblyDocument document)
@@ -314,6 +315,11 @@ public partial class MainWindow
             if(dialog.ShowDialog(this)!=true)return;
             path=dialog.FileName;
         }
+        if(!RebuildAssemblyMates())
+        {
+            Status("Montaj kaydedilmedi: ilişkiler çözülemedi veya yakınsamadı.");
+            return;
+        }
         AssemblyDocumentFile.Save(path!,_assemblyDocument);
         _assemblyPath=path;
         Status("Montaj kaydedildi: "+Path.GetFileName(path));
@@ -333,7 +339,8 @@ public partial class MainWindow
             foreach(var component in _assemblyDocument.Components.Where(c=>!c.Suppressed))
                 _assemblyBodies[component.Id]=RebuildAssemblyComponent(
                     AssemblyDocumentFile.ResolveSourcePath(dialog.FileName,component.SourcePath));
-            RebuildAssemblyMates(false);
+            if(!RebuildAssemblyMates(false))
+                throw new InvalidDataException("Montaj ilişkileri yeniden çözülemedi; dosya güvenli biçimde açılamadı.");
             RefreshAssemblyTree();
             RenderAssembly();
             Status("Montaj açıldı: "+Path.GetFileName(dialog.FileName));
