@@ -1,0 +1,310 @@
+using System.Globalization;
+using System.IO;
+using System.Windows;
+using System.Windows.Controls;
+using Microsoft.Win32;
+using SrcCad.Core.Assembly;
+using SrcCad.Core.Features;
+using SrcCad.Core.Geometry;
+
+namespace SrcCad.App;
+
+public partial class MainWindow
+{
+    private AssemblyDocument? _assemblyDocument;
+    private string? _assemblyPath;
+    private readonly Dictionary<Guid,string> _assemblyBodies=new();
+    private TreeViewItem? _assemblyRoot;
+    private Guid? _assemblyEditingComponentId;
+
+    private bool InAssemblyMode=>_assemblyDocument is not null;
+
+    private void ExitAssemblyMode()
+    {
+        if(_assemblyRoot is not null)FeatureTree.Items.Remove(_assemblyRoot);
+        _assemblyRoot=null;
+        _assemblyDocument=null;
+        _assemblyPath=null;
+        _assemblyBodies.Clear();
+        _assemblyEditingComponentId=null;
+        PartNode.Visibility=Visibility.Visible;
+        AssemblyMovePanel.Visibility=Visibility.Collapsed;
+        AssemblyMatePanel.Visibility=Visibility.Collapsed;
+    }
+
+    private string RebuildAssemblyComponent(string sourcePath)
+    {
+        var document=FeatureDocumentFile.Load(sourcePath);
+        var session=new FeatureSession<PartFeatureOutput>(document,new PartFeatureEvaluator(new OcctPartGeometryKernel()));
+        return LastBody(document,session.Output)??throw new InvalidDataException("Parça katı B-Rep içermiyor.");
+    }
+
+    private void RefreshAssemblyTree(Guid? selected=null)
+    {
+        if(_assemblyDocument is null)return;
+        if(_assemblyRoot is not null)FeatureTree.Items.Remove(_assemblyRoot);
+        PartNode.Visibility=Visibility.Collapsed;
+        _assemblyRoot=new TreeViewItem{Header="Montaj1",IsExpanded=true,Tag="assembly-root"};
+        foreach(var component in _assemblyDocument.Components)
+        {
+            var t=component.Transform;
+            var header=$"{component.Name}{(component.Fixed?" [Sabit]":"")}{(component.Suppressed?" [Baskılı]":"")}";
+            var item=new TreeViewItem
+            {
+                Header=header,
+                Tag=component.Id,
+                ToolTip=$"X={t.Translation.X:0.###} Y={t.Translation.Y:0.###} Z={t.Translation.Z:0.###} • Rx={t.RotationDegrees.X:0.###} Ry={t.RotationDegrees.Y:0.###} Rz={t.RotationDegrees.Z:0.###}"
+            };
+            var menu=new ContextMenu();
+            var move=new MenuItem{Header="Taşı / Döndür"};move.Click+=(_,_)=>BeginAssemblyMove(component.Id);menu.Items.Add(move);
+            var fix=new MenuItem{Header=component.Fixed?"Sabitlemeyi Kaldır":"Sabitle"};fix.Click+=(_,_)=>ToggleAssemblyFixed(component.Id);menu.Items.Add(fix);
+            var del=new MenuItem{Header="Bileşeni Sil"};del.Click+=(_,_)=>RemoveAssemblyComponent(component.Id);menu.Items.Add(del);
+            item.ContextMenu=menu;
+            _assemblyRoot.Items.Add(item);
+            if(selected==component.Id)item.IsSelected=true;
+        }
+        foreach(var mate in _assemblyDocument.Mates)
+            _assemblyRoot.Items.Add(new TreeViewItem{Header=$"İlişki: {mate.Name} ({mate.Type})",Tag="assembly-mate:"+mate.Id});
+        FeatureTree.Items.Add(_assemblyRoot);
+        ManagerTabs.SelectedItem=FeatureManagerTab;
+    }
+
+    private void RenderAssembly(bool fit=true)
+    {
+        if(_assemblyDocument is null)return;
+        _viewer.ClearModel();
+        foreach(var component in _assemblyDocument.Components.Where(c=>!c.Suppressed))
+        {
+            if(!_assemblyBodies.TryGetValue(component.Id,out var body))continue;
+            var t=component.Transform;
+            _viewer.AddAssemblyBody(body,
+                t.Translation.X,t.Translation.Y,t.Translation.Z,
+                t.RotationDegrees.X,t.RotationDegrees.Y,t.RotationDegrees.Z);
+        }
+        _viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Face);
+        if(fit)_viewer.FitAll();
+    }
+
+    private void NewAssembly_Click(object sender,RoutedEventArgs e)
+    {
+        NewPart_Click(sender,e);
+        _assemblyDocument=new AssemblyDocument(Guid.NewGuid(),Array.Empty<AssemblyComponent>(),Array.Empty<AssemblyMate>());
+        _assemblyPath=null;
+        PartNode.Visibility=Visibility.Collapsed;
+        RefreshAssemblyTree();
+        CommandTabs.SelectedIndex=4;
+        Status("Yeni Montaj • Bileşen Ekle ile .scpart parçalarını ekleyin.");
+    }
+
+    private void AddAssemblyComponent_Click(object sender,RoutedEventArgs e)
+    {
+        if(_assemblyDocument is null)NewAssembly_Click(sender,e);
+        if(_assemblyDocument is null)return;
+        var dialog=new OpenFileDialog
+        {
+            Title="SrcCad Parçası Ekle",
+            Filter="SrcCad Parça (*.scpart)|*.scpart|Tüm Dosyalar (*.*)|*.*",
+            Multiselect=true
+        };
+        if(dialog.ShowDialog(this)!=true)return;
+        Guid? last=null;
+        foreach(var file in dialog.FileNames)
+        {
+            try
+            {
+                var body=RebuildAssemblyComponent(file);
+                var id=Guid.NewGuid();
+                var component=new AssemblyComponent(id,Path.GetFileNameWithoutExtension(file),Path.GetFullPath(file),RigidTransform.Identity);
+                _assemblyDocument=_assemblyDocument.AddComponent(component);
+                _assemblyBodies[id]=body;
+                last=id;
+            }
+            catch(Exception ex)
+            {
+                MessageBox.Show(this,$"{Path.GetFileName(file)} eklenemedi:\n{ex.Message}","SrcCad Montaj",MessageBoxButton.OK,MessageBoxImage.Error);
+            }
+        }
+        RefreshAssemblyTree(last);
+        RenderAssembly();
+        Status($"{_assemblyDocument.Components.Length} bileşenli montaj.");
+    }
+
+    private void SaveAssembly_Click(object sender,RoutedEventArgs e)
+    {
+        if(_assemblyDocument is null){Status("Kaydedilecek montaj yok.");return;}
+        var path=_assemblyPath;
+        if(string.IsNullOrWhiteSpace(path))
+        {
+            var dialog=new SaveFileDialog{Title="Montajı Kaydet",Filter="SrcCad Montaj (*.scasm)|*.scasm",DefaultExt=".scasm",AddExtension=true};
+            if(dialog.ShowDialog(this)!=true)return;
+            path=dialog.FileName;
+        }
+        AssemblyDocumentFile.Save(path!,_assemblyDocument);
+        _assemblyPath=path;
+        Status("Montaj kaydedildi: "+Path.GetFileName(path));
+    }
+
+    private void OpenAssembly_Click(object sender,RoutedEventArgs e)
+    {
+        var dialog=new OpenFileDialog{Title="SrcCad Montaj Aç",Filter="SrcCad Montaj (*.scasm)|*.scasm"};
+        if(dialog.ShowDialog(this)!=true)return;
+        try
+        {
+            NewAssembly_Click(sender,e);
+            _assemblyDocument=AssemblyDocumentFile.Load(dialog.FileName);
+            _assemblyPath=dialog.FileName;
+            _assemblyBodies.Clear();
+            foreach(var component in _assemblyDocument.Components.Where(c=>!c.Suppressed))
+                _assemblyBodies[component.Id]=RebuildAssemblyComponent(component.SourcePath);
+            RefreshAssemblyTree();
+            RenderAssembly();
+            Status("Montaj açıldı: "+Path.GetFileName(dialog.FileName));
+        }
+        catch(Exception ex)
+        {
+            MessageBox.Show(this,ex.Message,"Montaj açılamadı",MessageBoxButton.OK,MessageBoxImage.Error);
+        }
+    }
+
+    private AssemblyComponent? SelectedAssemblyComponent()
+    {
+        if(_assemblyDocument is null||(FeatureTree.SelectedItem as TreeViewItem)?.Tag is not Guid id)return null;
+        return _assemblyDocument.Components.FirstOrDefault(c=>c.Id==id);
+    }
+
+    private void BeginAssemblyMove(Guid? id=null)
+    {
+        if(_assemblyDocument is null)return;
+        var component=id is Guid explicitId?_assemblyDocument.Components.FirstOrDefault(c=>c.Id==explicitId):SelectedAssemblyComponent();
+        if(component is null){Status("Taşımak için montaj ağacından bileşen seçin.");return;}
+        _assemblyEditingComponentId=component.Id;
+        var t=component.Transform;
+        AssemblyMoveX.Text=t.Translation.X.ToString("G17",CultureInfo.CurrentCulture);
+        AssemblyMoveY.Text=t.Translation.Y.ToString("G17",CultureInfo.CurrentCulture);
+        AssemblyMoveZ.Text=t.Translation.Z.ToString("G17",CultureInfo.CurrentCulture);
+        AssemblyRotateX.Text=t.RotationDegrees.X.ToString("G17",CultureInfo.CurrentCulture);
+        AssemblyRotateY.Text=t.RotationDegrees.Y.ToString("G17",CultureInfo.CurrentCulture);
+        AssemblyRotateZ.Text=t.RotationDegrees.Z.ToString("G17",CultureInfo.CurrentCulture);
+        AssemblyMovePanel.Visibility=Visibility.Visible;
+        AssemblyMatePanel.Visibility=Visibility.Collapsed;
+        PropertyTitle.Text="Bileşen Taşı / Döndür";
+        PropertyInfo.Text=component.Name+" • mm / derece • gerçek OCCT gövdesi anında yeniden konumlandırılır.";
+        ManagerTabs.SelectedItem=PropertyManagerTab;
+    }
+
+    private static bool TryAssemblyNumber(string text,out double value)
+        => double.TryParse(text,NumberStyles.Float,CultureInfo.CurrentCulture,out value)||
+           double.TryParse(text,NumberStyles.Float,CultureInfo.InvariantCulture,out value);
+
+    private void AssemblyMoveOk_Click(object sender,RoutedEventArgs e)
+    {
+        if(_assemblyDocument is null||_assemblyEditingComponentId is not Guid id)return;
+        if(!TryAssemblyNumber(AssemblyMoveX.Text,out var x)||!TryAssemblyNumber(AssemblyMoveY.Text,out var y)||
+           !TryAssemblyNumber(AssemblyMoveZ.Text,out var z)||!TryAssemblyNumber(AssemblyRotateX.Text,out var rx)||
+           !TryAssemblyNumber(AssemblyRotateY.Text,out var ry)||!TryAssemblyNumber(AssemblyRotateZ.Text,out var rz))
+        {Status("Montaj konum değerleri geçersiz.");return;}
+        var component=_assemblyDocument.Component(id);
+        var updated=component with{Transform=new RigidTransform(new Vector3d(x,y,z),new Vector3d(rx,ry,rz)).Validate()};
+        _assemblyDocument=_assemblyDocument with{Components=_assemblyDocument.Components.Select(c=>c.Id==id?updated:c).ToArray()};
+        AssemblyMovePanel.Visibility=Visibility.Collapsed;
+        RefreshAssemblyTree(id);RenderAssembly(false);Status(component.Name+" konumu güncellendi.");
+    }
+
+    private void AssemblyMoveCancel_Click(object sender,RoutedEventArgs e)
+    {
+        AssemblyMovePanel.Visibility=Visibility.Collapsed;_assemblyEditingComponentId=null;ManagerTabs.SelectedItem=FeatureManagerTab;
+    }
+
+    private void ToggleAssemblyFixed(Guid id)
+    {
+        if(_assemblyDocument is null)return;
+        var component=_assemblyDocument.Component(id);
+        _assemblyDocument=_assemblyDocument with{Components=_assemblyDocument.Components.Select(c=>c.Id==id?c with{Fixed=!c.Fixed}:c).ToArray()};
+        RefreshAssemblyTree(id);
+    }
+
+    private void RemoveAssemblyComponent(Guid id)
+    {
+        if(_assemblyDocument is null)return;
+        _assemblyDocument=_assemblyDocument.RemoveComponent(id);
+        _assemblyBodies.Remove(id);RefreshAssemblyTree();RenderAssembly();Status("Bileşen montajdan kaldırıldı.");
+    }
+
+    private void AssemblyMove_Click(object sender,RoutedEventArgs e)=>BeginAssemblyMove();
+
+    private void AssemblyMate_Click(object sender,RoutedEventArgs e)
+    {
+        if(_assemblyDocument is null||_assemblyDocument.Components.Length<2)
+        {Status("Montaj ilişkisi için en az iki bileşen gerekiyor.");return;}
+        AssemblyMateA.Items.Clear();AssemblyMateB.Items.Clear();AssemblyMateType.Items.Clear();
+        foreach(var component in _assemblyDocument.Components)
+        {
+            AssemblyMateA.Items.Add(new ComboBoxItem{Content=component.Name,Tag=component.Id});
+            AssemblyMateB.Items.Add(new ComboBoxItem{Content=component.Name,Tag=component.Id});
+        }
+        foreach(var type in new[]{MateType.Coincident,MateType.Concentric,MateType.Parallel,MateType.Perpendicular,MateType.Distance,MateType.Angle})
+            AssemblyMateType.Items.Add(new ComboBoxItem{Content=type.ToString(),Tag=type});
+        AssemblyMateA.SelectedIndex=0;AssemblyMateB.SelectedIndex=1;AssemblyMateType.SelectedIndex=0;AssemblyMateValue.Text="0";
+        AssemblyMatePanel.Visibility=Visibility.Visible;AssemblyMovePanel.Visibility=Visibility.Collapsed;
+        PropertyTitle.Text="Montaj İlişkisi";
+        PropertyInfo.Text="İlk montaj çekirdeği bileşen orijinleri/yönelimleri üzerinde gerçek transform ilişkisi uygular; mate kaydı .scasm içinde kalıcıdır.";
+        ManagerTabs.SelectedItem=PropertyManagerTab;
+    }
+
+    private void AssemblyMateOk_Click(object sender,RoutedEventArgs e)
+    {
+        if(_assemblyDocument is null||
+           (AssemblyMateA.SelectedItem as ComboBoxItem)?.Tag is not Guid aId||
+           (AssemblyMateB.SelectedItem as ComboBoxItem)?.Tag is not Guid bId||aId==bId||
+           (AssemblyMateType.SelectedItem as ComboBoxItem)?.Tag is not MateType type||
+           !TryAssemblyNumber(AssemblyMateValue.Text,out var value))
+        {Status("Geçerli iki bileşen ve ilişki değeri seçin.");return;}
+        var a=_assemblyDocument.Component(aId);var b=_assemblyDocument.Component(bId);
+        var at=a.Transform;var bt=b.Transform;
+        bt=type switch
+        {
+            MateType.Coincident=>bt with{Translation=at.Translation},
+            MateType.Concentric=>bt with{Translation=new Vector3d(at.Translation.X,at.Translation.Y,bt.Translation.Z)},
+            MateType.Parallel=>bt with{RotationDegrees=at.RotationDegrees},
+            MateType.Perpendicular=>bt with{RotationDegrees=new Vector3d(at.RotationDegrees.X,at.RotationDegrees.Y,at.RotationDegrees.Z+90)},
+            MateType.Distance=>bt with{Translation=new Vector3d(at.Translation.X+value,at.Translation.Y,at.Translation.Z)},
+            MateType.Angle=>bt with{RotationDegrees=new Vector3d(at.RotationDegrees.X,at.RotationDegrees.Y,at.RotationDegrees.Z+value)},
+            _=>bt
+        };
+        var mate=new AssemblyMate(Guid.NewGuid(),"İlişki"+(_assemblyDocument.Mates.Length+1),type,
+            new AssemblyReference(aId,TopologyKind.Body,"BODY"),
+            new AssemblyReference(bId,TopologyKind.Body,"BODY"),value);
+        _assemblyDocument=_assemblyDocument with
+        {
+            Components=_assemblyDocument.Components.Select(c=>c.Id==bId?c with{Transform=bt.Validate()}:c).ToArray(),
+            Mates=_assemblyDocument.Mates.Append(mate).ToArray()
+        };
+        AssemblyMatePanel.Visibility=Visibility.Collapsed;RefreshAssemblyTree(bId);RenderAssembly(false);
+        Status(mate.Name+" uygulandı.");
+    }
+
+    private void AssemblyMateCancel_Click(object sender,RoutedEventArgs e)
+    {
+        AssemblyMatePanel.Visibility=Visibility.Collapsed;ManagerTabs.SelectedItem=FeatureManagerTab;
+    }
+
+    private void AssemblyExplode_Click(object sender,RoutedEventArgs e)
+    {
+        if(_assemblyDocument is null)return;
+        _viewer.ClearModel();
+        var index=0;
+        foreach(var component in _assemblyDocument.Components.Where(c=>!c.Suppressed))
+        {
+            if(!_assemblyBodies.TryGetValue(component.Id,out var body))continue;
+            var t=component.Transform;var extra=40.0*index++;
+            _viewer.AddAssemblyBody(body,t.Translation.X+extra,t.Translation.Y,t.Translation.Z,
+                t.RotationDegrees.X,t.RotationDegrees.Y,t.RotationDegrees.Z);
+        }
+        _viewer.FitAll();Status("Patlatılmış görünüm • montaj transformları değiştirilmedi.");
+    }
+
+    private void AssemblyResetView_Click(object sender,RoutedEventArgs e)
+    {
+        if(_assemblyDocument is null)return;RenderAssembly();Status("Montaj normal görünüm.");
+    }
+}
