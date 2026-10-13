@@ -693,6 +693,90 @@ public partial class MainWindow
         Status($"{members.Length} yapısal eleman için gerçek kesim listesi hesaplandı.");
     }
 
+    private void EndCap_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession())return;
+        var baseNode=CurrentSolidFeature();
+        if(baseNode is null){Status("Uç Kapağı için mevcut katı gerekiyor.");return;}
+        _viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Face);
+        BeginEndCapFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Uç Kapağı"),
+            new EndCapFeatureParameters(baseNode.Id,3,false),
+            References:SelectedFaceReferences(baseNode.Id).Take(1).ToArray()));
+    }
+
+    private void BeginEndCapFeature(FeatureNode node)
+    {
+        if(node.Parameters is not EndCapFeatureParameters cap)throw new InvalidOperationException("Unsupported end cap.");
+        _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;
+        EndCapThickness.Text=cap.Thickness.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        EndCapReverse.IsChecked=cap.Reverse;
+        EndCapSelectionText.Text=(node.References?.Length??0)==1?"Uç yüzü seçili":"Düzlemsel uç yüzü seçin.";
+        EndCapError.Text=(node.References?.Length??0)==1?"":"Yüz seçimi gerekiyor.";
+        EndCapPanel.Visibility=Visibility.Visible;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;
+        RevolveFeaturePanel.Visibility=Visibility.Collapsed;MultiSketchFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;
+        DraftFeaturePanel.Visibility=Visibility.Collapsed;RibFeaturePanel.Visibility=Visibility.Collapsed;ReferenceGeometryPanel.Visibility=Visibility.Collapsed;
+        MirrorFeaturePanel.Visibility=Visibility.Collapsed;PatternFeaturePanel.Visibility=Visibility.Collapsed;SheetMetalBasePanel.Visibility=Visibility.Collapsed;
+        SheetMetalConvertPanel.Visibility=Visibility.Collapsed;EdgeFlangePanel.Visibility=Visibility.Collapsed;EndCapPanel.Visibility=Visibility.Collapsed;
+        PropertyTitle.Text=node.Name;PropertyInfo.Text="Gerçek OCCT uç kapağı • düzlemsel yüz • kalınlık • canlı B-Rep önizleme";
+        ManagerTabs.SelectedItem=PropertyManagerTab;_viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Face);
+        _loadingGraphParameters=false;
+        if((node.References?.Length??0)==1)UpdateEndCapPreview();
+        RefreshCommandState();
+    }
+
+    internal void UpdateActiveEndCapSelection()
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not EndCapFeatureParameters cap)return;
+        var refs=SelectedFaceReferences(cap.BaseFeatureId).Take(1).ToArray();
+        _graphFeatureEdit=_graphFeatureEdit with{References=refs};
+        EndCapSelectionText.Text=refs.Length==1?"Uç yüzü seçili":"Düzlemsel uç yüzü seçin.";
+        UpdateEndCapPreview();
+    }
+
+    private FeatureDocument? EndCapCandidate()
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not EndCapFeatureParameters cap||
+           (_graphFeatureEdit.References?.Length??0)!=1||
+           !DimensionNumbers.TryParse(EndCapThickness.Text,SketchDimensionType.LineLength,out var thickness,out _)||
+           thickness<=1e-9)return null;
+        return ReplaceGraphNode(_graphFeatureEdit with{Parameters=cap with{Thickness=thickness,Reverse=EndCapReverse.IsChecked==true}});
+    }
+
+    private void EndCapParameterChanged(object sender,RoutedEventArgs e)
+    {
+        if(!_loadingGraphParameters)UpdateEndCapPreview();
+    }
+
+    private void UpdateEndCapPreview()
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not EndCapFeatureParameters)return;
+        var candidate=EndCapCandidate();
+        if(candidate is null)
+        {
+            _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.0);
+            EndCapError.Text=(_graphFeatureEdit.References?.Length??0)==0?"Bir düzlemsel uç yüzü seçin.":"Pozitif kalınlık girin.";return;
+        }
+        var preview=_partSession.Preview(candidate);
+        var body=preview.Success?LastBody(candidate,id=>preview.Outputs.GetValueOrDefault(id)):null;
+        if(body is not null&&_viewer.PreviewFeatureBody(body))
+        {
+            _viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.72);EndCapError.Text="";return;
+        }
+        _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.0);
+        EndCapError.Text=preview.Report.Nodes.LastOrDefault(n=>n.State==RebuildState.Failed)?.Error??preview.Report.Error??"Uç kapağı önizlemesi oluşturulamadı.";
+    }
+
+    private void EndCapOk_Click(object sender,RoutedEventArgs e)
+    {
+        var candidate=EndCapCandidate();
+        if(candidate is null||_partSession is null){EndCapError.Text="Yüz ve geçerli kalınlık gerekiyor.";return;}
+        if(!_partSession.TryCommit(candidate)){EndCapError.Text=GraphError();return;}
+        var id=_graphFeatureEdit!.Id;EndGraphFeature();RefreshPartTree(id);Status("Parametrik uç kapağı onaylandı.");
+    }
+
+    private void EndCapCancel_Click(object sender,RoutedEventArgs e)=>EndGraphFeature();
+
     private void SweepBoss_Click(object sender,RoutedEventArgs e)=>StartSweepLoft(false,false);
     private void SweepCut_Click(object sender,RoutedEventArgs e)=>StartSweepLoft(false,true);
     private void StructuralMember_Click(object sender,RoutedEventArgs e)
@@ -1704,7 +1788,7 @@ public partial class MainWindow
         GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;
         RevolveFeaturePanel.Visibility=Visibility.Collapsed;MultiSketchFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;
         DraftFeaturePanel.Visibility=Visibility.Collapsed;RibFeaturePanel.Visibility=Visibility.Collapsed;ReferenceGeometryPanel.Visibility=Visibility.Collapsed;
-        MirrorFeaturePanel.Visibility=Visibility.Collapsed;PatternFeaturePanel.Visibility=Visibility.Collapsed;SheetMetalBasePanel.Visibility=Visibility.Collapsed;SheetMetalConvertPanel.Visibility=Visibility.Collapsed;EdgeFlangePanel.Visibility=Visibility.Collapsed;
+        MirrorFeaturePanel.Visibility=Visibility.Collapsed;PatternFeaturePanel.Visibility=Visibility.Collapsed;SheetMetalBasePanel.Visibility=Visibility.Collapsed;SheetMetalConvertPanel.Visibility=Visibility.Collapsed;EdgeFlangePanel.Visibility=Visibility.Collapsed;EndCapPanel.Visibility=Visibility.Collapsed;
         PropertyTitle.Text=node.Name;PropertyInfo.Text="Mevcut gerçek B-Rep korunur; kalınlık, büküm yarıçapı ve K-faktörü feature geçmişine bağlanır.";
         ManagerTabs.SelectedItem=PropertyManagerTab;_loadingGraphParameters=false;RefreshCommandState();
     }
@@ -1753,6 +1837,7 @@ public partial class MainWindow
         if(node.Parameters is HoleFeatureParameters){BeginHoleFeature(node);return;}
         if(node.Parameters is RevolveFeatureParameters or RevolveCutFeatureParameters){BeginRevolveFeature(node);return;}
         if(node.Parameters is SweepFeatureParameters or SweepCutFeatureParameters or LoftFeatureParameters or LoftCutFeatureParameters or StructuralMemberFeatureParameters){BeginMultiSketchFeature(node);return;}
+        if(node.Parameters is EndCapFeatureParameters){BeginEndCapFeature(node);return;}
         if(node.Parameters is ShellFeatureParameters){BeginShellFeature(node);return;}
         if(node.Parameters is DraftFeatureParameters){BeginDraftFeature(node);return;}
         if(node.Parameters is RibFeatureParameters){BeginRibFeature(node);return;}
@@ -1812,7 +1897,7 @@ public partial class MainWindow
     {
         _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.0);
         _graphFeatureEdit=null;_extrudeCommandActive=false;
-        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;RevolveFeaturePanel.Visibility=Visibility.Collapsed;MultiSketchFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;DraftFeaturePanel.Visibility=Visibility.Collapsed;RibFeaturePanel.Visibility=Visibility.Collapsed;ReferenceGeometryPanel.Visibility=Visibility.Collapsed;MirrorFeaturePanel.Visibility=Visibility.Collapsed;PatternFeaturePanel.Visibility=Visibility.Collapsed;SheetMetalBasePanel.Visibility=Visibility.Collapsed;SheetMetalConvertPanel.Visibility=Visibility.Collapsed;EdgeFlangePanel.Visibility=Visibility.Collapsed;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;RevolveFeaturePanel.Visibility=Visibility.Collapsed;MultiSketchFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;DraftFeaturePanel.Visibility=Visibility.Collapsed;RibFeaturePanel.Visibility=Visibility.Collapsed;ReferenceGeometryPanel.Visibility=Visibility.Collapsed;MirrorFeaturePanel.Visibility=Visibility.Collapsed;PatternFeaturePanel.Visibility=Visibility.Collapsed;SheetMetalBasePanel.Visibility=Visibility.Collapsed;SheetMetalConvertPanel.Visibility=Visibility.Collapsed;EdgeFlangePanel.Visibility=Visibility.Collapsed;EndCapPanel.Visibility=Visibility.Collapsed;
         _viewer.ClearSelection();_viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Face);
         ManagerTabs.SelectedItem=FeatureManagerTab;RefreshCommandState();
     }
@@ -1843,6 +1928,6 @@ public partial class MainWindow
         PatternFeaturePanel.Visibility=Visibility.Collapsed;
         SheetMetalBasePanel.Visibility=Visibility.Collapsed;
         SheetMetalConvertPanel.Visibility=Visibility.Collapsed;
-        EdgeFlangePanel.Visibility=Visibility.Collapsed;
+        EdgeFlangePanel.Visibility=Visibility.Collapsed;EndCapPanel.Visibility=Visibility.Collapsed;
     }
 }
