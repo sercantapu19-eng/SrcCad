@@ -373,6 +373,7 @@ public partial class MainWindow
         var existing=mateId is Guid id?_assemblyDocument.Mates.FirstOrDefault(m=>m.Id==id):null;
 
         AssemblyMateA.Items.Clear();AssemblyMateB.Items.Clear();AssemblyMateType.Items.Clear();
+        AssemblyMateAReference.Items.Clear();AssemblyMateBReference.Items.Clear();
         foreach(var component in _assemblyDocument.Components)
         {
             var aItem=new ComboBoxItem{Content=component.Name,Tag=component.Id};
@@ -381,6 +382,16 @@ public partial class MainWindow
             if(existing?.A.ComponentId==component.Id)AssemblyMateA.SelectedItem=aItem;
             if(existing?.B.ComponentId==component.Id)AssemblyMateB.SelectedItem=bItem;
         }
+        foreach(var reference in AssemblyReferenceCatalog.Standard)
+        {
+            var aRef=new ComboBoxItem{Content=reference.Name,Tag=new AssemblyReference(Guid.Empty,reference.Kind,reference.Semantic)};
+            var bRef=new ComboBoxItem{Content=reference.Name,Tag=new AssemblyReference(Guid.Empty,reference.Kind,reference.Semantic)};
+            AssemblyMateAReference.Items.Add(aRef);AssemblyMateBReference.Items.Add(bRef);
+            if(existing is not null&&existing.A.Kind==reference.Kind&&existing.A.SemanticName==reference.Semantic)
+                AssemblyMateAReference.SelectedItem=aRef;
+            if(existing is not null&&existing.B.Kind==reference.Kind&&existing.B.SemanticName==reference.Semantic)
+                AssemblyMateBReference.SelectedItem=bRef;
+        }
         foreach(var type in new[]{MateType.Coincident,MateType.Concentric,MateType.Parallel,MateType.Perpendicular,MateType.Distance,MateType.Angle})
         {
             var item=new ComboBoxItem{Content=type.ToString(),Tag=type};AssemblyMateType.Items.Add(item);
@@ -388,6 +399,8 @@ public partial class MainWindow
         }
         if(AssemblyMateA.SelectedItem is null)AssemblyMateA.SelectedIndex=0;
         if(AssemblyMateB.SelectedItem is null)AssemblyMateB.SelectedIndex=Math.Min(1,AssemblyMateB.Items.Count-1);
+        if(AssemblyMateAReference.SelectedItem is null)AssemblyMateAReference.SelectedIndex=0;
+        if(AssemblyMateBReference.SelectedItem is null)AssemblyMateBReference.SelectedIndex=0;
         if(AssemblyMateType.SelectedItem is null)AssemblyMateType.SelectedIndex=0;
         AssemblyMateValue.Text=(existing?.Value??0).ToString("G17",CultureInfo.CurrentCulture);
         AssemblyMatePanel.Visibility=Visibility.Visible;AssemblyMovePanel.Visibility=Visibility.Collapsed;
@@ -401,33 +414,33 @@ public partial class MainWindow
         if(_assemblyDocument is null||
            (AssemblyMateA.SelectedItem as ComboBoxItem)?.Tag is not Guid aId||
            (AssemblyMateB.SelectedItem as ComboBoxItem)?.Tag is not Guid bId||aId==bId||
+           (AssemblyMateAReference.SelectedItem as ComboBoxItem)?.Tag is not AssemblyReference aTemplate||
+           (AssemblyMateBReference.SelectedItem as ComboBoxItem)?.Tag is not AssemblyReference bTemplate||
            (AssemblyMateType.SelectedItem as ComboBoxItem)?.Tag is not MateType type||
            !TryAssemblyNumber(AssemblyMateValue.Text,out var value))
-        {Status("Geçerli iki bileşen ve ilişki değeri seçin.");return;}
-        var a=_assemblyDocument.Component(aId);var b=_assemblyDocument.Component(bId);
-        var at=a.Transform;var bt=b.Transform;
-        bt=type switch
-        {
-            MateType.Coincident=>bt with{Translation=at.Translation},
-            MateType.Concentric=>bt with{Translation=new Vector3d(at.Translation.X,at.Translation.Y,bt.Translation.Z)},
-            MateType.Parallel=>bt with{RotationDegrees=at.RotationDegrees},
-            MateType.Perpendicular=>bt with{RotationDegrees=new Vector3d(at.RotationDegrees.X,at.RotationDegrees.Y,at.RotationDegrees.Z+90)},
-            MateType.Distance=>bt with{Translation=new Vector3d(at.Translation.X+value,at.Translation.Y,at.Translation.Z)},
-            MateType.Angle=>bt with{RotationDegrees=new Vector3d(at.RotationDegrees.X,at.RotationDegrees.Y,at.RotationDegrees.Z+value)},
-            _=>bt
-        };
+        {Status("Geçerli iki bileşen, referans ve ilişki değeri seçin.");return;}
+
         var previous=_assemblyEditingMateId is Guid editId?_assemblyDocument.Mates.FirstOrDefault(m=>m.Id==editId):null;
         var mate=new AssemblyMate(previous?.Id??Guid.NewGuid(),previous?.Name??"İlişki"+(_assemblyDocument.Mates.Length+1),type,
-            new AssemblyReference(aId,TopologyKind.Body,"BODY"),
-            new AssemblyReference(bId,TopologyKind.Body,"BODY"),value,previous?.Suppressed??false);
-        var mates=previous is null
-            ?_assemblyDocument.Mates.Append(mate).ToArray()
-            :_assemblyDocument.Mates.Select(m=>m.Id==mate.Id?mate:m).ToArray();
-        SetAssemblyDocument(_assemblyDocument with
+            aTemplate with{ComponentId=aId},
+            bTemplate with{ComponentId=bId},value,previous?.Suppressed??false);
+
+        try
         {
-            Components=_assemblyDocument.Components.Select(c=>c.Id==bId?c with{Transform=bt.Validate()}:c).ToArray(),
-            Mates=mates
-        });
+            var withoutEdited=previous is null
+                ?_assemblyDocument
+                :_assemblyDocument with{Mates=_assemblyDocument.Mates.Where(m=>m.Id!=previous.Id).ToArray()};
+            var solved=AssemblyMateSolver.Apply(withoutEdited,mate);
+            var mates=previous is null
+                ?solved.Mates.Append(mate).ToArray()
+                :_assemblyDocument.Mates.Select(m=>m.Id==mate.Id?mate:m).ToArray();
+            SetAssemblyDocument(solved with{Mates=mates});
+        }
+        catch(Exception ex)
+        {
+            Status("Montaj ilişkisi çözülemedi: "+ex.Message);return;
+        }
+
         _assemblyEditingMateId=null;
         AssemblyMatePanel.Visibility=Visibility.Collapsed;RefreshAssemblyTree(bId);RenderAssembly(false);
         Status(mate.Name+(previous is null?" uygulandı.":" güncellendi."));
