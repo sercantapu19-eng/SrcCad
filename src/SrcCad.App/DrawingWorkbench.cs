@@ -102,7 +102,7 @@ public partial class MainWindow
             try
             {
                 var parentType=_drawingDocument.Views.FirstOrDefault(v=>v.Id==view.ParentViewId)?.Type??DrawingViewType.Front;
-                var orientationType=view.Type is DrawingViewType.Projected or DrawingViewType.Section or DrawingViewType.Detail?parentType:view.Type;
+                var orientationType=view.Type is DrawingViewType.Projected or DrawingViewType.Section or DrawingViewType.Detail or DrawingViewType.Broken?parentType:view.Type;
                 var (direction,up)=DrawingOrientation(orientationType);
                 var allSegments=new List<double>();
                 foreach(var body in DrawingBodies(view.ModelPath))
@@ -120,6 +120,24 @@ public partial class MainWindow
                 if(segments.Length<4)continue;
                 var xs=new List<double>();var ys=new List<double>();
                 for(var i=0;i+3<segments.Length;i+=4){xs.Add(segments[i]);xs.Add(segments[i+2]);ys.Add(segments[i+1]);ys.Add(segments[i+3]);}
+                if(view.Type==DrawingViewType.Broken&&view.BreakStart is double breakStart&&view.BreakEnd is double breakEnd)
+                {
+                    double MapX(double x)=>x<=breakStart?x:x>=breakEnd?x-(breakEnd-breakStart):breakStart;
+                    for(var i=0;i+3<segments.Length;i+=4)
+                    {
+                        var ax=segments[i];var ay=segments[i+1];var bx=segments[i+2];var by=segments[i+3];
+                        if(ax>breakStart&&ax<breakEnd&&bx>breakStart&&bx<breakEnd)continue;
+                        var x1=MapX(ax);var x2=MapX(bx);
+                        segments[i]=x1;segments[i+2]=x2;
+                    }
+                    xs.Clear();ys.Clear();
+                    for(var i=0;i+3<segments.Length;i+=4)
+                    {
+                        var ax=segments[i],bx=segments[i+2];
+                        if(!double.IsFinite(ax)||!double.IsFinite(bx))continue;
+                        xs.Add(ax);xs.Add(bx);ys.Add(segments[i+1]);ys.Add(segments[i+3]);
+                    }
+                }
                 var cx=(xs.Min()+xs.Max())*0.5;var cy=(ys.Min()+ys.Max())*0.5;
                 for(var i=0;i+3<segments.Length;i+=4)
                 {
@@ -128,6 +146,13 @@ public partial class MainWindow
                     var x2=(segments[i+2]-cx)*view.Scale+view.Position.X;
                     var y2=(segments[i+3]-cy)*view.Scale+view.Position.Y;
                     Line(x1,y1,x2,y2);
+                }
+                if(view.Type==DrawingViewType.Broken)
+                {
+                    var symbolX=view.Position.X;
+                    var top=view.Position.Y+28;var bottom=view.Position.Y-28;
+                    Line(symbolX-4,top,symbolX+2,top-6,1);Line(symbolX+2,top-6,symbolX-2,top-12,1);Line(symbolX-2,top-12,symbolX+4,top-18,1);
+                    Line(symbolX-4,bottom,symbolX+2,bottom+6,1);Line(symbolX+2,bottom+6,symbolX-2,bottom+12,1);Line(symbolX-2,bottom+12,symbolX+4,bottom+18,1);
                 }
                 if(view.Type==DrawingViewType.Detail)
                     _viewer.AddStyledSketchCircle(view.Position.X,view.Position.Y,0,0,0,1,1,0,0,45,1);
@@ -219,6 +244,27 @@ public partial class MainWindow
         catch(Exception ex){Status("Kesit oluşturulamadı: "+ex.Message);}
     }
 
+    private void DrawingBrokenView_Click(object sender,RoutedEventArgs e)
+    {
+        if(_drawingDocument is null)return;
+        var parent=SelectedDrawingView();
+        if(parent is null){Status("Kopuk görünüm için ana görünüşü FeatureManager'dan seçin.");return;}
+        try
+        {
+            var data=DrawingProjectionData(parent);
+            var xs=new List<double>();
+            for(var i=0;i+3<data.Segments.Length;i+=4){xs.Add(data.Segments[i]);xs.Add(data.Segments[i+2]);}
+            var min=xs.Min();var max=xs.Max();var width=max-min;
+            if(width<=1e-6){Status("Kopuk görünüm için görünüş genişliği yetersiz.");return;}
+            var broken=new DrawingView(Guid.NewGuid(),"KOPUK "+parent.Name,parent.ModelPath,DrawingViewType.Broken,parent.SheetId,
+                new Point2d(parent.Position.X+125,parent.Position.Y-80),parent.Scale,parent.Id,
+                BreakStart:min+width*0.40,BreakEnd:min+width*0.60);
+            _drawingDocument=_drawingDocument with{Views=_drawingDocument.Views.Append(broken).ToArray()};
+            RefreshDrawingTree(broken.Id);RenderDrawing();Status("Kopuk görünüm oluşturuldu; orta %20 bölge kaldırıldı.");
+        }
+        catch(Exception ex){Status("Kopuk görünüm oluşturulamadı: "+ex.Message);}
+    }
+
     private void DrawingDetailView_Click(object sender,RoutedEventArgs e)
     {
         if(_drawingDocument is null)return;
@@ -234,7 +280,7 @@ public partial class MainWindow
     {
         if(_drawingDocument is null)throw new InvalidOperationException("Drawing document missing.");
         var parentType=_drawingDocument.Views.FirstOrDefault(v=>v.Id==view.ParentViewId)?.Type??DrawingViewType.Front;
-        var orientationType=view.Type is DrawingViewType.Projected or DrawingViewType.Section or DrawingViewType.Detail?parentType:view.Type;
+        var orientationType=view.Type is DrawingViewType.Projected or DrawingViewType.Section or DrawingViewType.Detail or DrawingViewType.Broken?parentType:view.Type;
         var (direction,up)=DrawingOrientation(orientationType);
         var segments=DrawingBodies(view.ModelPath).SelectMany(body=>
             SrcCad.Kernel.Occt.OcctFeatureKernel.ProjectEdges(body,
