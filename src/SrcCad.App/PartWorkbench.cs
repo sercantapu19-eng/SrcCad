@@ -256,6 +256,16 @@ public partial class MainWindow
         BeginEdgeFeature(node);
     }
 
+    private void WeldBead_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession())return;
+        var baseNode=CurrentSolidFeature();
+        if(baseNode is null){Status("Kaynak Dikişi için mevcut katı gerekiyor.");return;}
+        _viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Edge);
+        BeginEdgeFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Kaynak Dikişi"),
+            new WeldBeadFeatureParameters(baseNode.Id,2),References:SelectedEdgeReferences(baseNode.Id)));
+    }
+
     private void BeginEdgeFeature(FeatureNode node)
     {
         _graphFeatureEdit=node;
@@ -265,10 +275,17 @@ public partial class MainWindow
         {
             FilletFeatureParameters f=>f.Radius,
             ChamferFeatureParameters c=>c.Distance,
+            WeldBeadFeatureParameters w=>w.Radius,
             _=>throw new InvalidOperationException("Unsupported edge feature.")
         };
         EdgeFeatureValue.Text=value.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
-        EdgeFeatureValueLabel.Text=node.Kind==FeatureKind.Fillet?"Radyus (mm)":"Pah Mesafesi (mm)";
+        EdgeFeatureValueLabel.Text=node.Kind switch
+        {
+            FeatureKind.Fillet=>"Radyus (mm)",
+            FeatureKind.Chamfer=>"Pah Mesafesi (mm)",
+            FeatureKind.WeldBead=>"Kaynak Yarıçapı (mm)",
+            _=>"Değer (mm)"
+        };
         EdgeFeaturePanel.Visibility=Visibility.Visible;
         GraphFeaturePanel.Visibility=Visibility.Collapsed;
         EdgeFeatureSelectionText.Text=(node.References?.Length??0)==0?"Kenar seçilmedi":$"{node.References!.Length} kenar seçili";
@@ -285,11 +302,12 @@ public partial class MainWindow
     internal void UpdateActiveEdgeFeatureSelection()
     {
         if(_partSession is null||_graphFeatureEdit is null||
-           _graphFeatureEdit.Parameters is not (FilletFeatureParameters or ChamferFeatureParameters))return;
+           _graphFeatureEdit.Parameters is not (FilletFeatureParameters or ChamferFeatureParameters or WeldBeadFeatureParameters))return;
         var baseId=_graphFeatureEdit.Parameters switch
         {
             FilletFeatureParameters f=>f.BaseFeatureId,
             ChamferFeatureParameters c=>c.BaseFeatureId,
+            WeldBeadFeatureParameters w=>w.BaseFeatureId,
             _=>Guid.Empty
         };
         var references=SelectedEdgeReferences(baseId);
@@ -307,6 +325,7 @@ public partial class MainWindow
         {
             FilletFeatureParameters f=>(FeatureParameters)(f with{Radius=value}),
             ChamferFeatureParameters c=>c with{Distance=value},
+            WeldBeadFeatureParameters w=>w with{Radius=value},
             _=>throw new InvalidOperationException("Unsupported edge feature.")
         };
         return ReplaceGraphNode(_graphFeatureEdit with{Parameters=parameters});
@@ -2003,7 +2022,7 @@ public partial class MainWindow
     }
     private void BeginGraphFeature(FeatureNode node)
     {
-        if(node.Parameters is FilletFeatureParameters or ChamferFeatureParameters){BeginEdgeFeature(node);return;}
+        if(node.Parameters is FilletFeatureParameters or ChamferFeatureParameters or WeldBeadFeatureParameters){BeginEdgeFeature(node);return;}
         if(node.Parameters is HoleFeatureParameters){BeginHoleFeature(node);return;}
         if(node.Parameters is RevolveFeatureParameters or RevolveCutFeatureParameters){BeginRevolveFeature(node);return;}
         if(node.Parameters is SweepFeatureParameters or SweepCutFeatureParameters or LoftFeatureParameters or LoftCutFeatureParameters or StructuralMemberFeatureParameters){BeginMultiSketchFeature(node);return;}
