@@ -25,15 +25,29 @@
         <DrawingImage x:Key="CadExtrudeIcon"><DrawingImage.Drawing><GeometryDrawing Geometry="M 4,11 L 20,11 20,28 4,28 Z M 4,11 L 12,3 28,3 28,20 20,28 M 20,11 L 28,3"><GeometryDrawing.Pen><Pen Brush="#236FA3" Thickness="1.7"/></GeometryDrawing.Pen></GeometryDrawing></DrawingImage.Drawing></DrawingImage>
         <DrawingImage x:Key="CadSketchIcon"><DrawingImage.Drawing><GeometryDrawing Geometry="M 3,27 L 24,27 29,6 8,6 Z M 10,22 L 23,9 M 20,8 L 25,13"><GeometryDrawing.Pen><Pen Brush="#236FA3" Thickness="1.7"/></GeometryDrawing.Pen></GeometryDrawing></DrawingImage.Drawing></DrawingImage>
         <Style x:Key="CadCommandButton" TargetType="Button" BasedOn="{StaticResource CommandButton}">
-            <Setter Property="MinHeight" Value="64"/>
-            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="MinHeight" Value="76"/>
+            <Setter Property="MinWidth" Value="88"/>
+            <Setter Property="Padding" Value="7,5"/>
+            <Setter Property="Foreground" Value="#17212B"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Setter Property="ToolTip" Value="{Binding Content, RelativeSource={RelativeSource Self}}"/>
             <Setter Property="ContentTemplate"><Setter.Value><DataTemplate>
-                <StackPanel HorizontalAlignment="Center">
-                    <Image Width="30" Height="30" Margin="0,0,0,4" Source="{Binding Tag, RelativeSource={RelativeSource AncestorType=Button}}"/>
-                    <TextBlock Text="{Binding}" TextAlignment="Center"/>
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Image Width="30" Height="30" Margin="0,0,0,4"
+                           Source="{Binding Tag, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                    <TextBlock Text="{Binding}" TextAlignment="Center" TextWrapping="Wrap"
+                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                               MaxWidth="92" MinHeight="28" VerticalAlignment="Center"/>
                 </StackPanel>
             </DataTemplate></Setter.Value></Setter>
+            <Style.Triggers>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Foreground" Value="#687786"/>
+                    <Setter Property="Opacity" Value="1"/>
+                    <Setter Property="Background" Value="#F1F4F6"/>
+                </Trigger>
+            </Style.Triggers>
         </Style>
         <Style TargetType="Button" x:Key="HeadButton">
             <Setter Property="Margin" Value="2"/>
