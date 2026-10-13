@@ -1900,6 +1900,47 @@ namespace SrcCad::Kernel::Occt
         catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
     }
 
+    String^ OcctFeatureKernel::TrimToPlane(String^ baseBody,array<double>^ planeFrame,bool keepPositive)
+    {
+        if(planeFrame==nullptr||planeFrame->Length!=12)throw gcnew ArgumentException("Trim plane requires 12 frame values.");
+        for each(double value in planeFrame)if(!std::isfinite(value))throw gcnew ArgumentException("Invalid trim plane.");
+        try
+        {
+            TopoDS_Shape baseShape=decodeFeature(baseBody);
+            const double before=featureVolume(baseShape);
+            gp_Pnt origin(planeFrame[0],planeFrame[1],planeFrame[2]);
+            gp_Vec u(planeFrame[3],planeFrame[4],planeFrame[5]);
+            gp_Vec v(planeFrame[6],planeFrame[7],planeFrame[8]);
+            gp_Vec n(planeFrame[9],planeFrame[10],planeFrame[11]);
+            if(u.Magnitude()<=1e-12||v.Magnitude()<=1e-12||n.Magnitude()<=1e-12)
+                throw gcnew ArgumentException("Trim plane basis cannot be zero.");
+            u.Normalize();v.Normalize();n.Normalize();if(!keepPositive)n.Reverse();
+
+            Bnd_Box bounds;BRepBndLib::Add(baseShape,bounds);
+            double xmin,ymin,zmin,xmax,ymax,zmax;bounds.Get(xmin,ymin,zmin,xmax,ymax,zmax);
+            const double diagonal=gp_Pnt(xmin,ymin,zmin).Distance(gp_Pnt(xmax,ymax,zmax));
+            const double extent=std::max(100.0,diagonal*4.0+10.0);
+
+            gp_Pnt p0=origin.Translated(u.Multiplied(-extent)).Translated(v.Multiplied(-extent));
+            gp_Pnt p1=origin.Translated(u.Multiplied(extent)).Translated(v.Multiplied(-extent));
+            gp_Pnt p2=origin.Translated(u.Multiplied(extent)).Translated(v.Multiplied(extent));
+            gp_Pnt p3=origin.Translated(u.Multiplied(-extent)).Translated(v.Multiplied(extent));
+            BRepBuilderAPI_MakePolygon polygon;polygon.Add(p0);polygon.Add(p1);polygon.Add(p2);polygon.Add(p3);polygon.Close();
+            if(!polygon.IsDone())throw gcnew InvalidOperationException("Trim half-space profile failed.");
+            BRepBuilderAPI_MakeFace face(polygon.Wire(),true);
+            if(!face.IsDone())throw gcnew InvalidOperationException("Trim half-space face failed.");
+            BRepPrimAPI_MakePrism prism(face.Face(),n.Multiplied(extent*2.0),true,true);
+            TopoDS_Shape half=prism.Shape();featureVolume(half);
+            BRepAlgoAPI_Common common(baseShape,half);common.Build();
+            if(!common.IsDone())throw gcnew InvalidOperationException("OCCT structural trim failed.");
+            TopoDS_Shape result=common.Shape();const double after=featureVolume(result);
+            if(after<=1e-9||before-after<=std::max(1e-8,before*1e-10))
+                throw gcnew InvalidOperationException("Trim plane removes no material; reverse the kept side or move the plane.");
+            return encodeFeature(result);
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
     String^ OcctFeatureKernel::EndCap(String^ baseBody,String^ faceReference,double thickness,bool reverse)
     {
         if(!std::isfinite(thickness)||thickness<=1e-9)throw gcnew ArgumentException("End cap thickness must be positive.");
