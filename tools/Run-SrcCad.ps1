@@ -76,7 +76,12 @@ try {
         $testExe = Join-Path $repoRoot "src\SrcCad.Tests\bin\x64\$Configuration\net8.0\SrcCad.Tests.exe"
         if (!(Test-Path -LiteralPath $testExe)) { throw "Managed test executable bulunamadi: $testExe" }
         Write-RunLog "Managed regresyon testleri calisiyor: $testExe"
-        $testProcess = Start-Process -FilePath $testExe -WorkingDirectory (Split-Path $testExe -Parent) -Wait -PassThru -NoNewWindow
+        $managedStdout = Join-Path $logs 'run-managed-tests.stdout.log'
+        $managedStderr = Join-Path $logs 'run-managed-tests.stderr.log'
+        Remove-Item -LiteralPath $managedStdout,$managedStderr -Force -ErrorAction SilentlyContinue
+        $testProcess = Start-Process -FilePath $testExe -WorkingDirectory (Split-Path $testExe -Parent) -Wait -PassThru -NoNewWindow -RedirectStandardOutput $managedStdout -RedirectStandardError $managedStderr
+        if (Test-Path -LiteralPath $managedStdout) { Get-Content -LiteralPath $managedStdout | Tee-Object -FilePath $log -Append }
+        if (Test-Path -LiteralPath $managedStderr) { Get-Content -LiteralPath $managedStderr | Tee-Object -FilePath $log -Append }
         if ($testProcess.ExitCode -ne 0) { throw "Managed regresyon testleri basarisiz. ExitCode=$($testProcess.ExitCode)" }
         Write-RunLog "Managed regresyon testleri PASS."
     }
