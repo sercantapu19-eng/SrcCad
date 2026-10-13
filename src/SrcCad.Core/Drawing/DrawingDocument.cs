@@ -5,7 +5,7 @@ namespace SrcCad.Core.Drawing;
 
 public enum DrawingViewType { Front, Top, Right, Isometric, Projected, Section, Detail, Broken }
 public enum DrawingProjectionStandard { FirstAngle, ThirdAngle }
-public enum DrawingAnnotationKind { Text, OverallSize, HoleCallout, Balloon, BillOfMaterials }
+public enum DrawingAnnotationKind { Text, OverallSize, LinearDimension, DiameterDimension, HoleCallout, Balloon, BillOfMaterials }
 
 public sealed record DrawingSheet(
     Guid Id,
