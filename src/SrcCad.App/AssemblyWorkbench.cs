@@ -385,7 +385,8 @@ public partial class MainWindow
         if(_assemblyDocument is null)return;
         var component=_assemblyDocument.Component(id);
         SetAssemblyDocument(_assemblyDocument with{Components=_assemblyDocument.Components.Select(c=>c.Id==id?c with{Fixed=!c.Fixed}:c).ToArray()});
-        RefreshAssemblyTree(id);
+        RebuildAssemblyMates();
+        RefreshAssemblyTree(id);RenderAssembly(false);
     }
 
     private void ToggleAssemblySuppressed(Guid id)
@@ -420,8 +421,9 @@ public partial class MainWindow
         var mate=_assemblyDocument.Mates.FirstOrDefault(m=>m.Id==id);
         if(mate is null)return;
         SetAssemblyDocument(_assemblyDocument with{Mates=_assemblyDocument.Mates.Where(m=>m.Id!=id).ToArray()});
-        RefreshAssemblyTree();
-        Status(mate.Name+" silindi.");
+        RebuildAssemblyMates();
+        RefreshAssemblyTree();RenderAssembly(false);
+        Status(mate.Name+" silindi; kalan ilişkiler yeniden çözüldü.");
     }
 
     private void RemoveAssemblyComponent(Guid id)
@@ -621,6 +623,7 @@ public partial class MainWindow
                 ?solved.Mates.Append(mate).ToArray()
                 :_assemblyDocument.Mates.Select(m=>m.Id==mate.Id?mate:m).ToArray();
             SetAssemblyDocument(solved with{Mates=mates});
+            RebuildAssemblyMates();
         }
         catch(Exception ex)
         {
