@@ -1681,6 +1681,60 @@ public partial class MainWindow
 
     private void SheetMetalBaseCancel_Click(object sender,RoutedEventArgs e)=>EndGraphFeature();
 
+    private void ConvertToSheetMetal_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession())return;
+        var baseNode=CurrentSolidFeature();
+        if(baseNode is null){Status("Sac'a Dönüştür için mevcut katı gerekiyor.");return;}
+        if(_partSession!.Document.Features.Any(f=>f.Kind is FeatureKind.SheetMetalBase or FeatureKind.SheetMetalConvert))
+        {Status("Bu parça zaten sac levha kökü içeriyor.");return;}
+        BeginSheetMetalConvertFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Sac'a Dönüştür"),
+            new SheetMetalConvertFeatureParameters(baseNode.Id,2,2,0.5)));
+    }
+
+    private void BeginSheetMetalConvertFeature(FeatureNode node)
+    {
+        if(node.Parameters is not SheetMetalConvertFeatureParameters sheet)throw new InvalidOperationException("Unsupported sheet metal conversion.");
+        _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;
+        ConvertSheetThickness.Text=sheet.Thickness.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        ConvertSheetBendRadius.Text=sheet.BendRadius.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        ConvertSheetKFactor.Text=sheet.KFactor.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        SheetMetalConvertError.Text="";
+        SheetMetalConvertPanel.Visibility=Visibility.Visible;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;
+        RevolveFeaturePanel.Visibility=Visibility.Collapsed;MultiSketchFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;
+        DraftFeaturePanel.Visibility=Visibility.Collapsed;RibFeaturePanel.Visibility=Visibility.Collapsed;ReferenceGeometryPanel.Visibility=Visibility.Collapsed;
+        MirrorFeaturePanel.Visibility=Visibility.Collapsed;PatternFeaturePanel.Visibility=Visibility.Collapsed;SheetMetalBasePanel.Visibility=Visibility.Collapsed;SheetMetalConvertPanel.Visibility=Visibility.Collapsed;EdgeFlangePanel.Visibility=Visibility.Collapsed;
+        PropertyTitle.Text=node.Name;PropertyInfo.Text="Mevcut gerçek B-Rep korunur; kalınlık, büküm yarıçapı ve K-faktörü feature geçmişine bağlanır.";
+        ManagerTabs.SelectedItem=PropertyManagerTab;_loadingGraphParameters=false;RefreshCommandState();
+    }
+
+    private FeatureDocument? SheetMetalConvertCandidate()
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not SheetMetalConvertFeatureParameters sheet||
+           !DimensionNumbers.TryParse(ConvertSheetThickness.Text,SketchDimensionType.LineLength,out var thickness,out _)||
+           !DimensionNumbers.TryParseScalar(ConvertSheetBendRadius.Text,out var radius)||
+           !DimensionNumbers.TryParseScalar(ConvertSheetKFactor.Text,out var k)||
+           thickness<=1e-9||radius<0||k<0||k>1)return null;
+        return ReplaceGraphNode(_graphFeatureEdit with{Parameters=sheet with{Thickness=thickness,BendRadius=radius,KFactor=k}});
+    }
+
+    private void SheetMetalConvertParameterChanged(object sender,RoutedEventArgs e)
+    {
+        if(_loadingGraphParameters)return;
+        SheetMetalConvertError.Text=SheetMetalConvertCandidate() is null?"Kalınlık > 0, yarıçap ≥ 0 ve K-faktörü 0–1 olmalı.":"";
+    }
+
+    private void SheetMetalConvertOk_Click(object sender,RoutedEventArgs e)
+    {
+        var candidate=SheetMetalConvertCandidate();
+        if(candidate is null||_partSession is null){SheetMetalConvertError.Text="Geçerli sac parametreleri gerekiyor.";return;}
+        if(!_partSession.TryCommit(candidate)){SheetMetalConvertError.Text=GraphError();return;}
+        var id=_graphFeatureEdit!.Id;EndGraphFeature();RefreshPartTree(id);Status("Katı parametrik sac levha gövdesine dönüştürüldü.");
+    }
+
+    private void SheetMetalConvertCancel_Click(object sender,RoutedEventArgs e)=>EndGraphFeature();
+
     private void BeginGraphExtrude()
     {
         if(_inSketch||_extrudeCommandActive||_partSession is null||SelectedGraphId is not Guid id||_partSession.Document.Node(id).Kind!=FeatureKind.Sketch)return;
@@ -1706,6 +1760,7 @@ public partial class MainWindow
         if(node.Parameters is LinearPatternFeatureParameters or CircularPatternFeatureParameters){BeginPatternFeature(node);return;}
         if(node.Parameters is ReferencePlaneFeatureParameters or ReferenceAxisFeatureParameters or ReferencePointFeatureParameters){BeginReferenceGeometryFeature(node);return;}
         if(node.Parameters is SheetMetalBaseFeatureParameters){BeginSheetMetalBaseFeature(node);return;}
+        if(node.Parameters is SheetMetalConvertFeatureParameters){BeginSheetMetalConvertFeature(node);return;}
         if(node.Parameters is SheetMetalEdgeFlangeFeatureParameters){BeginEdgeFlangeFeature(node);return;}
         _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;_depthWheel.Reset();
         var cut=node.Parameters as CutFeatureParameters;
@@ -1757,7 +1812,7 @@ public partial class MainWindow
     {
         _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.0);
         _graphFeatureEdit=null;_extrudeCommandActive=false;
-        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;RevolveFeaturePanel.Visibility=Visibility.Collapsed;MultiSketchFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;DraftFeaturePanel.Visibility=Visibility.Collapsed;RibFeaturePanel.Visibility=Visibility.Collapsed;ReferenceGeometryPanel.Visibility=Visibility.Collapsed;MirrorFeaturePanel.Visibility=Visibility.Collapsed;PatternFeaturePanel.Visibility=Visibility.Collapsed;SheetMetalBasePanel.Visibility=Visibility.Collapsed;EdgeFlangePanel.Visibility=Visibility.Collapsed;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;RevolveFeaturePanel.Visibility=Visibility.Collapsed;MultiSketchFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;DraftFeaturePanel.Visibility=Visibility.Collapsed;RibFeaturePanel.Visibility=Visibility.Collapsed;ReferenceGeometryPanel.Visibility=Visibility.Collapsed;MirrorFeaturePanel.Visibility=Visibility.Collapsed;PatternFeaturePanel.Visibility=Visibility.Collapsed;SheetMetalBasePanel.Visibility=Visibility.Collapsed;SheetMetalConvertPanel.Visibility=Visibility.Collapsed;EdgeFlangePanel.Visibility=Visibility.Collapsed;
         _viewer.ClearSelection();_viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Face);
         ManagerTabs.SelectedItem=FeatureManagerTab;RefreshCommandState();
     }
