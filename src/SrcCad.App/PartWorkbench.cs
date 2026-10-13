@@ -307,6 +307,9 @@ public partial class MainWindow
             FilletFeatureParameters f=>f.Radius,
             ChamferFeatureParameters c=>c.Distance,
             WeldBeadFeatureParameters w=>w.Radius,
+            SheetMetalHemFeatureParameters h=>h.Width,
+            SheetMetalRipFeatureParameters r=>r.Gap,
+            SheetMetalCornerReliefFeatureParameters c=>c.Radius,
             _=>throw new InvalidOperationException("Unsupported edge feature.")
         };
         EdgeFeatureValue.Text=value.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
@@ -315,6 +318,9 @@ public partial class MainWindow
             FeatureKind.Fillet=>"Radyus (mm)",
             FeatureKind.Chamfer=>"Pah Mesafesi (mm)",
             FeatureKind.WeldBead=>"Kaynak Yarıçapı (mm)",
+            FeatureKind.SheetMetalHem=>"Hem Genişliği (mm)",
+            FeatureKind.SheetMetalRip=>"Yırtık Boşluğu (mm)",
+            FeatureKind.SheetMetalCornerRelief=>"Rölyef Yarıçapı (mm)",
             _=>"Değer (mm)"
         };
         EdgeFeaturePanel.Visibility=Visibility.Visible;
@@ -333,12 +339,16 @@ public partial class MainWindow
     internal void UpdateActiveEdgeFeatureSelection()
     {
         if(_partSession is null||_graphFeatureEdit is null||
-           _graphFeatureEdit.Parameters is not (FilletFeatureParameters or ChamferFeatureParameters or WeldBeadFeatureParameters))return;
+           _graphFeatureEdit.Parameters is not (FilletFeatureParameters or ChamferFeatureParameters or WeldBeadFeatureParameters or
+               SheetMetalHemFeatureParameters or SheetMetalRipFeatureParameters or SheetMetalCornerReliefFeatureParameters))return;
         var baseId=_graphFeatureEdit.Parameters switch
         {
             FilletFeatureParameters f=>f.BaseFeatureId,
             ChamferFeatureParameters c=>c.BaseFeatureId,
             WeldBeadFeatureParameters w=>w.BaseFeatureId,
+            SheetMetalHemFeatureParameters h=>h.BaseFeatureId,
+            SheetMetalRipFeatureParameters r=>r.BaseFeatureId,
+            SheetMetalCornerReliefFeatureParameters c=>c.BaseFeatureId,
             _=>Guid.Empty
         };
         var references=SelectedEdgeReferences(baseId);
@@ -357,6 +367,9 @@ public partial class MainWindow
             FilletFeatureParameters f=>(FeatureParameters)(f with{Radius=value}),
             ChamferFeatureParameters c=>c with{Distance=value},
             WeldBeadFeatureParameters w=>w with{Radius=value},
+            SheetMetalHemFeatureParameters h=>h with{Width=value},
+            SheetMetalRipFeatureParameters r=>r with{Gap=value},
+            SheetMetalCornerReliefFeatureParameters c=>c with{Radius=value},
             _=>throw new InvalidOperationException("Unsupported edge feature.")
         };
         return ReplaceGraphNode(_graphFeatureEdit with{Parameters=parameters});
