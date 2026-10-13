@@ -8,6 +8,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using SrcCad.Commands;
 using SrcCad.Core.Geometry;
+using SrcCad.Core.Features;
 using SrcCad.Core.History;
 using SrcCad.Core.Sketch;
 using SrcCad.Core.Persistence;
