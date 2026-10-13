@@ -132,10 +132,10 @@
                     <Button Style="{StaticResource CadCommandButton}" Content="Çizim Pahı" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Çizgi Kırp" Tag="{StaticResource CadTrimIcon}" Click="Trim_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Uzat" Click="CadCommandPlaceholder_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Ofset" Click="CadCommandPlaceholder_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Aynala" Click="CadCommandPlaceholder_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Doğrusal Dizilim" Click="CadCommandPlaceholder_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Dairesel Dizilim" Click="CadCommandPlaceholder_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Ofset" Click="OffsetSketch_Click" ToolTip="Seçili çizgi/daireleri girilen mesafede gerçek geometri olarak ofsetler."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Aynala" Click="MirrorSketch_Click" ToolTip="Seçili geometri + Merkez Çizgisi ile parametrik çizim kopyası oluşturur."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Doğrusal Dizilim" Click="LinearSketchPattern_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Dairesel Dizilim" Click="CircularSketchPattern_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadDimensionIcon}" Content="Akıllı Ölçü" Click="SmartDimension_Click" x:Name="SmartDimensionButton"/>
                     <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadRelationIcon}" Content="İlişkiler" Click="ShowSketchRelations_Click"/>
                     <Separator Margin="8,2"/>
