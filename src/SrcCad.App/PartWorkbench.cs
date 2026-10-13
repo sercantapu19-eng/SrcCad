@@ -1818,6 +1818,16 @@ public partial class MainWindow
 
     private void EdgeFlange_Click(object sender,RoutedEventArgs e)=>StartSheetEdgeFlange(false);
     private void MiterFlange_Click(object sender,RoutedEventArgs e)=>StartSheetEdgeFlange(true);
+    private void Jog_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession()||_partSession is null)return;
+        var defaults=SheetMetalDefaults();var baseNode=CurrentSolidFeature();
+        if(defaults is null||baseNode is null){Status("Jog için sac levha gövdesi gerekiyor.");return;}
+        _viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Edge);
+        BeginEdgeFlangeFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Jog"),
+            new SheetMetalJogFeatureParameters(baseNode.Id,10,20,defaults.Value.Thickness,false),
+            References:SelectedEdgeReferences(baseNode.Id)));
+    }
 
     private void StartSheetEdgeFlange(bool miter)
     {
@@ -1839,18 +1849,23 @@ public partial class MainWindow
     {
         var values=node.Parameters switch
         {
-            SheetMetalEdgeFlangeFeatureParameters f=>(f.BaseFeatureId,f.Length,f.AngleDegrees,f.Thickness,f.BendRadius,f.Reverse,false),
-            SheetMetalMiterFlangeFeatureParameters f=>(f.BaseFeatureId,f.Length,f.AngleDegrees,f.Thickness,f.BendRadius,f.Reverse,true),
-            _=>throw new InvalidOperationException("Unsupported edge flange.")
+            SheetMetalEdgeFlangeFeatureParameters f=>(BaseId:f.BaseFeatureId,First:f.Length,Second:f.AngleDegrees,Thickness:f.Thickness,BendRadius:f.BendRadius,Reverse:f.Reverse,Miter:false,Jog:false),
+            SheetMetalMiterFlangeFeatureParameters f=>(BaseId:f.BaseFeatureId,First:f.Length,Second:f.AngleDegrees,Thickness:f.Thickness,BendRadius:f.BendRadius,Reverse:f.Reverse,Miter:true,Jog:false),
+            SheetMetalJogFeatureParameters f=>(BaseId:f.BaseFeatureId,First:f.Offset,Second:f.Height,Thickness:f.Thickness,BendRadius:0.0,Reverse:f.Reverse,Miter:false,Jog:true),
+            _=>throw new InvalidOperationException("Unsupported edge flange/jog.")
         };
         _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;
-        EdgeFlangeLength.Text=values.Length.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
-        EdgeFlangeAngle.Text=values.AngleDegrees.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        EdgeFlangeLength.Text=values.First.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        EdgeFlangeAngle.Text=values.Second.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        EdgeFlangeLengthLabel.Text=values.Jog?"Ofset Uzunluğu (mm)":"Flanş Uzunluğu (mm)";
+        EdgeFlangeAngleLabel.Text=values.Jog?"Jog Yüksekliği (mm)":"Açı (°)";
+        EdgeFlangeBendRadiusLabel.Visibility=values.Jog?Visibility.Collapsed:Visibility.Visible;
+        EdgeFlangeBendRadius.Visibility=values.Jog?Visibility.Collapsed:Visibility.Visible;
         EdgeFlangeThickness.Text=values.Thickness.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
         EdgeFlangeBendRadius.Text=values.BendRadius.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
         EdgeFlangeReverse.IsChecked=values.Reverse;
         EdgeFlangeSelectionText.Text=(node.References?.Length??0)==0
-            ?(values.Item7?"En az iki bağlı sac kenarı seçin.":"Doğrusal sac kenarı seçin.")
+            ?(values.Miter?"En az iki bağlı sac kenarı seçin.":"Doğrusal sac kenarı seçin.")
             :$"{node.References!.Length} kenar seçili";
         EdgeFlangeError.Text=(node.References?.Length??0)==0?"Kenar seçimi gerekiyor.":"";
         EdgeFlangePanel.Visibility=Visibility.Visible;
@@ -1858,9 +1873,11 @@ public partial class MainWindow
         RevolveFeaturePanel.Visibility=Visibility.Collapsed;MultiSketchFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;
         DraftFeaturePanel.Visibility=Visibility.Collapsed;RibFeaturePanel.Visibility=Visibility.Collapsed;ReferenceGeometryPanel.Visibility=Visibility.Collapsed;
         MirrorFeaturePanel.Visibility=Visibility.Collapsed;PatternFeaturePanel.Visibility=Visibility.Collapsed;SheetMetalBasePanel.Visibility=Visibility.Collapsed;
-        PropertyTitle.Text=node.Name;PropertyInfo.Text=values.Item7
-            ?"Gerçek çoklu kenar gönye flanşı • bağlı kenarlar aynı feature'da B-Rep olarak oluşturulur."
-            :"Gerçek OCCT sac kenar flanşı • çoklu doğrusal kenar • açı/uzunluk/kalınlık/büküm yarıçapı • canlı önizleme";
+        PropertyTitle.Text=node.Name;PropertyInfo.Text=values.Jog
+            ?"Gerçek OCCT Jog • seçili kenarda Z-step • ofset/yükseklik/kalınlık • canlı önizleme"
+            :values.Miter
+                ?"Gerçek çoklu kenar gönye flanşı • bağlı kenarlar aynı feature'da B-Rep olarak oluşturulur."
+                :"Gerçek OCCT sac kenar flanşı • çoklu doğrusal kenar • açı/uzunluk/kalınlık/büküm yarıçapı • canlı önizleme";
         ManagerTabs.SelectedItem=PropertyManagerTab;_viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Edge);
         _loadingGraphParameters=false;
         if((node.References?.Length??0)>0)UpdateEdgeFlangePreview();
@@ -1875,6 +1892,7 @@ public partial class MainWindow
         {
             SheetMetalEdgeFlangeFeatureParameters f=>f.BaseFeatureId,
             SheetMetalMiterFlangeFeatureParameters f=>f.BaseFeatureId,
+            SheetMetalJogFeatureParameters f=>f.BaseFeatureId,
             _=>Guid.Empty
         };
         if(baseId==Guid.Empty)return;
