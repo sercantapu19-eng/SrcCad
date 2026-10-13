@@ -877,6 +877,20 @@
                         <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
                             <Button Style="{StaticResource HeadButton}" Content="Fit" Click="Fit_Click" ToolTip="Ekrana Sığdır (F)"/>
                             <Button Style="{StaticResource HeadButton}" Content="Dik Bak" Click="NormalTo_Click" ToolTip="Seçili düzlemsel yüze/düzleme dik bak (Ctrl+8)"/>
+                            <Button Style="{StaticResource HeadButton}" Content="Görünüş ▾" Click="CommandFamily_Click" ToolTip="Standart görünüş yönleri (Space)">
+                                <Button.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="İzometrik" Click="Iso_Click"/>
+                                        <Separator/>
+                                        <MenuItem Header="Ön" Click="Front_Click"/>
+                                        <MenuItem Header="Arka" Click="Back_Click"/>
+                                        <MenuItem Header="Üst" Click="Top_Click"/>
+                                        <MenuItem Header="Alt" Click="Bottom_Click"/>
+                                        <MenuItem Header="Sağ" Click="Right_Click"/>
+                                        <MenuItem Header="Sol" Click="Left_Click"/>
+                                    </ContextMenu>
+                                </Button.ContextMenu>
+                            </Button>
                             <Button Style="{StaticResource HeadButton}" Content="ISO" Click="Iso_Click"/>
                             <Button Style="{StaticResource HeadButton}" Content="Ön" Click="Front_Click"/>
                             <Button Style="{StaticResource HeadButton}" Content="Üst" Click="Top_Click"/>
@@ -903,9 +917,15 @@
 
         <Border Grid.Row="4" Background="#F9FBFC" BorderBrush="#C7D0D8" BorderThickness="0,1,0,0">
             <Grid Margin="8,0">
-                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
                 <TextBlock x:Name="StatusText" Text="SrcCad hazır" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="1" Text="mm" VerticalAlignment="Center" Foreground="#51606C"/>
+                <TextBlock x:Name="MeasureStatusText" Grid.Column="1" Text="" VerticalAlignment="Center"
+                           FontWeight="SemiBold" Foreground="#1F5E8C" Margin="12,0,12,0"/>
+                <TextBlock Grid.Column="2" Text="mm" VerticalAlignment="Center" Foreground="#51606C"/>
             </Grid>
         </Border>
     </Grid>
