@@ -164,7 +164,7 @@ public partial class MainWindow
         foreach(var component in _assemblyDocument.Components)
         {
             var t=component.Transform;
-            var header=$"{component.Name}{(component.Fixed?" [Sabit]":"")}{(component.Suppressed?" [Baskılı]":"")}";
+            var header=$"{component.Name}{(component.Fixed?" [Sabit]":"")}{(component.Suppressed?" [Baskılı]":"")}{(component.ExplodeOffset is not null?" [Patlatılmış]":"")}";
             var item=new TreeViewItem
             {
                 Header=header,
@@ -225,10 +225,11 @@ public partial class MainWindow
                 if(!_assemblyBodies.TryGetValue(component.Id,out var source))
                     throw new InvalidOperationException("Bileşen gövdesi yüklenmedi: "+component.Name);
                 var t=component.Transform;
+                var explode=component.ExplodeOffset??Vector3d.Zero;
                 if(component.MirrorPlane is null)
                 {
                     _viewer.AddAssemblyBody(source,component.Id.ToString("D"),
-                        t.Translation.X,t.Translation.Y,t.Translation.Z,
+                        t.Translation.X+explode.X,t.Translation.Y+explode.Y,t.Translation.Z+explode.Z,
                         t.RotationDegrees.X,t.RotationDegrees.Y,t.RotationDegrees.Z);
                 }
                 else
@@ -237,6 +238,9 @@ public partial class MainWindow
                     // component identity but topology capture is intentionally disabled
                     // because the persisted reference belongs to the pre-mirror source.
                     var body=ResolvedAssemblyBody(component);
+                    if(explode.Length>1e-12)
+                        body=SrcCad.Kernel.Occt.OcctFeatureKernel.Transform(body,
+                            new[]{explode.X,explode.Y,explode.Z,0d,0d,0d});
                     _viewer.AddAssemblyBody(body,component.Id.ToString("D"),0,0,0,0,0,0);
                 }
             }
@@ -645,21 +649,33 @@ public partial class MainWindow
     private void AssemblyExplode_Click(object sender,RoutedEventArgs e)
     {
         if(_assemblyDocument is null)return;
-        _viewer.ClearModel();
-        var index=0;
-        foreach(var component in _assemblyDocument.Components.Where(c=>!c.Suppressed))
+        var visible=_assemblyDocument.Components.Where(c=>!c.Suppressed).ToArray();
+        if(visible.Length==0){Status("Patlatılacak görünür bileşen yok.");return;}
+        var indexById=visible.Select((component,index)=>(component.Id,index)).ToDictionary(x=>x.Id,x=>x.index);
+        SetAssemblyDocument(_assemblyDocument with
         {
-            if(!_assemblyBodies.TryGetValue(component.Id,out var body))continue;
-            var t=component.Transform;var extra=40.0*index++;
-            _viewer.AddAssemblyBody(body,t.Translation.X+extra,t.Translation.Y,t.Translation.Z,
-                t.RotationDegrees.X,t.RotationDegrees.Y,t.RotationDegrees.Z);
-        }
-        _viewer.FitAll();Status("Patlatılmış görünüm • montaj transformları değiştirilmedi.");
+            Components=_assemblyDocument.Components.Select(component=>
+            {
+                if(component.Suppressed||!indexById.TryGetValue(component.Id,out var index))
+                    return component with{ExplodeOffset=null};
+                var magnitude=40.0*index;
+                return component with{ExplodeOffset=new Vector3d(magnitude,0,0)};
+            }).ToArray()
+        });
+        RefreshAssemblyTree();RenderAssembly();
+        Status("Patlatılmış görünüm kalıcı sunum durumu olarak oluşturuldu • Undo/Redo ve .scasm kayıt destekli.");
     }
 
     private void AssemblyResetView_Click(object sender,RoutedEventArgs e)
     {
-        if(_assemblyDocument is null)return;RenderAssembly();Status("Montaj normal görünüm.");
+        if(_assemblyDocument is null)return;
+        if(_assemblyDocument.Components.All(c=>c.ExplodeOffset is null))
+        {RenderAssembly();Status("Montaj normal görünüm.");return;}
+        SetAssemblyDocument(_assemblyDocument with
+        {
+            Components=_assemblyDocument.Components.Select(c=>c with{ExplodeOffset=null}).ToArray()
+        });
+        RefreshAssemblyTree();RenderAssembly();Status("Patlatılmış görünüm kapatıldı.");
     }
 
     private void AssemblyLinearPattern_Click(object sender,RoutedEventArgs e)=>BeginAssemblyPattern(false);
