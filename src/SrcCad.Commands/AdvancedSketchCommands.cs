@@ -213,3 +213,60 @@ public sealed class StraightSlotSketchCommand : SketchCommandBase
 
     public override void CancelStep(){a=null;b=null;}
 }
+
+
+public sealed class EllipseSketchCommand : SketchCommandBase
+{
+    private Point2d? center;
+    private Point2d? majorPoint;
+
+    public EllipseSketchCommand(SketchModel sketch):base(sketch){}
+    public override string Id=>"sketch.ellipse";
+    public override string Title=>"Elips";
+    public override bool HasPendingStep=>center.HasValue;
+
+    public override void Begin(CommandContext context)
+    {
+        base.Begin(context);Context.SetStatus?.Invoke("Elips: merkez noktasını seçin.");
+    }
+
+    public override void Pick(SketchPick pick)
+    {
+        if(!center.HasValue){center=pick.Point;Context.SetStatus?.Invoke("Elips: ana eksen ucunu seçin.");return;}
+        if(!majorPoint.HasValue)
+        {
+            if(Point2d.Distance(center.Value,pick.Point)<=1e-9){Context.SetStatus?.Invoke("Ana yarı eksen sıfır olamaz.");return;}
+            majorPoint=pick.Point;Context.SetStatus?.Invoke("Elips: ikinci yarı ekseni belirleyin.");return;
+        }
+
+        var dx=majorPoint.Value.X-center.Value.X;var dy=majorPoint.Value.Y-center.Value.Y;
+        var rx=Math.Sqrt(dx*dx+dy*dy);var rotation=Math.Atan2(dy,dx);
+        var nx=-Math.Sin(rotation);var ny=Math.Cos(rotation);
+        var ry=Math.Abs((pick.Point.X-center.Value.X)*nx+(pick.Point.Y-center.Value.Y)*ny);
+        if(ry<=1e-9){Context.SetStatus?.Invoke("İkinci yarı eksen sıfır olamaz.");return;}
+        var cId=Sketch.CreateOrSnapPoint(center.Value,pick.SnapTolerance);
+        Sketch.AddEllipse(cId,rx,ry,rotation);
+        center=null;majorPoint=null;Changed("Parametrik elips oluşturuldu.");
+    }
+
+    public override IReadOnlyList<SketchPreviewPrimitive> Preview(Point2d cursor)
+    {
+        if(!center.HasValue)return Array.Empty<SketchPreviewPrimitive>();
+        if(!majorPoint.HasValue)return new SketchPreviewPrimitive[]{new SketchPreviewLine(center.Value,cursor)};
+        var dx=majorPoint.Value.X-center.Value.X;var dy=majorPoint.Value.Y-center.Value.Y;
+        var rx=Math.Sqrt(dx*dx+dy*dy);if(rx<=1e-9)return Array.Empty<SketchPreviewPrimitive>();
+        var rotation=Math.Atan2(dy,dx);var nx=-Math.Sin(rotation);var ny=Math.Cos(rotation);
+        var ry=Math.Abs((cursor.X-center.Value.X)*nx+(cursor.Y-center.Value.Y)*ny);
+        if(ry<=1e-9)return Array.Empty<SketchPreviewPrimitive>();
+        const int n=48;
+        var cos=Math.Cos(rotation);var sin=Math.Sin(rotation);
+        var pts=Enumerable.Range(0,n).Select(i=>
+        {
+            var a=Math.PI*2*i/n;var x=Math.Cos(a)*rx;var y=Math.Sin(a)*ry;
+            return new Point2d(center.Value.X+x*cos-y*sin,center.Value.Y+x*sin+y*cos);
+        }).ToArray();
+        return Enumerable.Range(0,n).Select(i=>(SketchPreviewPrimitive)new SketchPreviewLine(pts[i],pts[(i+1)%n])).ToArray();
+    }
+
+    public override void CancelStep(){center=null;majorPoint=null;}
+}
