@@ -8,6 +8,7 @@ public sealed record SketchPoint(int Id, Point2d Position, bool Fixed = false);
 [System.Text.Json.Serialization.JsonDerivedType(typeof(SketchLine), "line")]
 [System.Text.Json.Serialization.JsonDerivedType(typeof(SketchCircle), "circle")]
 [System.Text.Json.Serialization.JsonDerivedType(typeof(SketchArc), "arc")]
+[System.Text.Json.Serialization.JsonDerivedType(typeof(SketchEllipse), "ellipse")]
 public abstract record SketchEntity(int Id, bool Construction);
 public sealed record SketchLine(int Id, int StartPointId, int EndPointId, bool Construction = false)
     : SketchEntity(Id, Construction);
@@ -15,6 +16,8 @@ public sealed record SketchCircle(int Id, int CenterPointId, double Radius, bool
     : SketchEntity(Id, Construction);
 public sealed record SketchArc(int Id, int CenterPointId, int StartPointId, int EndPointId, bool Clockwise = false, bool Construction = false)
     : SketchEntity(Id, Construction);
+public sealed record SketchEllipse(int Id,int CenterPointId,double RadiusX,double RadiusY,double RotationRadians=0,bool Construction=false)
+    : SketchEntity(Id,Construction);
 
 public enum SketchRelationType
 {
@@ -217,6 +220,9 @@ public sealed partial class SketchModel
                 case SketchArc arc:
                     d = DistanceToArc(p,arc);
                     break;
+                case SketchEllipse ellipse:
+                    d = DistanceToEllipse(p,ellipse);
+                    break;
                 default:
                     continue;
             }
@@ -245,6 +251,15 @@ public sealed partial class SketchModel
             }
         }
         return bestId;
+    }
+
+    private double DistanceToEllipse(Point2d p,SketchEllipse ellipse)
+    {
+        var sampled=SampleEllipse(ellipse,72);
+        var best=double.PositiveInfinity;
+        for(var i=0;i<sampled.Count;i++)
+            best=Math.Min(best,DistancePointToSegment(p,sampled[i],sampled[(i+1)%sampled.Count]));
+        return best;
     }
 
     private double DistanceToArc(Point2d p,SketchArc arc)
@@ -322,6 +337,15 @@ public sealed partial class SketchModel
         var circle = new SketchCircle(_nextEntityId++, centerPointId, radius, construction);
         Entities.Add(circle);
         return circle;
+    }
+
+    public SketchEllipse AddEllipse(int centerPointId,double radiusX,double radiusY,double rotationRadians=0,bool construction=false)
+    {
+        if(!Points.ContainsKey(centerPointId))throw new ArgumentException("Elips merkezi bulunamadı.");
+        if(!double.IsFinite(radiusX)||!double.IsFinite(radiusY)||radiusX<=1e-9||radiusY<=1e-9||!double.IsFinite(rotationRadians))
+            throw new InvalidOperationException("Elips yarı eksenleri pozitif ve sonlu olmalı.");
+        var ellipse=new SketchEllipse(_nextEntityId++,centerPointId,radiusX,radiusY,rotationRadians,construction);
+        Entities.Add(ellipse);return ellipse;
     }
 
     public SketchArc AddArc(int centerPointId,int startPointId,int endPointId,bool clockwise=false,bool construction=false)
@@ -1174,6 +1198,22 @@ public sealed partial class SketchModel
 
     public IEnumerable<SketchArc> Arcs(bool includeConstruction = true)
         => Entities.OfType<SketchArc>().Where(x => includeConstruction || !x.Construction);
+
+    public IEnumerable<SketchEllipse> Ellipses(bool includeConstruction=true)
+        => Entities.OfType<SketchEllipse>().Where(x=>includeConstruction||!x.Construction);
+
+    public IReadOnlyList<Point2d> SampleEllipse(SketchEllipse ellipse,int segments=64)
+    {
+        segments=Math.Clamp(segments,12,512);
+        var c=Point(ellipse.CenterPointId).Position;
+        var cos=Math.Cos(ellipse.RotationRadians);var sin=Math.Sin(ellipse.RotationRadians);
+        return Enumerable.Range(0,segments).Select(i=>
+        {
+            var a=Math.PI*2*i/segments;
+            var x=Math.Cos(a)*ellipse.RadiusX;var y=Math.Sin(a)*ellipse.RadiusY;
+            return new Point2d(c.X+x*cos-y*sin,c.Y+x*sin+y*cos);
+        }).ToArray();
+    }
 
     public IReadOnlyList<Point2d> SampleArc(SketchArc arc,int segments=24)
     {
