@@ -41,7 +41,14 @@ internal static class FeatureGraphTests
                 SheetMetalEdgeFlangeFeatureParameters p=>p.Length,
                 SheetMetalMiterFlangeFeatureParameters p=>p.Length,
                 SheetMetalConvertFeatureParameters p=>p.Thickness,
+                SheetMetalHemFeatureParameters p=>p.Width,
+                SheetMetalJogFeatureParameters p=>p.Height+p.Offset,
+                SheetMetalRipFeatureParameters p=>p.Gap,
+                SheetMetalCornerReliefFeatureParameters p=>p.Radius,
+                SheetMetalBendFeatureParameters p=>p.AngleDegrees,
+                SpatialSketchFeatureParameters p=>p.Points.Length,
                 StructuralMemberFeatureParameters=>1,
+                StructuralTrimFeatureParameters=>1,
                 EndCapFeatureParameters p=>p.Thickness,
                 WeldBeadFeatureParameters p=>p.Radius,
                 _=>1
@@ -237,6 +244,27 @@ internal static class FeatureGraphTests
         var convertDoc=initial with{Features=initial.Features.Append(convertNode).ToArray()};
         Check(((SheetMetalConvertFeatureParameters)FeatureDocumentFile.Clone(convertDoc).Node(convertNode.Id).Parameters).KFactor==0.45,
             "convert-to-sheet-metal metadata roundtrip");
+
+        var spatialNode=new FeatureNode(Guid.NewGuid(),"3B Çizim1",
+            new SpatialSketchFeatureParameters(new[]{new Vector3d(0,0,0),new Vector3d(50,0,20),new Vector3d(100,25,40)}));
+        var spatialSweepNode=new FeatureNode(Guid.NewGuid(),"Süpürme3B",new SweepFeatureParameters(source.Id,spatialNode.Id));
+        var spatialDoc=new FeatureDocument(Guid.NewGuid(),new[]{source,spatialNode,spatialSweepNode});
+        var spatialClone=FeatureDocumentFile.Clone(spatialDoc);
+        Check(spatialClone.Node(spatialNode.Id).Kind==FeatureKind.SpatialSketch&&spatialClone.Node(spatialSweepNode.Id).Dependencies.Contains(spatialNode.Id),
+            "3D sketch path persists and participates in sweep dependencies");
+
+        var bendSketch=new SketchModel(StandardPlanes.Front);
+        var bendA=bendSketch.CreatePointExact(new(20,-10));var bendB=bendSketch.CreatePointExact(new(20,40));bendSketch.AddLine(bendA,bendB);
+        var bendSketchNode=new FeatureNode(Guid.NewGuid(),"Büküm Çizgisi",new SketchFeatureParameters(bendSketch.Plane,bendSketch.CaptureSnapshot()));
+        var bendNode=new FeatureNode(Guid.NewGuid(),"Çizilmiş Büküm1",new SheetMetalBendFeatureParameters(sheetBaseNode.Id,bendSketchNode.Id,90));
+        var bendDoc=new FeatureDocument(Guid.NewGuid(),new[]{source,sheetBaseNode,bendSketchNode,bendNode});
+        Check(FeatureDocumentFile.Clone(bendDoc).Node(bendNode.Id).Kind==FeatureKind.SheetMetalBend,
+            "sketched bend axis angle dependency roundtrip");
+
+        var trimNode=new FeatureNode(Guid.NewGuid(),"Kırp1",new StructuralTrimFeatureParameters(boss.Id,StandardPlanes.Right,true));
+        var trimDoc=initial with{Features=initial.Features.Append(trimNode).ToArray()};
+        Check(FeatureDocumentFile.Clone(trimDoc).Node(trimNode.Id).Kind==FeatureKind.StructuralTrim,
+            "structural plane trim persistence");
 
         var memberProfile=new SketchModel(StandardPlanes.Front);memberProfile.AddCornerRectangle(new(-5,-5),new(5,5),.001);
         var memberPath=new SketchModel(StandardPlanes.Top);
