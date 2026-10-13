@@ -232,11 +232,15 @@ public static class FeatureReferenceCatalog
     }
 
     public static bool ArePersistentEdges(FeatureReference[]? references,Guid producerId,int minimum=1)
-        => references is not null&&references.Length>=minimum&&references.All(r=>IsPersistentEdge(r,producerId));
+        => references is not null&&references.Length>=minimum&&
+           references.Select(r=>r.SemanticName).Distinct(StringComparer.Ordinal).Count()==references.Length&&
+           references.All(r=>IsPersistentEdge(r,producerId));
 
     public static bool ArePersistentFaces(FeatureReference[]? references,Guid producerId,int minimum=1,int? exact=null)
         => references is not null&&references.Length>=minimum&&
-           (exact is null||references.Length==exact.Value)&&references.All(r=>IsPersistentFace(r,producerId));
+           (exact is null||references.Length==exact.Value)&&
+           references.Select(r=>r.SemanticName).Distinct(StringComparer.Ordinal).Count()==references.Length&&
+           references.All(r=>IsPersistentFace(r,producerId));
 }
 
 public sealed record PartProperties(string MaterialName,double DensityGPerCm3)
