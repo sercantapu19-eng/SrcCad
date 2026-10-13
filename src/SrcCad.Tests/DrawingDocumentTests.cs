@@ -1,0 +1,31 @@
+using SrcCad.Core.Drawing;
+using SrcCad.Core.Geometry;
+
+internal static class DrawingDocumentTests
+{
+    private static int _checks;
+    private static void Check(bool value,string message){if(!value)throw new InvalidOperationException(message);_checks++;}
+
+    public static void Run()
+    {
+        var sheet=new DrawingSheet(Guid.NewGuid(),"A3",420,297,DrawingProjectionStandard.FirstAngle);
+        var front=new DrawingView(Guid.NewGuid(),"Ön","C:\\Models\\Body.scpart",DrawingViewType.Front,sheet.Id,new Point2d(120,150),1.0);
+        var top=new DrawingView(Guid.NewGuid(),"Üst","C:\\Models\\Body.scpart",DrawingViewType.Projected,sheet.Id,new Point2d(120,70),1.0,front.Id);
+        var note=new DrawingAnnotation(Guid.NewGuid(),sheet.Id,front.Id,new Point2d(20,20),"SRC CAD");
+        var doc=new DrawingDocument(Guid.NewGuid(),new[]{sheet},new[]{front,top},new[]{note});
+        var clone=DrawingDocumentFile.Clone(doc);
+
+        Check(clone.Sheets.Length==1&&clone.Sheets[0].Width==420,"drawing sheet roundtrip");
+        Check(clone.Views.Length==2&&clone.View(top.Id).ParentViewId==front.Id,"projected drawing view roundtrip");
+        Check(clone.Annotations.Single().Text=="SRC CAD","drawing annotation roundtrip");
+
+        try
+        {
+            DrawingDocumentFile.Serialize(doc with{Views=new[]{top with{ParentViewId=Guid.NewGuid()}}});
+            throw new InvalidOperationException("drawing accepted missing parent view");
+        }
+        catch(InvalidDataException){_checks++;}
+
+        Console.WriteLine($"Drawing Document Tests: {_checks} PASS");
+    }
+}
