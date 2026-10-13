@@ -46,6 +46,8 @@
                 <MenuItem Header="Parça Aç…" InputGestureText="Ctrl+O" Click="OpenPart_Click"/>
                 <MenuItem Header="Montaj Aç…" Click="OpenAssembly_Click"/>
                 <MenuItem Header="STEP / IGES İçe Aktar…" Click="ImportCad_Click"/>
+                <MenuItem Header="DXF Çizim İçe Aktar…" Click="ImportSketchDxf_Click"/>
+                <MenuItem Header="Çizimi DXF Dışa Aktar…" Click="ExportSketchDxf_Click"/>
                 <MenuItem Header="Parçayı Farklı Kaydet…" InputGestureText="Ctrl+S" Click="SavePart_Click"/>
                 <MenuItem Header="Montajı Kaydet…" Click="SaveAssembly_Click"/>
                 <MenuItem Header="STEP Olarak Dışa Aktar…" Click="ExportStep_Click"/>
