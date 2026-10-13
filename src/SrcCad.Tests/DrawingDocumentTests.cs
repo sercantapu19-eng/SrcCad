@@ -141,6 +141,15 @@ internal static class DrawingDocumentTests
         }
         catch(InvalidDataException){_checks++;}
 
+        var drawingPath=Path.Combine(Path.GetTempPath(),"SrcCadTests","Drawings","Main.scdrw");
+        var relativeModel=Path.Combine("Models","Body.scpart");
+        Check(DrawingDocumentFile.ResolveModelPath(drawingPath,relativeModel)==
+              Path.GetFullPath(Path.Combine(Path.GetDirectoryName(drawingPath)!,relativeModel)),
+            "relative drawing model path resolves against scdrw directory");
+        var absoluteModel=Path.GetFullPath(Path.Combine(Path.GetTempPath(),"SrcCadTests","Body.scpart"));
+        Check(DrawingDocumentFile.ResolveModelPath(drawingPath,absoluteModel)==absoluteModel,
+            "absolute drawing model path remains absolute");
+
         Console.WriteLine($"Drawing Document Tests: {_checks} PASS");
     }
 }
