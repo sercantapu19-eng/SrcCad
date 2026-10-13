@@ -54,7 +54,10 @@
                 <Separator/>
                 <MenuItem Header="Çıkış" Click="Exit_Click"/>
             </MenuItem>
-            <MenuItem Header="Düzenle" IsEnabled="False"/>
+            <MenuItem Header="Düzenle">
+                <MenuItem Header="Geri Al" InputGestureText="Ctrl+Z" Click="UndoActiveDocument_Click"/>
+                <MenuItem Header="Yinele" InputGestureText="Ctrl+Y" Click="RedoActiveDocument_Click"/>
+            </MenuItem>
             <MenuItem Header="Görünüm" IsEnabled="False"/>
             <MenuItem Header="Araçlar" IsEnabled="False"/>
             <MenuItem Header="Yardım" IsEnabled="False"/>
