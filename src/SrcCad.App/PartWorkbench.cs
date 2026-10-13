@@ -1449,6 +1449,39 @@ public partial class MainWindow
         }
     }
 
+    private void InspectSectionView_Click(object sender,RoutedEventArgs e)
+    {
+        var body=CurrentBodyBRep();
+        if(body is null){Status("Kesit görünümü için katı gerekiyor.");return;}
+        try
+        {
+            var bounds=SrcCad.Kernel.Occt.OcctFeatureKernel.Bounds(body);
+            if(bounds.Length!=6)throw new InvalidOperationException("Model sınırları çözülemedi.");
+            var center=new Vector3d((bounds[0]+bounds[3])*0.5,(bounds[1]+bounds[4])*0.5,(bounds[2]+bounds[5])*0.5);
+            var normal=_selectedPlane.Normal.Normalized();
+            var up=_selectedPlane.V.Normalized();
+            var right=Vector3d.Cross(up,normal).Normalized();
+            var segments=SrcCad.Kernel.Occt.OcctFeatureKernel.SectionEdges(body,
+                new[]{center.X,center.Y,center.Z},new[]{normal.X,normal.Y,normal.Z},
+                new[]{normal.X,normal.Y,normal.Z},new[]{up.X,up.Y,up.Z});
+            if(segments.Length<4){Status("Aktif düzlem yönünde kesit eğrisi oluşmadı.");return;}
+            _viewer.ClearSketch();
+            var h=Vector3d.Dot(center,normal);
+            Vector3d World(double x,double y)=>right*x+up*y+normal*h;
+            for(var i=0;i+3<segments.Length;i+=4)
+            {
+                var a=World(segments[i],segments[i+1]);var b=World(segments[i+2],segments[i+3]);
+                _viewer.AddStyledSketchLine(a.X,a.Y,a.Z,b.X,b.Y,b.Z,2);
+            }
+            _viewer.SetNormalView(normal.X,normal.Y,normal.Z,up.X,up.Y,up.Z);_viewer.FitAll();
+            PropertyTitle.Text="Kesit Görünümü";
+            PropertyInfo.Text=$"{_selectedPlane.Name} yönünde model merkezinden gerçek OCCT kesit eğrileri gösteriliyor. Normal model görünümüne dönmek için ISO/Ön/Üst/Sağ kullanın.";
+            ManagerTabs.SelectedItem=PropertyManagerTab;
+            Status($"{segments.Length/4} kesit segmenti gösterildi.");
+        }
+        catch(Exception ex){Status("Kesit görünümü oluşturulamadı: "+ex.Message);}
+    }
+
     private void InspectDraftAnalysis_Click(object sender,RoutedEventArgs e)
     {
         var refs=_viewer.SelectedFaceReferences();
