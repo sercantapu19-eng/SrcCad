@@ -105,13 +105,27 @@ public partial class MainWindow
             var menu=new ContextMenu();
             var move=new MenuItem{Header="Taşı / Döndür"};move.Click+=(_,_)=>BeginAssemblyMove(component.Id);menu.Items.Add(move);
             var fix=new MenuItem{Header=component.Fixed?"Sabitlemeyi Kaldır":"Sabitle"};fix.Click+=(_,_)=>ToggleAssemblyFixed(component.Id);menu.Items.Add(fix);
+            var suppress=new MenuItem{Header=component.Suppressed?"Baskılamayı Kaldır":"Baskıla"};suppress.Click+=(_,_)=>ToggleAssemblySuppressed(component.Id);menu.Items.Add(suppress);
             var del=new MenuItem{Header="Bileşeni Sil"};del.Click+=(_,_)=>RemoveAssemblyComponent(component.Id);menu.Items.Add(del);
             item.ContextMenu=menu;
             _assemblyRoot.Items.Add(item);
             if(selected==component.Id)item.IsSelected=true;
         }
         foreach(var mate in _assemblyDocument.Mates)
-            _assemblyRoot.Items.Add(new TreeViewItem{Header=$"İlişki: {mate.Name} ({mate.Type})",Tag="assembly-mate:"+mate.Id});
+        {
+            var item=new TreeViewItem
+            {
+                Header=$"İlişki: {mate.Name} ({mate.Type}){(mate.Suppressed?" [Baskılı]":"")}",
+                Tag="assembly-mate:"+mate.Id
+            };
+            var menu=new ContextMenu();
+            var suppress=new MenuItem{Header=mate.Suppressed?"Baskılamayı Kaldır":"Baskıla"};
+            suppress.Click+=(_,_)=>ToggleAssemblyMateSuppressed(mate.Id);menu.Items.Add(suppress);
+            var del=new MenuItem{Header="İlişkiyi Sil"};
+            del.Click+=(_,_)=>RemoveAssemblyMate(mate.Id);menu.Items.Add(del);
+            item.ContextMenu=menu;
+            _assemblyRoot.Items.Add(item);
+        }
         FeatureTree.Items.Add(_assemblyRoot);
         ManagerTabs.SelectedItem=FeatureManagerTab;
     }
@@ -284,6 +298,41 @@ public partial class MainWindow
         var component=_assemblyDocument.Component(id);
         SetAssemblyDocument(_assemblyDocument with{Components=_assemblyDocument.Components.Select(c=>c.Id==id?c with{Fixed=!c.Fixed}:c).ToArray()});
         RefreshAssemblyTree(id);
+    }
+
+    private void ToggleAssemblySuppressed(Guid id)
+    {
+        if(_assemblyDocument is null)return;
+        var component=_assemblyDocument.Component(id);
+        SetAssemblyDocument(_assemblyDocument with
+        {
+            Components=_assemblyDocument.Components.Select(c=>c.Id==id?c with{Suppressed=!component.Suppressed}:c).ToArray()
+        });
+        RefreshAssemblyTree(id);RenderAssembly(false);
+        Status(component.Suppressed?component.Name+" yeniden etkinleştirildi.":component.Name+" baskılandı.");
+    }
+
+    private void ToggleAssemblyMateSuppressed(Guid id)
+    {
+        if(_assemblyDocument is null)return;
+        var mate=_assemblyDocument.Mates.FirstOrDefault(m=>m.Id==id);
+        if(mate is null)return;
+        SetAssemblyDocument(_assemblyDocument with
+        {
+            Mates=_assemblyDocument.Mates.Select(m=>m.Id==id?m with{Suppressed=!m.Suppressed}:m).ToArray()
+        });
+        RefreshAssemblyTree();
+        Status(mate.Suppressed?mate.Name+" yeniden etkinleştirildi.":mate.Name+" baskılandı.");
+    }
+
+    private void RemoveAssemblyMate(Guid id)
+    {
+        if(_assemblyDocument is null)return;
+        var mate=_assemblyDocument.Mates.FirstOrDefault(m=>m.Id==id);
+        if(mate is null)return;
+        SetAssemblyDocument(_assemblyDocument with{Mates=_assemblyDocument.Mates.Where(m=>m.Id!=id).ToArray()});
+        RefreshAssemblyTree();
+        Status(mate.Name+" silindi.");
     }
 
     private void RemoveAssemblyComponent(Guid id)
