@@ -7,7 +7,7 @@ using SrcCad.Core.Persistence;
 
 namespace SrcCad.Core.Features;
 
-public enum FeatureKind { Sketch, Extrude, ExtrudedCut, Fillet, Chamfer, Hole, Revolve, RevolvedCut, Sweep, SweptCut, Loft, LoftedCut, Shell, Draft, Rib, Mirror, LinearPattern, CircularPattern, ReferencePlane, ReferenceAxis, ReferencePoint, SheetMetalBase, SheetMetalCut, SheetMetalEdgeFlange, SheetMetalConvert, StructuralMember, EndCap }
+public enum FeatureKind { Sketch, Extrude, ExtrudedCut, Fillet, Chamfer, Hole, Revolve, RevolvedCut, Sweep, SweptCut, Loft, LoftedCut, Shell, Draft, Rib, Mirror, LinearPattern, CircularPattern, ReferencePlane, ReferenceAxis, ReferencePoint, SheetMetalBase, SheetMetalCut, SheetMetalEdgeFlange, SheetMetalMiterFlange, SheetMetalConvert, StructuralMember, EndCap }
 public enum RebuildState { Clean, Dirty, Suppressed, Blocked, Failed }
 public enum ExtrusionTermination { Blind, ThroughAll }
 public enum TopologyKind { Body, Face, Edge, Vertex }
@@ -39,6 +39,7 @@ public sealed record FeatureReference(Guid ProducerId, TopologyKind Kind, string
 [JsonDerivedType(typeof(SheetMetalBaseFeatureParameters), "sheet-metal-base")]
 [JsonDerivedType(typeof(SheetMetalCutFeatureParameters), "sheet-metal-cut")]
 [JsonDerivedType(typeof(SheetMetalEdgeFlangeFeatureParameters), "sheet-metal-edge-flange")]
+[JsonDerivedType(typeof(SheetMetalMiterFlangeFeatureParameters), "sheet-metal-miter-flange")]
 [JsonDerivedType(typeof(SheetMetalConvertFeatureParameters), "sheet-metal-convert")]
 [JsonDerivedType(typeof(StructuralMemberFeatureParameters), "structural-member")]
 [JsonDerivedType(typeof(EndCapFeatureParameters), "end-cap")]
@@ -71,6 +72,8 @@ public sealed record SheetMetalCutFeatureParameters(Guid BaseFeatureId, Guid Ske
     ExtrusionTermination Termination = ExtrusionTermination.ThroughAll, bool Reverse = true) : FeatureParameters;
 public sealed record SheetMetalEdgeFlangeFeatureParameters(Guid BaseFeatureId, double Length, double AngleDegrees,
     double Thickness, double BendRadius, bool Reverse = false) : FeatureParameters;
+public sealed record SheetMetalMiterFlangeFeatureParameters(Guid BaseFeatureId, double Length, double AngleDegrees,
+    double Thickness, double BendRadius, bool Reverse = false) : FeatureParameters;
 public sealed record SheetMetalConvertFeatureParameters(Guid BaseFeatureId,double Thickness,double BendRadius,double KFactor) : FeatureParameters;
 public sealed record StructuralMemberFeatureParameters(Guid ProfileSketchId, Guid PathSketchId) : FeatureParameters;
 public sealed record EndCapFeatureParameters(Guid BaseFeatureId,double Thickness,bool Reverse=false) : FeatureParameters;
@@ -90,6 +93,7 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
       ReferencePlaneFeatureParameters => FeatureKind.ReferencePlane, ReferenceAxisFeatureParameters => FeatureKind.ReferenceAxis,
       ReferencePointFeatureParameters => FeatureKind.ReferencePoint, SheetMetalBaseFeatureParameters => FeatureKind.SheetMetalBase,
       SheetMetalCutFeatureParameters => FeatureKind.SheetMetalCut, SheetMetalEdgeFlangeFeatureParameters => FeatureKind.SheetMetalEdgeFlange,
+      SheetMetalMiterFlangeFeatureParameters => FeatureKind.SheetMetalMiterFlange,
       SheetMetalConvertFeatureParameters => FeatureKind.SheetMetalConvert,
       StructuralMemberFeatureParameters => FeatureKind.StructuralMember, EndCapFeatureParameters => FeatureKind.EndCap,
       _ => throw new InvalidDataException("Unsupported feature") };
@@ -118,6 +122,7 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
         SheetMetalBaseFeatureParameters s => new[] { s.SketchId },
         SheetMetalCutFeatureParameters s => new[] { s.BaseFeatureId,s.SketchId },
         SheetMetalEdgeFlangeFeatureParameters s => new[] { s.BaseFeatureId },
+        SheetMetalMiterFlangeFeatureParameters s => new[] { s.BaseFeatureId },
         SheetMetalConvertFeatureParameters s => new[] { s.BaseFeatureId },
         StructuralMemberFeatureParameters s => new[] { s.ProfileSketchId,s.PathSketchId },
         EndCapFeatureParameters e => new[] { e.BaseFeatureId },
@@ -338,6 +343,16 @@ public static class FeatureDocumentFile
                        node.References is null||node.References.Length==0||
                        node.References.Any(r=>r.Kind!=TopologyKind.Edge||r.ProducerId!=s.BaseFeatureId))
                         throw new InvalidDataException("Invalid sheet metal edge flange.");
+                    break;
+                case SheetMetalMiterFlangeFeatureParameters s:
+                    if(document.Node(s.BaseFeatureId).Kind==FeatureKind.Sketch||
+                       !double.IsFinite(s.Length)||s.Length<=1e-9||
+                       !double.IsFinite(s.AngleDegrees)||s.AngleDegrees<=1e-6||s.AngleDegrees>=179.999||
+                       !double.IsFinite(s.Thickness)||s.Thickness<=1e-9||
+                       !double.IsFinite(s.BendRadius)||s.BendRadius<0||
+                       node.References is null||node.References.Length<2||
+                       node.References.Any(r=>r.Kind!=TopologyKind.Edge||r.ProducerId!=s.BaseFeatureId))
+                        throw new InvalidDataException("Invalid sheet metal miter flange.");
                     break;
                 case SheetMetalConvertFeatureParameters s:
                     if(document.Node(s.BaseFeatureId).Kind==FeatureKind.Sketch||
