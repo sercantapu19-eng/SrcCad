@@ -1055,6 +1055,19 @@ public partial class MainWindow : Window
             }
         }
 
+        foreach(var ellipse in _sketch.Ellipses())
+        {
+            var state=_selectedSketchEntities.Contains(ellipse.Id)||_hoverSketchEntityId==ellipse.Id
+                ?2:ellipse.Construction?1:baseGeometryState;
+            var sampled=_sketch.SampleEllipse(ellipse,64);
+            for(var i=0;i<sampled.Count;i++)
+            {
+                var a=_sketch.Plane.SketchToWorld(sampled[i].X,sampled[i].Y);
+                var b=_sketch.Plane.SketchToWorld(sampled[(i+1)%sampled.Count].X,sampled[(i+1)%sampled.Count].Y);
+                _viewer.AddStyledSketchLine(a.X,a.Y,a.Z,b.X,b.Y,b.Z,state);
+            }
+        }
+
         foreach (var point in _sketch.Points.Values)
         {
             var w = _sketch.Plane.SketchToWorld(point.Position.X, point.Position.Y);
@@ -1762,6 +1775,11 @@ public partial class MainWindow : Window
     private void Slot_Click(object sender,RoutedEventArgs e)
     {
         if(_sketch is not null)ActivateSketchCommand(new StraightSlotSketchCommand(_sketch));
+    }
+
+    private void Ellipse_Click(object sender,RoutedEventArgs e)
+    {
+        if(_sketch is not null)ActivateSketchCommand(new EllipseSketchCommand(_sketch));
     }
 
     private void Polygon_Click(object sender,RoutedEventArgs e)
