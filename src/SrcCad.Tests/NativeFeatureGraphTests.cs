@@ -78,6 +78,38 @@ internal static class NativeFeatureGraphTests
                 new[]{1.0,0.0,0.0},new[]{0.0,-1.0,0.0},new[]{0.0,0.0,1.0});
             Check(section.Length>=4&&section.Length%4==0,"technical drawing section kernel returns intersection segments");
 
+            var movedCopy=OcctFeatureKernel.MoveCopy(bossBody,new[]{60.0,0.0,0.0,0.0,0.0,0.0},true);
+            var movedCopyInfo=OcctFeatureKernel.Inspect(movedCopy);
+            Check(Math.Abs(movedCopyInfo[0]-48000)<1e-3&&movedCopyInfo[1]==2,
+                "move/copy body keep-original creates real two-solid B-Rep");
+
+            var offsetPattern=OcctFeatureKernel.PatternOffsets(bossBody,new[]{60.0,0.0,0.0,120.0,0.0,0.0});
+            var offsetPatternInfo=OcctFeatureKernel.Inspect(offsetPattern);
+            Check(Math.Abs(offsetPatternInfo[0]-72000)<1e-3&&offsetPatternInfo[1]==3,
+                "sketch-pattern offsets create real multibody copies");
+
+            var overlapBody=OcctFeatureKernel.Transform(bossBody,new[]{20.0,0.0,0.0,0.0,0.0,0.0});
+            var booleanAdd=OcctFeatureKernel.Boolean(bossBody,overlapBody,(int)BodyBooleanOperation.Add);
+            var booleanAddInfo=OcctFeatureKernel.Inspect(booleanAdd);
+            Check(booleanAddInfo[0]>24000&&booleanAddInfo[0]<48000&&booleanAddInfo[1]==1,
+                "boolean add fuses overlapping real solids");
+            var booleanCommon=OcctFeatureKernel.Boolean(bossBody,overlapBody,(int)BodyBooleanOperation.Common);
+            Check(OcctFeatureKernel.Inspect(booleanCommon)[0]>0,
+                "boolean common returns shared solid volume");
+            var booleanSubtract=OcctFeatureKernel.Boolean(bossBody,overlapBody,(int)BodyBooleanOperation.Subtract);
+            Check(OcctFeatureKernel.Inspect(booleanSubtract)[0]>0&&OcctFeatureKernel.Inspect(booleanSubtract)[0]<24000,
+                "boolean subtract removes overlapping body material");
+
+            var splitPlane=new PlaneFrame("Split",plane.Origin+plane.U*20,plane.V,plane.Normal,plane.U).Validate();
+            var splitBody=OcctFeatureKernel.SplitToPlane(bossBody,new[]{
+                splitPlane.Origin.X,splitPlane.Origin.Y,splitPlane.Origin.Z,
+                splitPlane.U.X,splitPlane.U.Y,splitPlane.U.Z,
+                splitPlane.V.X,splitPlane.V.Y,splitPlane.V.Z,
+                splitPlane.Normal.X,splitPlane.Normal.Y,splitPlane.Normal.Z});
+            var splitInfo=OcctFeatureKernel.Inspect(splitBody);
+            Check(Math.Abs(splitInfo[0]-24000)<1e-3&&splitInfo[1]==2,
+                "split body preserves volume as two real solids");
+
             var bossEdges=OcctFeatureKernel.EdgeReferences(bossBody);
             Check(bossEdges.Length>=4,"extruded body exposes semantic edge references");
 
@@ -148,6 +180,28 @@ internal static class NativeFeatureGraphTests
                 catch(InvalidOperationException){}
             }
             Check(workingFace is not null,"native hole resolves a planar support and removes material");
+            var wizardBody=OcctFeatureKernel.HoleWizard(bossBody,workingFace!,topCenter.X,topCenter.Y,topCenter.Z,
+                6,10,(int)HoleWizardType.Counterbore,12,3,true);
+            var wizardInfo=OcctFeatureKernel.Inspect(wizardBody);
+            Check(wizardInfo[0]>0&&wizardInfo[0]<24000&&wizardInfo[1]==1,
+                "native Hole Wizard counterbore removes real stepped material");
+
+            string? domeFace=null;string? domeBody=null;
+            foreach(var faceRef in faceRefs)
+            {
+                foreach(var domeHeight in new[]{5.0,-5.0})
+                {
+                    try
+                    {
+                        var candidate=OcctFeatureKernel.Dome(bossBody,faceRef,domeHeight);
+                        var info=OcctFeatureKernel.Inspect(candidate);
+                        if(info[0]>0&&Math.Abs(info[0]-24000)>1e-5){domeFace=faceRef;domeBody=candidate;break;}
+                    }
+                    catch(InvalidOperationException){}
+                }
+                if(domeBody is not null)break;
+            }
+            Check(domeFace is not null&&domeBody is not null,"native dome resolves planar face and changes real B-Rep volume");
             var holeNode=new FeatureNode(Guid.NewGuid(),"Delik1",
                 new HoleFeatureParameters(boss.Id,topCenter,6,10),
                 References:new[]{new FeatureReference(boss.Id,TopologyKind.Face,workingFace!)});
