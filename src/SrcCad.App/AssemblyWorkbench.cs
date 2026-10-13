@@ -69,17 +69,31 @@ public partial class MainWindow
         ManagerTabs.SelectedItem=FeatureManagerTab;
     }
 
+    private static double[] AssemblyTransformValues(RigidTransform t)
+        => new[]{t.Translation.X,t.Translation.Y,t.Translation.Z,t.RotationDegrees.X,t.RotationDegrees.Y,t.RotationDegrees.Z};
+
+    private string ResolvedAssemblyBody(AssemblyComponent component)
+    {
+        if(!_assemblyBodies.TryGetValue(component.Id,out var source))
+            throw new InvalidOperationException("Bileşen gövdesi yüklenmedi: "+component.Name);
+        var transformed=SrcCad.Kernel.Occt.OcctFeatureKernel.Transform(source,AssemblyTransformValues(component.Transform));
+        if(component.MirrorPlane is not PlaneFrame mirror)return transformed;
+        return SrcCad.Kernel.Occt.OcctFeatureKernel.Mirror(transformed,
+            new[]{mirror.Origin.X,mirror.Origin.Y,mirror.Origin.Z,mirror.U.X,mirror.U.Y,mirror.U.Z,mirror.Normal.X,mirror.Normal.Y,mirror.Normal.Z},false);
+    }
+
     private void RenderAssembly(bool fit=true)
     {
         if(_assemblyDocument is null)return;
         _viewer.ClearModel();
         foreach(var component in _assemblyDocument.Components.Where(c=>!c.Suppressed))
         {
-            if(!_assemblyBodies.TryGetValue(component.Id,out var body))continue;
-            var t=component.Transform;
-            _viewer.AddAssemblyBody(body,
-                t.Translation.X,t.Translation.Y,t.Translation.Z,
-                t.RotationDegrees.X,t.RotationDegrees.Y,t.RotationDegrees.Z);
+            try
+            {
+                var body=ResolvedAssemblyBody(component);
+                _viewer.AddAssemblyBody(body,0,0,0,0,0,0);
+            }
+            catch(Exception ex){Status(component.Name+" görüntülenemedi: "+ex.Message);}
         }
         _viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Face);
         if(fit)_viewer.FitAll();
@@ -306,5 +320,95 @@ public partial class MainWindow
     private void AssemblyResetView_Click(object sender,RoutedEventArgs e)
     {
         if(_assemblyDocument is null)return;RenderAssembly();Status("Montaj normal görünüm.");
+    }
+
+    private void AssemblyLinearPattern_Click(object sender,RoutedEventArgs e)=>BeginAssemblyPattern(false);
+    private void AssemblyCircularPattern_Click(object sender,RoutedEventArgs e)=>BeginAssemblyPattern(true);
+
+    private void BeginAssemblyPattern(bool circular)
+    {
+        var seed=SelectedAssemblyComponent();
+        if(_assemblyDocument is null||seed is null){Status("Dizilim için montaj ağacından bileşen seçin.");return;}
+        _assemblyEditingComponentId=seed.Id;
+        AssemblyPatternTitle.Text=circular?"Dairesel Bileşen Dizilimi":"Doğrusal Bileşen Dizilimi";
+        AssemblyPatternCount.Text=circular?"4":"3";
+        AssemblyPatternValue.Text=circular?"360":"50";
+        AssemblyPatternValueLabel.Text=circular?"Toplam Açı (°)":"Aralık (mm)";
+        AssemblyPatternCircular.IsChecked=circular;
+        AssemblyPatternPanel.Visibility=Visibility.Visible;
+        AssemblyMovePanel.Visibility=Visibility.Collapsed;AssemblyMatePanel.Visibility=Visibility.Collapsed;
+        PropertyTitle.Text=AssemblyPatternTitle.Text;PropertyInfo.Text=seed.Name+" çoğaltılacak; yeni bileşen örnekleri .scasm içinde ayrı instance olarak saklanır.";
+        ManagerTabs.SelectedItem=PropertyManagerTab;
+    }
+
+    private void AssemblyPatternOk_Click(object sender,RoutedEventArgs e)
+    {
+        if(_assemblyDocument is null||_assemblyEditingComponentId is not Guid id||
+           !_assemblyDocument.Components.Any(c=>c.Id==id)||
+           !int.TryParse(AssemblyPatternCount.Text,out var count)||count<2||count>200||
+           !TryAssemblyNumber(AssemblyPatternValue.Text,out var value)||value<=0)
+        {Status("Dizilim adet/değer bilgisi geçersiz.");return;}
+        var seed=_assemblyDocument.Component(id);
+        var list=_assemblyDocument.Components.ToList();
+        var circular=AssemblyPatternCircular.IsChecked==true;
+        for(var i=1;i<count;i++)
+        {
+            var transform=seed.Transform;
+            if(circular)
+            {
+                var step=Math.Abs(value-360)<1e-9?value/count:value/(count-1);
+                transform=transform with{RotationDegrees=new Vector3d(transform.RotationDegrees.X,transform.RotationDegrees.Y,transform.RotationDegrees.Z+step*i)};
+            }
+            else transform=transform with{Translation=transform.Translation+new Vector3d(value*i,0,0)};
+            var clone=seed with{Id=Guid.NewGuid(),Name=seed.Name+"_D"+(i+1),Transform=transform,Fixed=false};
+            list.Add(clone);
+            _assemblyBodies[clone.Id]=_assemblyBodies[seed.Id];
+        }
+        _assemblyDocument=_assemblyDocument with{Components=list.ToArray()};
+        AssemblyPatternPanel.Visibility=Visibility.Collapsed;RefreshAssemblyTree();RenderAssembly();
+        Status((circular?"Dairesel":"Doğrusal")+" bileşen dizilimi oluşturuldu.");
+    }
+
+    private void AssemblyPatternCancel_Click(object sender,RoutedEventArgs e)
+    {
+        AssemblyPatternPanel.Visibility=Visibility.Collapsed;_assemblyEditingComponentId=null;ManagerTabs.SelectedItem=FeatureManagerTab;
+    }
+
+    private void AssemblyMirror_Click(object sender,RoutedEventArgs e)
+    {
+        if(_assemblyDocument is null)return;
+        var seed=SelectedAssemblyComponent();
+        if(seed is null){Status("Aynalamak için montaj ağacından bileşen seçin.");return;}
+        var clone=seed with
+        {
+            Id=Guid.NewGuid(),Name=seed.Name+"_Ayna",Fixed=false,MirrorPlane=_selectedPlane
+        };
+        _assemblyDocument=_assemblyDocument.AddComponent(clone);
+        _assemblyBodies[clone.Id]=_assemblyBodies[seed.Id];
+        RefreshAssemblyTree(clone.Id);RenderAssembly();
+        Status(seed.Name+" • "+_selectedPlane.Name+" düzlemine göre aynalandı.");
+    }
+
+    private void AssemblyInterference_Click(object sender,RoutedEventArgs e)
+    {
+        if(_assemblyDocument is null||_assemblyDocument.Components.Count(c=>!c.Suppressed)<2)
+        {Status("Çakışma kontrolü için en az iki görünür bileşen gerekiyor.");return;}
+        var visible=_assemblyDocument.Components.Where(c=>!c.Suppressed).ToArray();
+        var collisions=new List<string>();
+        for(var i=0;i<visible.Length;i++)for(var j=i+1;j<visible.Length;j++)
+        {
+            var a=visible[i];var b=visible[j];
+            try
+            {
+                var av=ResolvedAssemblyBody(a);var bv=ResolvedAssemblyBody(b);
+                var volume=SrcCad.Kernel.Occt.OcctFeatureKernel.CommonVolume(av,new double[6],bv,new double[6]);
+                if(volume>1e-7)collisions.Add($"{a.Name} ↔ {b.Name}: {volume:0.###} mm³");
+            }
+            catch(Exception ex){collisions.Add($"{a.Name} ↔ {b.Name}: kontrol hatası ({ex.Message})");}
+        }
+        PropertyTitle.Text="Çakışma Kontrolü";
+        PropertyInfo.Text=collisions.Count==0?"Çakışma bulunmadı.":string.Join("\n",collisions);
+        ManagerTabs.SelectedItem=PropertyManagerTab;
+        Status(collisions.Count==0?"Montaj çakışma kontrolü: temiz.":$"{collisions.Count} çakışma/uyarı bulundu.");
     }
 }
