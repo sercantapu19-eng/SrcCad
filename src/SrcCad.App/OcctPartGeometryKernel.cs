@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using SrcCad.Core.Features;
+using SrcCad.Core.Geometry;
 using SrcCad.Core.Sketch;
 using SrcCad.Kernel.Occt;
 namespace SrcCad.App;
