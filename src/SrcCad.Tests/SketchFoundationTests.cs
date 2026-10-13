@@ -123,6 +123,17 @@ internal static class SketchFoundationTests
 
         {
             var s=new SketchModel(StandardPlanes.Front);
+            var center=s.CreatePointExact(new(0,0));
+            s.AddCircle(center,20);
+            var arcCenter=s.CreatePointExact(new(40,0));
+            var arcStart=s.CreatePointExact(new(50,0));
+            var arcEnd=s.CreatePointExact(new(40,10));
+            s.AddArc(arcCenter,arcStart,arcEnd);
+            Check(!s.TryGetSingleCircle(out _),"single-circle profile rejects additional open arc");
+        }
+
+        {
+            var s=new SketchModel(StandardPlanes.Front);
             var c=s.CreatePointExact(new(0,0));var ellipse=s.AddEllipse(c,30,15,Math.PI/6);
             Check(s.FindEntityNear(s.SampleEllipse(ellipse,64)[5],0.02)==ellipse.Id,"ellipse hit testing");
             Check(s.TryGetExtrusionProfile(out var ellipseLoop,out _,out _)&&ellipseLoop.Count==72,
