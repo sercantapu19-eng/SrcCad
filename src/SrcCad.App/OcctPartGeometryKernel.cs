@@ -91,13 +91,7 @@ internal sealed class OcctPartGeometryKernel : IPartGeometryKernel
 
     private static Profile SweepProfile(SketchModel sketch)=>Pack(sketch,1);
 
-    private static Profile LoftProfile(SketchModel sketch)
-    {
-        var p=Pack(sketch,1);
-        if(p.Holes.Length>0||p.CircleHoles.Length>0)
-            throw new InvalidOperationException("Loft currently requires matching outer profiles without inner loops.");
-        return p;
-    }
+    private static Profile LoftProfile(SketchModel sketch)=>Pack(sketch,1);
 
     private static double[] PackSpatialPath(IReadOnlyList<SrcCad.Core.Geometry.Vector3d> path)
     {
@@ -138,13 +132,23 @@ internal sealed class OcctPartGeometryKernel : IPartGeometryKernel
     {
         if(profiles.Count<2)throw new InvalidOperationException("Loft requires at least two profiles.");
         var packed=profiles.Select(LoftProfile).ToArray();
-        return OcctFeatureKernel.Loft(baseBody,packed.Select(p=>p.Outer).ToArray(),packed.Select(p=>p.Circle).ToArray(),packed.Select(p=>p.Frame).ToArray());
+        return OcctFeatureKernel.Loft(baseBody,
+            packed.Select(p=>p.Outer).ToArray(),
+            packed.Select(p=>p.Holes).ToArray(),
+            packed.Select(p=>p.CircleHoles).ToArray(),
+            packed.Select(p=>p.Circle).ToArray(),
+            packed.Select(p=>p.Frame).ToArray());
     }
     public string LoftCut(string baseBody,IReadOnlyList<SketchModel> profiles)
     {
         if(profiles.Count<2)throw new InvalidOperationException("Loft cut requires at least two profiles.");
-        var packed=profiles.Select(SimpleProfile).ToArray();
-        return OcctFeatureKernel.LoftCut(baseBody,packed.Select(p=>p.Outer).ToArray(),packed.Select(p=>p.Circle).ToArray(),packed.Select(p=>p.Frame).ToArray());
+        var packed=profiles.Select(LoftProfile).ToArray();
+        return OcctFeatureKernel.LoftCut(baseBody,
+            packed.Select(p=>p.Outer).ToArray(),
+            packed.Select(p=>p.Holes).ToArray(),
+            packed.Select(p=>p.CircleHoles).ToArray(),
+            packed.Select(p=>p.Circle).ToArray(),
+            packed.Select(p=>p.Frame).ToArray());
     }
 
     public string Boolean(string bodyA,string bodyB,BodyBooleanOperation operation)
