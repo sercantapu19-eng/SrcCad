@@ -76,7 +76,7 @@
                 <MenuItem Header="Kütle / Geometri Özellikleri" Click="InspectMassProperties_Click"/>
                 <MenuItem Header="Geometri Kontrolü" Click="InspectGeometry_Click"/>
                 <Separator/>
-                <MenuItem Header="Kesit Görünümü" Click="InspectSection_Click"/>
+                <MenuItem Header="Kesit Görünümü" Click="InspectSectionView_Click"/>
                 <MenuItem Header="Draft Analizi" Click="InspectDraftAnalysis_Click"/>
                 <MenuItem Header="Çakışma Kontrolü" Click="InspectInterference_Click"/>
                 <MenuItem Header="B-Rep Karşılaştır" Click="InspectCompare_Click"/>
