@@ -341,10 +341,50 @@ public partial class MainWindow
         }
         foreach(var note in _drawingDocument.Annotations.Where(a=>a.SheetId==sheet.Id))
         {
+            RenderDrawingDimensionGraphics(note);
             var text=ResolveDrawingAnnotationText(note);
             _viewer.AddSketchText(note.Position.X,note.Position.Y,0,text,0);
         }
         _viewer.SetTopView();_viewer.FitAll();
+    }
+
+    private void RenderDrawingDimensionGraphics(DrawingAnnotation note)
+    {
+        if(_drawingDocument is null||note.ViewId is not Guid viewId)return;
+        var view=_drawingDocument.Views.FirstOrDefault(v=>v.Id==viewId);
+        if(view is null)return;
+        void Line(Point2d a,Point2d b)=>_viewer.AddStyledSketchLine(a.X,a.Y,0,b.X,b.Y,0,1);
+
+        if(note.Kind==DrawingAnnotationKind.LinearDimension&&ResolveLinearDimension(view,note.Data) is ProjectedSegment segment)
+        {
+            var a=DrawingToSheet(view,segment.X1,segment.Y1);
+            var b=DrawingToSheet(view,segment.X2,segment.Y2);
+            var dx=b.X-a.X;var dy=b.Y-a.Y;var length=Math.Sqrt(dx*dx+dy*dy);
+            if(length<=1e-9)return;
+            var nx=-dy/length;var ny=dx/length;
+            var mid=new Point2d((a.X+b.X)*0.5,(a.Y+b.Y)*0.5);
+            var offset=(note.Position.X-mid.X)*nx+(note.Position.Y-mid.Y)*ny;
+            if(Math.Abs(offset)<6)offset=offset<0?-12:12;
+            var qa=new Point2d(a.X+nx*offset,a.Y+ny*offset);
+            var qb=new Point2d(b.X+nx*offset,b.Y+ny*offset);
+            Line(a,qa);Line(b,qb);Line(qa,qb);
+            var tick=3.0;
+            Line(new Point2d(qa.X-dx/length*tick-nx*tick,qa.Y-dy/length*tick-ny*tick),
+                 new Point2d(qa.X+dx/length*tick+nx*tick,qa.Y+dy/length*tick+ny*tick));
+            Line(new Point2d(qb.X-dx/length*tick-nx*tick,qb.Y-dy/length*tick-ny*tick),
+                 new Point2d(qb.X+dx/length*tick+nx*tick,qb.Y+dy/length*tick+ny*tick));
+        }
+        else if(note.Kind==DrawingAnnotationKind.DiameterDimension&&ResolveDiameterDimension(view,note.Data) is ProjectedCircle circle)
+        {
+            var center=DrawingToSheet(view,circle.X,circle.Y);
+            var radius=circle.Radius*view.Scale;
+            var direction=new Vector3d(note.Position.X-center.X,note.Position.Y-center.Y,0);
+            var len=direction.Length;
+            var ux=len>1e-9?direction.X/len:1.0;var uy=len>1e-9?direction.Y/len:0.0;
+            var a=new Point2d(center.X-ux*radius,center.Y-uy*radius);
+            var b=new Point2d(center.X+ux*radius,center.Y+uy*radius);
+            Line(a,b);Line(b,note.Position);
+        }
     }
 
     private string ResolveDrawingAnnotationText(DrawingAnnotation note)
