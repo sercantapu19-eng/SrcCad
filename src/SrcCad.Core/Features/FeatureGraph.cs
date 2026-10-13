@@ -7,7 +7,7 @@ using SrcCad.Core.Persistence;
 
 namespace SrcCad.Core.Features;
 
-public enum FeatureKind { Sketch, SpatialSketch, Extrude, Boundary, BoundaryCut, ExtrudedCut, Fillet, Chamfer, Hole, Revolve, RevolvedCut, Sweep, SweptCut, Loft, LoftedCut, Shell, Draft, Rib, Mirror, LinearPattern, CircularPattern, SketchPattern, BodyBoolean, MoveCopyBody, SplitBody, Dome, HoleWizard, ReferencePlane, ReferenceAxis, ReferencePoint, SheetMetalBase, SheetMetalCut, SheetMetalEdgeFlange, SheetMetalMiterFlange, SheetMetalConvert, SheetMetalHem, SheetMetalJog, SheetMetalRip, SheetMetalCornerRelief, SheetMetalBend, StructuralMember, StructuralTrim, EndCap, WeldBead }
+public enum FeatureKind { Sketch, SpatialSketch, Extrude, Boundary, BoundaryCut, ExtrudedCut, Fillet, Chamfer, Hole, Revolve, RevolvedCut, Sweep, SweptCut, Loft, LoftedCut, Shell, Draft, Rib, Mirror, LinearPattern, CircularPattern, SketchPattern, BodyBoolean, MoveCopyBody, SplitBody, Dome, HoleWizard, ReferencePlane, ReferenceAxis, ReferencePoint, SheetMetalBase, SheetMetalCut, SheetMetalEdgeFlange, SheetMetalMiterFlange, SheetMetalConvert, SheetMetalHem, SheetMetalJog, SheetMetalRip, SheetMetalCornerRelief, SheetMetalBend, SheetMetalFlatten, StructuralMember, StructuralTrim, EndCap, WeldBead }
 public enum RebuildState { Clean, Dirty, Suppressed, Blocked, Failed }
 public enum ExtrusionTermination { Blind, ThroughAll }
 public enum BodyBooleanOperation { Add, Subtract, Common }
@@ -57,6 +57,7 @@ public sealed record FeatureReference(Guid ProducerId, TopologyKind Kind, string
 [JsonDerivedType(typeof(SheetMetalRipFeatureParameters), "sheet-metal-rip")]
 [JsonDerivedType(typeof(SheetMetalCornerReliefFeatureParameters), "sheet-metal-corner-relief")]
 [JsonDerivedType(typeof(SheetMetalBendFeatureParameters), "sheet-metal-bend")]
+[JsonDerivedType(typeof(SheetMetalFlattenFeatureParameters), "sheet-metal-flatten")]
 [JsonDerivedType(typeof(StructuralMemberFeatureParameters), "structural-member")]
 [JsonDerivedType(typeof(StructuralTrimFeatureParameters), "structural-trim")]
 [JsonDerivedType(typeof(EndCapFeatureParameters), "end-cap")]
@@ -108,6 +109,8 @@ public sealed record SheetMetalJogFeatureParameters(Guid BaseFeatureId,double He
 public sealed record SheetMetalRipFeatureParameters(Guid BaseFeatureId,double Gap) : FeatureParameters;
 public sealed record SheetMetalCornerReliefFeatureParameters(Guid BaseFeatureId,double Radius) : FeatureParameters;
 public sealed record SheetMetalBendFeatureParameters(Guid BaseFeatureId,Guid SketchId,double AngleDegrees,bool Reverse=false) : FeatureParameters;
+public sealed record SheetMetalBendStep(Guid SketchId,double AngleDegrees,bool Reverse=false);
+public sealed record SheetMetalFlattenFeatureParameters(Guid BaseFeatureId,SheetMetalBendStep[] Steps,bool Refold=false) : FeatureParameters;
 public sealed record StructuralMemberFeatureParameters(Guid ProfileSketchId, Guid PathSketchId) : FeatureParameters;
 public sealed record StructuralTrimFeatureParameters(Guid BaseFeatureId,PlaneFrame Plane,bool KeepPositive=true) : FeatureParameters;
 public sealed record EndCapFeatureParameters(Guid BaseFeatureId,double Thickness,bool Reverse=false) : FeatureParameters;
@@ -140,6 +143,7 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
       SheetMetalRipFeatureParameters => FeatureKind.SheetMetalRip,
       SheetMetalCornerReliefFeatureParameters => FeatureKind.SheetMetalCornerRelief,
       SheetMetalBendFeatureParameters => FeatureKind.SheetMetalBend,
+      SheetMetalFlattenFeatureParameters => FeatureKind.SheetMetalFlatten,
       StructuralMemberFeatureParameters => FeatureKind.StructuralMember, StructuralTrimFeatureParameters => FeatureKind.StructuralTrim,
       EndCapFeatureParameters => FeatureKind.EndCap,
       WeldBeadFeatureParameters => FeatureKind.WeldBead,
@@ -185,6 +189,7 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
         SheetMetalRipFeatureParameters s => new[] { s.BaseFeatureId },
         SheetMetalCornerReliefFeatureParameters s => new[] { s.BaseFeatureId },
         SheetMetalBendFeatureParameters s => new[] { s.BaseFeatureId,s.SketchId },
+        SheetMetalFlattenFeatureParameters s => new[] { s.BaseFeatureId }.Concat((s.Steps??Array.Empty<SheetMetalBendStep>()).Select(step=>step.SketchId)).ToArray(),
         StructuralMemberFeatureParameters s => new[] { s.ProfileSketchId,s.PathSketchId },
         StructuralTrimFeatureParameters s => new[] { s.BaseFeatureId },
         EndCapFeatureParameters e => new[] { e.BaseFeatureId },
@@ -502,6 +507,13 @@ public static class FeatureDocumentFile
                        bendSketch.Sketch.Entities.OfType<SketchLine>().Count(l=>!l.Construction)!=1||
                        !double.IsFinite(s.AngleDegrees)||Math.Abs(s.AngleDegrees)<=1e-6||Math.Abs(s.AngleDegrees)>=179.0)
                         throw new InvalidDataException("Invalid sheet metal bend.");
+                    break;
+                case SheetMetalFlattenFeatureParameters s:
+                    if(document.Node(s.BaseFeatureId).Kind==FeatureKind.Sketch||s.Steps is null||s.Steps.Length==0||
+                       s.Steps.Any(step=>document.Node(step.SketchId).Parameters is not SketchFeatureParameters bend||
+                           bend.Sketch.Entities.OfType<SketchLine>().Count(l=>!l.Construction)!=1||
+                           !double.IsFinite(step.AngleDegrees)||Math.Abs(step.AngleDegrees)<=1e-6||Math.Abs(step.AngleDegrees)>=179.0))
+                        throw new InvalidDataException("Invalid sheet metal flatten/refold.");
                     break;
                 case StructuralMemberFeatureParameters s:
                     if(s.ProfileSketchId==s.PathSketchId||
