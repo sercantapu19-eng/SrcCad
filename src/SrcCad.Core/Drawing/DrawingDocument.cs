@@ -77,6 +77,20 @@ public sealed record DrawingDocument(
         if(!Annotations.Any(a=>a.Id==id))throw new InvalidOperationException("Drawing annotation not found.");
         return this with{Annotations=Annotations.Where(a=>a.Id!=id).ToArray()};
     }
+
+    public DrawingDocument RemoveSheet(Guid id)
+    {
+        if(!Sheets.Any(s=>s.Id==id))throw new InvalidOperationException("Drawing sheet not found.");
+        if(Sheets.Length<=1)throw new InvalidOperationException("Drawing must keep at least one sheet.");
+        var viewIds=Views.Where(v=>v.SheetId==id).Select(v=>v.Id).ToHashSet();
+        return this with
+        {
+            Sheets=Sheets.Where(s=>s.Id!=id).ToArray(),
+            Views=Views.Where(v=>v.SheetId!=id).ToArray(),
+            Annotations=Annotations.Where(a=>a.SheetId!=id&&
+                (a.ViewId is not Guid viewId||!viewIds.Contains(viewId))).ToArray()
+        };
+    }
 }
 
 public static class DrawingDocumentFile
