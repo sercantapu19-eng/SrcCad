@@ -65,6 +65,7 @@
 #include "OcctFeatureKernel.h"
 #include <BRepAlgoAPI_Cut.hxx>
 #include <BRepAlgoAPI_Fuse.hxx>
+#include <BRepAlgoAPI_Common.hxx>
 #include <BRepFilletAPI_MakeFillet.hxx>
 #include <BRepFilletAPI_MakeChamfer.hxx>
 #include <BRepOffsetAPI_MakeThickSolid.hxx>
@@ -1683,6 +1684,51 @@ namespace SrcCad::Kernel::Occt
             if(featureVolume(result)<=initialVolume+std::max(1e-8,initialVolume*1e-10))
                 throw gcnew InvalidOperationException("Edge flange added no material.");
             return encodeFeature(result);
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
+    static TopoDS_Shape transformedFeatureBody(String^ body,array<double>^ transform6)
+    {
+        if(transform6==nullptr||transform6->Length!=6)throw gcnew ArgumentException("Transform requires X/Y/Z and Rx/Ry/Rz.");
+        for each(double value in transform6)if(!std::isfinite(value))throw gcnew ArgumentException("Invalid transform value.");
+        TopoDS_Shape shape=decodeFeature(body);
+        auto rotate=[&](double degrees,const gp_Dir& axis)
+        {
+            if(std::abs(degrees)<=1e-12)return;
+            gp_Trsf tr;tr.SetRotation(gp_Ax1(gp_Pnt(0,0,0),axis),degrees*3.14159265358979323846/180.0);
+            shape=BRepBuilderAPI_Transform(shape,tr,true).Shape();
+        };
+        rotate(transform6[3],gp_Dir(1,0,0));
+        rotate(transform6[4],gp_Dir(0,1,0));
+        rotate(transform6[5],gp_Dir(0,0,1));
+        if(std::abs(transform6[0])>1e-12||std::abs(transform6[1])>1e-12||std::abs(transform6[2])>1e-12)
+        {
+            gp_Trsf tr;tr.SetTranslation(gp_Vec(transform6[0],transform6[1],transform6[2]));
+            shape=BRepBuilderAPI_Transform(shape,tr,true).Shape();
+        }
+        if(shape.IsNull()||!BRepCheck_Analyzer(shape).IsValid())throw gcnew InvalidOperationException("Transformed body is invalid.");
+        return shape;
+    }
+
+    String^ OcctFeatureKernel::Transform(String^ body,array<double>^ transform6)
+    {
+        try{return encodeFeature(transformedFeatureBody(body,transform6));}
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
+    double OcctFeatureKernel::CommonVolume(String^ bodyA,array<double>^ transformA,String^ bodyB,array<double>^ transformB)
+    {
+        try
+        {
+            TopoDS_Shape a=transformedFeatureBody(bodyA,transformA);
+            TopoDS_Shape b=transformedFeatureBody(bodyB,transformB);
+            BRepAlgoAPI_Common common(a,b);common.Build();
+            if(!common.IsDone())throw gcnew InvalidOperationException("OCCT common operation failed.");
+            TopoDS_Shape result=common.Shape();
+            if(result.IsNull())return 0.0;
+            GProp_GProps props;BRepGProp::VolumeProperties(result,props);
+            return std::max(0.0,props.Mass());
         }
         catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
     }
