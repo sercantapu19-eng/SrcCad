@@ -401,6 +401,7 @@ public partial class MainWindow
     }
     private void CancelGraphSketch()
     {
+        _pendingSheetMetalBaseAfterSketch=false;
         _graphSketchEdit=null;
         _sketch=null;
         FinishSketchInteraction();_viewer.ClearSketch();_viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.0);
@@ -2972,12 +2973,33 @@ public partial class MainWindow
 
     private void BaseFlange_Click(object sender,RoutedEventArgs e)
     {
-        if(_inSketch||_extrudeCommandActive||!EnsurePartSession()||_partSession is null)return;
+        if(_inSketch||_extrudeCommandActive)return;
         if(_hasSolid){Status("Taban Flanş yeni sac parçanın ilk katı özelliğidir.");return;}
-        var sketch=BaseFlangeSketchCandidate();
-        if(sketch is null){Status("Taban Flanş için kapalı bir Çizim seçin.");return;}
-        BeginSheetMetalBaseFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Taban Flanş"),
-            new SheetMetalBaseFeatureParameters(sketch.Id,2,2,0.5,false)));
+
+        // SOLIDWORKS-like workflow: an empty part can enter Taban Flanş directly.
+        // When there is no suitable closed sketch, start a sketch on the selected
+        // plane/planar face and continue to the sheet parameters after sketch exit.
+        if(_partSession is not null)
+        {
+            var existing=BaseFlangeSketchCandidate();
+            if(existing is not null)
+            {
+                BeginSheetMetalBaseFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Taban Flanş"),
+                    new SheetMetalBaseFeatureParameters(existing.Id,2,2,0.5,false)));
+                return;
+            }
+
+            _pendingSheetMetalBaseAfterSketch=true;
+            Status("Sac Oluştur • seçili düzlem/yüz üzerinde kapalı profil çizin; Çizimden Çıkınca Taban Flanş otomatik açılacak.");
+            NewProfileSketch_Click(sender,e);
+            if(!_inSketch)_pendingSheetMetalBaseAfterSketch=false;
+            return;
+        }
+
+        _pendingSheetMetalBaseAfterSketch=true;
+        Status("Sac Oluştur • kapalı profil çizin; Çizimden Çıkınca Taban Flanş otomatik açılacak.");
+        StartSketch_Click(sender,e);
+        if(!_inSketch)_pendingSheetMetalBaseAfterSketch=false;
     }
 
     private void BeginSheetMetalBaseFeature(FeatureNode node)
