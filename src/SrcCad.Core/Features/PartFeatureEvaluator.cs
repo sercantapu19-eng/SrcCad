@@ -108,7 +108,7 @@ public sealed class PartFeatureEvaluator(IPartGeometryKernel kernel) : IFeatureE
         string Flatten(SheetMetalFlattenFeatureParameters flatten)
         {
             var body=Base(flatten.BaseFeatureId);
-            var steps=flatten.Refold?flatten.Steps:flatten.Steps.Reverse().ToArray();
+            var steps=flatten.Refold?flatten.Steps:flatten.Steps.AsEnumerable().Reverse().ToArray();
             foreach(var step in steps)
             {
                 var angle=flatten.Refold?step.AngleDegrees:-step.AngleDegrees;
