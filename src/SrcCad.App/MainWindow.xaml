@@ -45,8 +45,11 @@
                 <Separator/>
                 <MenuItem Header="Parça Aç…" InputGestureText="Ctrl+O" Click="OpenPart_Click"/>
                 <MenuItem Header="Montaj Aç…" Click="OpenAssembly_Click"/>
+                <MenuItem Header="STEP / IGES İçe Aktar…" Click="ImportCad_Click"/>
                 <MenuItem Header="Parçayı Farklı Kaydet…" InputGestureText="Ctrl+S" Click="SavePart_Click"/>
                 <MenuItem Header="Montajı Kaydet…" Click="SaveAssembly_Click"/>
+                <MenuItem Header="STEP Olarak Dışa Aktar…" Click="ExportStep_Click"/>
+                <MenuItem Header="IGES Olarak Dışa Aktar…" Click="ExportIges_Click"/>
                 <Separator/>
                 <MenuItem Header="Yeni Teknik Resim" Click="NewDrawing_Click"/>
                 <MenuItem Header="Teknik Resim Aç…" Click="OpenDrawing_Click"/>
