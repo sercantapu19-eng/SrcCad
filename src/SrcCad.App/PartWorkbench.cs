@@ -642,6 +642,19 @@ public partial class MainWindow
 
     private void SweepBoss_Click(object sender,RoutedEventArgs e)=>StartSweepLoft(false,false);
     private void SweepCut_Click(object sender,RoutedEventArgs e)=>StartSweepLoft(false,true);
+    private void StructuralMember_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession()||_partSession is null)return;
+        var profiles=ClosedProfileSketches();
+        var paths=PathSketches();
+        if(profiles.Length==0){Status("Yapısal Eleman için kapalı profil çizimi gerekiyor.");return;}
+        if(paths.Length==0){Status("Yapısal Eleman için çizgisel yol çizimi gerekiyor.");return;}
+        var profile=SelectedGraphNode is {Kind:FeatureKind.Sketch} selected&&profiles.Any(p=>p.Id==selected.Id)?selected:profiles[^1];
+        var path=paths.LastOrDefault(n=>n.Id!=profile.Id);
+        if(path is null){Status("Profil ve yol farklı çizimler olmalı.");return;}
+        BeginMultiSketchFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Yapısal Eleman"),
+            new StructuralMemberFeatureParameters(profile.Id,path.Id)));
+    }
     private void LoftBoss_Click(object sender,RoutedEventArgs e)=>StartSweepLoft(true,false);
     private void LoftCut_Click(object sender,RoutedEventArgs e)=>StartSweepLoft(true,true);
 
@@ -687,21 +700,26 @@ public partial class MainWindow
             case SweepCutFeatureParameters s:p1=s.ProfileSketchId;path=s.PathSketchId;break;
             case LoftFeatureParameters l:p1=l.ProfileSketchIds.ElementAtOrDefault(0);p2=l.ProfileSketchIds.ElementAtOrDefault(1);break;
             case LoftCutFeatureParameters l:p1=l.ProfileSketchIds.ElementAtOrDefault(0);p2=l.ProfileSketchIds.ElementAtOrDefault(1);break;
-            default:throw new InvalidOperationException("Unsupported sweep/loft feature.");
+            case StructuralMemberFeatureParameters s:p1=s.ProfileSketchId;path=s.PathSketchId;break;
+            default:throw new InvalidOperationException("Unsupported sweep/loft/structural feature.");
         }
         MultiSketchFeatureTitle.Text=node.Kind switch
         {
             FeatureKind.Sweep=>"Süpürme",FeatureKind.SweptCut=>"Süpürerek Kes",
-            FeatureKind.Loft=>"Loft",FeatureKind.LoftedCut=>"Loft Kes",_=>"Süpürme / Loft"
+            FeatureKind.Loft=>"Loft",FeatureKind.LoftedCut=>"Loft Kes",
+            FeatureKind.StructuralMember=>"Yapısal Eleman",_=>"Süpürme / Loft"
         };
         MultiProfile2Panel.Visibility=node.Parameters is LoftFeatureParameters or LoftCutFeatureParameters?Visibility.Visible:Visibility.Collapsed;
-        MultiPathPanel.Visibility=node.Parameters is SweepFeatureParameters or SweepCutFeatureParameters?Visibility.Visible:Visibility.Collapsed;
+        MultiPathPanel.Visibility=node.Parameters is SweepFeatureParameters or SweepCutFeatureParameters or StructuralMemberFeatureParameters?Visibility.Visible:Visibility.Collapsed;
         FillSketchCombo(MultiProfile1,profiles,p1);
         FillSketchCombo(MultiProfile2,profiles,p2);
         FillSketchCombo(MultiPath,paths,path);
-        MultiSketchFeatureInfo.Text=node.Parameters is SweepFeatureParameters or SweepCutFeatureParameters
-            ?"Kapalı profil + tek, dallanmayan çizgisel yol. Profil delikleri bu ilk çekirdekte kabul edilmez."
-            :"En az iki kapalı profil. Profillerin sırası FeatureManager sırasına göre loft edilir.";
+        MultiSketchFeatureInfo.Text=node.Parameters switch
+        {
+            StructuralMemberFeatureParameters=>"Profil / Weldment başlangıcı • kapalı kesit + tek, dallanmayan yol • gerçek OCCT katısı.",
+            SweepFeatureParameters or SweepCutFeatureParameters=>"Kapalı profil + tek, dallanmayan çizgisel yol. Profil delikleri bu ilk çekirdekte kabul edilmez.",
+            _=>"En az iki kapalı profil. Profillerin sırası FeatureManager sırasına göre loft edilir."
+        };
         MultiSketchFeatureError.Text="";
         MultiSketchFeaturePanel.Visibility=Visibility.Visible;
         GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;
@@ -728,6 +746,8 @@ public partial class MainWindow
                 =>l with{ProfileSketchIds=new[]{first.Value,second}},
             LoftCutFeatureParameters l when ComboFeatureId(MultiProfile2) is Guid second&&second!=first
                 =>l with{ProfileSketchIds=new[]{first.Value,second}},
+            StructuralMemberFeatureParameters member when ComboFeatureId(MultiPath) is Guid memberPath&&memberPath!=first
+                =>member with{ProfileSketchId=first.Value,PathSketchId=memberPath},
             _=>null
         };
         return parameters is null?null:ReplaceGraphNode(_graphFeatureEdit with{Parameters=parameters});
