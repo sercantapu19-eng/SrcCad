@@ -84,6 +84,41 @@ public static class DrawingDocumentFile
     private sealed record Envelope(int SchemaVersion,string Units,DrawingDocument Document);
     private static readonly JsonSerializerOptions Options=new(){WriteIndented=true,MaxDepth=64};
 
+    private static bool TryAnnotationData(string? data,char type,int count,out double[] values)
+    {
+        values=Array.Empty<double>();
+        if(string.IsNullOrWhiteSpace(data))return false;
+        var fields=data.Split(';');
+        if(fields.Length!=count+1||fields[0].Length!=1||fields[0][0]!=type)return false;
+        values=new double[count];
+        for(var i=0;i<count;i++)
+            if(!double.TryParse(fields[i+1],System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture,out values[i])||!double.IsFinite(values[i]))
+                return false;
+        return true;
+    }
+
+    private static bool ValidAssociativeAnnotation(DrawingAnnotation annotation)
+    {
+        if(annotation.Kind is DrawingAnnotationKind.LinearDimension)
+        {
+            if(annotation.ViewId is null||!TryAnnotationData(annotation.Data,'L',4,out var v))return false;
+            return Math.Sqrt(Math.Pow(v[2]-v[0],2)+Math.Pow(v[3]-v[1],2))>1e-9;
+        }
+        if(annotation.Kind is DrawingAnnotationKind.DiameterDimension)
+            return annotation.ViewId is not null&&TryAnnotationData(annotation.Data,'D',3,out var v)&&v[2]>1e-9;
+        if(annotation.Kind is DrawingAnnotationKind.RadiusDimension or DrawingAnnotationKind.CenterMark)
+            return annotation.ViewId is not null&&TryAnnotationData(annotation.Data,'R',3,out var v)&&v[2]>1e-9;
+        if(annotation.Kind is DrawingAnnotationKind.AngularDimension)
+        {
+            if(annotation.ViewId is null||!TryAnnotationData(annotation.Data,'A',8,out var v))return false;
+            var a=Math.Sqrt(Math.Pow(v[2]-v[0],2)+Math.Pow(v[3]-v[1],2));
+            var b=Math.Sqrt(Math.Pow(v[6]-v[4],2)+Math.Pow(v[7]-v[5],2));
+            return a>1e-9&&b>1e-9;
+        }
+        return true;
+    }
+
     public static string Serialize(DrawingDocument document)
     {
         Validate(document);
@@ -188,6 +223,8 @@ public static class DrawingDocumentFile
                 throw new InvalidDataException("Invalid drawing annotation.");
             if(annotation.ViewId is Guid attachedViewId&&viewsById[attachedViewId].SheetId!=annotation.SheetId)
                 throw new InvalidDataException("Drawing annotation and attached view must be on the same sheet.");
+            if(!ValidAssociativeAnnotation(annotation))
+                throw new InvalidDataException("Invalid associative drawing annotation.");
         }
     }
 }
