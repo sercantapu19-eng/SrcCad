@@ -87,6 +87,7 @@ internal static class AcceptanceTests
         Test("Çizgi komutu geometri üretir",()=>{var s=New();var c=new LineSketchCommand(s);c.Pick(new(new(0,0),0,0.01,1));c.Pick(new(new(30,20),-1,0.01,1));Require(s.Lines().Count()==1);});
         Test("Dikdörtgen iptali geometri üretmez",()=>{var s=New();var c=new CornerRectangleSketchCommand(s);c.Pick(new(new(1,1),-1,0.01,1));c.CancelStep();Require(!c.HasPendingStep&&s.Entities.Count==0);});
         Test("Daire komutu geometri üretir",()=>{var s=New();var c=new CircleSketchCommand(s);c.Pick(new(new(0,0),0,0.01,1));c.Pick(new(new(10,0),-1,0.01,1));Require(s.TryGetSingleCircle(out var circle)&&Near(circle.Radius,10));});
+        Test("3 nokta yay geometri üretir",()=>{var s=New();var c=new ThreePointArcCommand(s);c.Pick(new(new(10,0),-1,0.01,1));c.Pick(new(new(0,10),-1,0.01,1));c.Pick(new(new(-10,0),-1,0.01,1));var arc=s.Arcs(false).Single();var pts=s.SampleArc(arc,12);Require(pts.Count>=3&&pts.Any(p=>p.Y>9));});
         Test("Merkez dikdörtgen komutu",()=>{var s=New();var c=new CenterRectangleSketchCommand(s);c.Pick(new(new(0,0),0,0.01,1));c.Pick(new(new(20,10),-1,0.01,1));Require(s.Lines(false).Count()==4&&s.Lines().Count()==6&&s.CenterRectangles.Count==1);});
         Test("Önizleme modeli değiştirmez",()=>{var s=New();var c=new CircleSketchCommand(s);c.Pick(new(new(0,0),0,0.01,1));var before=State(s);Require(c.Preview(new(20,20)).Count==1&&State(s)==before);});
         Console.WriteLine($"ACCEPTANCE: {count-failures}/{count} PASS, {failures} FAIL");
