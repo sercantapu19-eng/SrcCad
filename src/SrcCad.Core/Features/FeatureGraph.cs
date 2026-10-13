@@ -7,7 +7,7 @@ using SrcCad.Core.Persistence;
 
 namespace SrcCad.Core.Features;
 
-public enum FeatureKind { Sketch, Extrude, ExtrudedCut, Fillet, Chamfer, Hole, Revolve, RevolvedCut, Shell, Draft, Rib, Mirror, LinearPattern, CircularPattern }
+public enum FeatureKind { Sketch, Extrude, ExtrudedCut, Fillet, Chamfer, Hole, Revolve, RevolvedCut, Shell, Draft, Rib, Mirror, LinearPattern, CircularPattern, ReferencePlane, ReferenceAxis, ReferencePoint }
 public enum RebuildState { Clean, Dirty, Suppressed, Blocked, Failed }
 public enum ExtrusionTermination { Blind, ThroughAll }
 public enum TopologyKind { Body, Face, Edge, Vertex }
@@ -29,6 +29,9 @@ public sealed record FeatureReference(Guid ProducerId, TopologyKind Kind, string
 [JsonDerivedType(typeof(MirrorFeatureParameters), "mirror")]
 [JsonDerivedType(typeof(LinearPatternFeatureParameters), "linear-pattern")]
 [JsonDerivedType(typeof(CircularPatternFeatureParameters), "circular-pattern")]
+[JsonDerivedType(typeof(ReferencePlaneFeatureParameters), "reference-plane")]
+[JsonDerivedType(typeof(ReferenceAxisFeatureParameters), "reference-axis")]
+[JsonDerivedType(typeof(ReferencePointFeatureParameters), "reference-point")]
 public abstract record FeatureParameters;
 public sealed record SketchFeatureParameters(PlaneFrame Plane, SketchSnapshot Sketch) : FeatureParameters;
 public sealed record ExtrudeFeatureParameters(Guid SketchId, double Depth) : FeatureParameters;
@@ -46,6 +49,9 @@ public sealed record RibFeatureParameters(Guid BaseFeatureId, Guid SketchId, dou
 public sealed record MirrorFeatureParameters(Guid BaseFeatureId, PlaneFrame Plane, bool KeepOriginal = true) : FeatureParameters;
 public sealed record LinearPatternFeatureParameters(Guid BaseFeatureId, Vector3d Direction, double Spacing, int Count) : FeatureParameters;
 public sealed record CircularPatternFeatureParameters(Guid BaseFeatureId, Vector3d AxisOrigin, Vector3d AxisDirection, double AngleDegrees, int Count) : FeatureParameters;
+public sealed record ReferencePlaneFeatureParameters(PlaneFrame BasePlane, double Offset) : FeatureParameters;
+public sealed record ReferenceAxisFeatureParameters(Vector3d Origin, Vector3d Direction) : FeatureParameters;
+public sealed record ReferencePointFeatureParameters(Vector3d Position) : FeatureParameters;
 public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Parameters,
     bool Suppressed = false, FeatureReference[]? References = null)
 {
@@ -57,7 +63,8 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
       ShellFeatureParameters => FeatureKind.Shell, DraftFeatureParameters => FeatureKind.Draft,
       RibFeatureParameters => FeatureKind.Rib, MirrorFeatureParameters => FeatureKind.Mirror,
       LinearPatternFeatureParameters => FeatureKind.LinearPattern, CircularPatternFeatureParameters => FeatureKind.CircularPattern,
-      _ => throw new InvalidDataException("Unsupported feature") };
+      ReferencePlaneFeatureParameters => FeatureKind.ReferencePlane, ReferenceAxisFeatureParameters => FeatureKind.ReferenceAxis,
+      ReferencePointFeatureParameters => FeatureKind.ReferencePoint, _ => throw new InvalidDataException("Unsupported feature") };
     [JsonIgnore] public Guid[] Dependencies => (Parameters switch
     {
         ExtrudeFeatureParameters e => new[] { e.SketchId },
@@ -73,6 +80,9 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
         MirrorFeatureParameters m => new[] { m.BaseFeatureId },
         LinearPatternFeatureParameters p => new[] { p.BaseFeatureId },
         CircularPatternFeatureParameters p => new[] { p.BaseFeatureId },
+        ReferencePlaneFeatureParameters => Array.Empty<Guid>(),
+        ReferenceAxisFeatureParameters => Array.Empty<Guid>(),
+        ReferencePointFeatureParameters => Array.Empty<Guid>(),
         _ => Array.Empty<Guid>()
     }).Concat((References ?? Array.Empty<FeatureReference>()).Select(r=>r.ProducerId)).Distinct().ToArray();
 }
@@ -234,6 +244,19 @@ public static class FeatureDocumentFile
                        p.Count<2||p.Count>500||!double.IsFinite(p.AxisOrigin.X)||!double.IsFinite(p.AxisOrigin.Y)||!double.IsFinite(p.AxisOrigin.Z)||
                        !double.IsFinite(p.AxisDirection.X)||!double.IsFinite(p.AxisDirection.Y)||!double.IsFinite(p.AxisDirection.Z)||
                        p.AxisDirection.Length<=1e-9)throw new InvalidDataException("Invalid circular pattern.");
+                    break;
+                case ReferencePlaneFeatureParameters p:
+                    _=p.BasePlane.Validate();
+                    if(!double.IsFinite(p.Offset))throw new InvalidDataException("Invalid reference plane.");
+                    break;
+                case ReferenceAxisFeatureParameters a:
+                    if(!double.IsFinite(a.Origin.X)||!double.IsFinite(a.Origin.Y)||!double.IsFinite(a.Origin.Z)||
+                       !double.IsFinite(a.Direction.X)||!double.IsFinite(a.Direction.Y)||!double.IsFinite(a.Direction.Z)||
+                       a.Direction.Length<=1e-9)throw new InvalidDataException("Invalid reference axis.");
+                    break;
+                case ReferencePointFeatureParameters p:
+                    if(!double.IsFinite(p.Position.X)||!double.IsFinite(p.Position.Y)||!double.IsFinite(p.Position.Z))
+                        throw new InvalidDataException("Invalid reference point.");
                     break;
                 default:throw new InvalidDataException("Unsupported feature parameters.");
             }

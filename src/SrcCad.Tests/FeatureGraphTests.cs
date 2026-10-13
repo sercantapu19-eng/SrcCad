@@ -29,6 +29,9 @@ internal static class FeatureGraphTests
                 MirrorFeatureParameters=>1,
                 LinearPatternFeatureParameters p=>p.Count,
                 CircularPatternFeatureParameters p=>p.Count,
+                ReferencePlaneFeatureParameters=>1,
+                ReferenceAxisFeatureParameters=>1,
+                ReferencePointFeatureParameters=>1,
                 _=>1
             };
             return new(own+dependencies.Values.Sum(x=>x.Value));
@@ -162,6 +165,18 @@ internal static class FeatureGraphTests
         var patternClone=FeatureDocumentFile.Clone(patternDoc);
         Check(patternClone.Node(linearNode.Id).Kind==FeatureKind.LinearPattern&&patternClone.Node(circularNode.Id).Kind==FeatureKind.CircularPattern,
             "linear/circular pattern parameters roundtrip");
+
+        var refPlaneNode=new FeatureNode(Guid.NewGuid(),"Düzlem1",new ReferencePlaneFeatureParameters(StandardPlanes.Front,25));
+        var refAxisNode=new FeatureNode(Guid.NewGuid(),"Eksen1",new ReferenceAxisFeatureParameters(Vector3d.Zero,Vector3d.UnitZ));
+        var refPointNode=new FeatureNode(Guid.NewGuid(),"Nokta1",new ReferencePointFeatureParameters(new Vector3d(10,20,30)));
+        var referenceGeometryDoc=initial with{Features=initial.Features.Concat(new[]{refPlaneNode,refAxisNode,refPointNode}).ToArray()};
+        var referenceGeometryClone=FeatureDocumentFile.Clone(referenceGeometryDoc);
+        Check(referenceGeometryClone.Node(refPlaneNode.Id).Kind==FeatureKind.ReferencePlane&&
+              referenceGeometryClone.Node(refAxisNode.Id).Kind==FeatureKind.ReferenceAxis&&
+              referenceGeometryClone.Node(refPointNode.Id).Kind==FeatureKind.ReferencePoint,
+            "reference plane axis point persist through parametric document");
+        Check(((ReferencePlaneFeatureParameters)referenceGeometryClone.Node(refPlaneNode.Id).Parameters).Offset==25,
+            "reference plane offset roundtrip");
 
         var external=session.Document;((IDictionary<int,SketchPoint>)((SketchFeatureParameters)external.Node(source.Id).Parameters).Sketch.Points).Clear();
         Check(((SketchFeatureParameters)session.Document.Node(source.Id).Parameters).Sketch.Points.Count>0,"external snapshot cannot mutate committed document");

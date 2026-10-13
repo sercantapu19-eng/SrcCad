@@ -61,6 +61,9 @@ public sealed class PartFeatureEvaluator(IPartGeometryKernel kernel) : IFeatureE
             MirrorFeatureParameters m => new(null,kernel.Mirror(Base(m.BaseFeatureId),m.Plane,m.KeepOriginal)),
             LinearPatternFeatureParameters p => new(null,kernel.LinearPattern(Base(p.BaseFeatureId),p.Direction,p.Spacing,p.Count)),
             CircularPatternFeatureParameters p => new(null,kernel.CircularPattern(Base(p.BaseFeatureId),p.AxisOrigin,p.AxisDirection,p.AngleDegrees,p.Count)),
+            ReferencePlaneFeatureParameters => new(null,null),
+            ReferenceAxisFeatureParameters => new(null,null),
+            ReferencePointFeatureParameters => new(null,null),
             _=>throw new NotSupportedException("Feature evaluator unavailable.")
         };
     }
