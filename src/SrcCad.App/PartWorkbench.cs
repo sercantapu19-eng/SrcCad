@@ -2109,8 +2109,16 @@ public partial class MainWindow
         try
         {
             var info=SrcCad.Kernel.Occt.OcctFeatureKernel.Inspect(body);
-            PropertyInfo.Text=$"Hacim: {info[0]:0.###} mm³\nKatı Sayısı: {info[1]:0}\nYüz Sayısı: {info[2]:0}\nKenar Sayısı: {info[3]:0}\n\nMalzeme/yoğunluk tanımlı olmadığı için kütle değeri hesaplanmadı.";
-            ManagerTabs.SelectedItem=PropertyManagerTab;Status("Geometrik kütle özellikleri hesaplandı.");
+            var material=_partSession?.Document.Properties??PartProperties.Default;
+            var massGrams=material.DensityGPerCm3>0?info[0]/1000.0*material.DensityGPerCm3:0;
+            var massText=material.DensityGPerCm3>0
+                ?$"Malzeme: {material.MaterialName}\nYoğunluk: {material.DensityGPerCm3:0.###} g/cm³\nKütle: {massGrams:0.###} g ({massGrams/1000.0:0.######} kg)"
+                :"Malzeme: belirli değil\nKütle hesabı için FeatureManager > Malzeme öğesine çift tıklayın.";
+            var center=info.Length>=7
+                ?$"Ağırlık Merkezi: X={info[4]:0.###}, Y={info[5]:0.###}, Z={info[6]:0.###} mm\n"
+                :"";
+            PropertyInfo.Text=$"Hacim: {info[0]:0.###} mm³\n{center}Katı Sayısı: {info[1]:0}\nYüz Sayısı: {info[2]:0}\nKenar Sayısı: {info[3]:0}\n\n{massText}";
+            ManagerTabs.SelectedItem=PropertyManagerTab;Status("Kütle özellikleri gerçek B-Rep ve malzeme yoğunluğundan hesaplandı.");
         }
         catch(Exception ex){PropertyInfo.Text="Kütle özellikleri hesaplanamadı: "+ex.Message;ManagerTabs.SelectedItem=PropertyManagerTab;}
     }
