@@ -20,10 +20,10 @@ namespace SrcCad::Kernel::Occt
         static System::String^ RevolveCut(System::String^ baseBody, array<double>^ outer, array<double>^ holes,
             array<double>^ circleHoles, array<double>^ circle, array<double>^ frame,
             array<double>^ axis, double angleDegrees, bool reverse);
-        static System::String^ Sweep(System::String^ baseBody, array<double>^ outer, array<double>^ circle,
-            array<double>^ frame, array<double>^ pathPoints);
-        static System::String^ SweepCut(System::String^ baseBody, array<double>^ outer, array<double>^ circle,
-            array<double>^ frame, array<double>^ pathPoints);
+        static System::String^ Sweep(System::String^ baseBody, array<double>^ outer, array<double>^ holes,
+            array<double>^ circleHoles, array<double>^ circle, array<double>^ frame, array<double>^ pathPoints);
+        static System::String^ SweepCut(System::String^ baseBody, array<double>^ outer, array<double>^ holes,
+            array<double>^ circleHoles, array<double>^ circle, array<double>^ frame, array<double>^ pathPoints);
         static System::String^ Loft(System::String^ baseBody, array<array<double>^>^ outers,
             array<array<double>^>^ circles, array<array<double>^>^ frames);
         static System::String^ LoftCut(System::String^ baseBody, array<array<double>^>^ outers,
