@@ -904,6 +904,42 @@ namespace SrcCad::Kernel::Occt
         catch(const Standard_Failure&){return nullptr;}
     }
 
+    static array<double>^ topologyMeasure(const TopoDS_Shape& selected)
+    {
+        if(selected.IsNull())return gcnew array<double>(0);
+        GProp_GProps props;
+        if(selected.ShapeType()==TopAbs_EDGE)
+        {
+            BRepGProp::LinearProperties(selected,props);
+            TopoDS_Edge edge=TopoDS::Edge(selected);
+            BRepAdaptor_Curve curve(edge);
+            if(curve.GetType()==GeomAbs_Circle)
+            {
+                gp_Circ circle=curve.Circle();
+                return gcnew array<double>{3.0,props.Mass(),circle.Radius(),
+                    props.CentreOfMass().X(),props.CentreOfMass().Y(),props.CentreOfMass().Z()};
+            }
+            return gcnew array<double>{2.0,props.Mass(),props.CentreOfMass().X(),props.CentreOfMass().Y(),props.CentreOfMass().Z()};
+        }
+        if(selected.ShapeType()==TopAbs_FACE)
+        {
+            BRepGProp::SurfaceProperties(selected,props);
+            return gcnew array<double>{4.0,props.Mass(),props.CentreOfMass().X(),props.CentreOfMass().Y(),props.CentreOfMass().Z()};
+        }
+        if(selected.ShapeType()==TopAbs_VERTEX)
+        {
+            gp_Pnt p=BRep_Tool::Pnt(TopoDS::Vertex(selected));
+            return gcnew array<double>{1.0,0.0,p.X(),p.Y(),p.Z()};
+        }
+        if(selected.ShapeType()==TopAbs_SOLID||selected.ShapeType()==TopAbs_COMPSOLID||selected.ShapeType()==TopAbs_COMPOUND)
+        {
+            BRepGProp::VolumeProperties(selected,props);
+            if(props.Mass()>1e-12)
+                return gcnew array<double>{6.0,props.Mass(),props.CentreOfMass().X(),props.CentreOfMass().Y(),props.CentreOfMass().Z()};
+        }
+        return gcnew array<double>(0);
+    }
+
     array<double>^ OcctViewportBridge::SelectedTopologyMeasure()
     {
         if(!IsInitialized()||myState->Context->NbSelected()!=1)return gcnew array<double>(0);
@@ -911,39 +947,18 @@ namespace SrcCad::Kernel::Occt
         {
             myState->Context->InitSelected();
             if(!myState->Context->MoreSelected()||!myState->Context->HasSelectedShape())return gcnew array<double>(0);
-            TopoDS_Shape selected=myState->Context->SelectedShape();
-            if(selected.IsNull())return gcnew array<double>(0);
-            GProp_GProps props;
-            if(selected.ShapeType()==TopAbs_EDGE)
-            {
-                BRepGProp::LinearProperties(selected,props);
-                TopoDS_Edge edge=TopoDS::Edge(selected);
-                BRepAdaptor_Curve curve(edge);
-                if(curve.GetType()==GeomAbs_Circle)
-                {
-                    gp_Circ circle=curve.Circle();
-                    return gcnew array<double>{3.0,props.Mass(),circle.Radius(),
-                        props.CentreOfMass().X(),props.CentreOfMass().Y(),props.CentreOfMass().Z()};
-                }
-                return gcnew array<double>{2.0,props.Mass(),props.CentreOfMass().X(),props.CentreOfMass().Y(),props.CentreOfMass().Z()};
-            }
-            if(selected.ShapeType()==TopAbs_FACE)
-            {
-                BRepGProp::SurfaceProperties(selected,props);
-                return gcnew array<double>{4.0,props.Mass(),props.CentreOfMass().X(),props.CentreOfMass().Y(),props.CentreOfMass().Z()};
-            }
-            if(selected.ShapeType()==TopAbs_VERTEX)
-            {
-                gp_Pnt p=BRep_Tool::Pnt(TopoDS::Vertex(selected));
-                return gcnew array<double>{1.0,0.0,p.X(),p.Y(),p.Z()};
-            }
-            if(selected.ShapeType()==TopAbs_SOLID||selected.ShapeType()==TopAbs_COMPSOLID||selected.ShapeType()==TopAbs_COMPOUND)
-            {
-                BRepGProp::VolumeProperties(selected,props);
-                if(props.Mass()>1e-12)
-                    return gcnew array<double>{6.0,props.Mass(),props.CentreOfMass().X(),props.CentreOfMass().Y(),props.CentreOfMass().Z()};
-            }
-            return gcnew array<double>(0);
+            return topologyMeasure(myState->Context->SelectedShape());
+        }
+        catch(const Standard_Failure&){return gcnew array<double>(0);}
+    }
+
+    array<double>^ OcctViewportBridge::DetectedTopologyMeasure()
+    {
+        if(!IsInitialized()||!myState->Context->HasDetected())return gcnew array<double>(0);
+        try
+        {
+            TopoDS_Shape detected=myState->Context->DetectedShape();
+            return topologyMeasure(detected);
         }
         catch(const Standard_Failure&){return gcnew array<double>(0);}
     }
