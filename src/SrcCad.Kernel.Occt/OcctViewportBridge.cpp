@@ -1691,6 +1691,46 @@ namespace SrcCad::Kernel::Occt
         catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
     }
 
+    String^ OcctFeatureKernel::WeldBead(String^ baseBody,array<String^>^ edgeReferences,double radius)
+    {
+        if(!std::isfinite(radius)||radius<=1e-9)throw gcnew ArgumentException("Weld bead radius must be positive.");
+        try
+        {
+            TopoDS_Shape result=decodeFeature(baseBody);
+            const double before=featureVolume(result);
+            auto edges=resolveEdgeReferences(result,edgeReferences);
+            for(const auto& selected:edges)
+            {
+                BRepAdaptor_Curve curve(selected);
+                const double first=curve.FirstParameter();
+                gp_Pnt start;gp_Vec tangent;curve.D1(first,start,tangent);
+                if(tangent.Magnitude()<=1e-9)throw gcnew InvalidOperationException("Weld path tangent is invalid.");
+                gp_Dir axis(tangent);
+
+                BRepBuilderAPI_MakeWire spine(selected);
+                if(!spine.IsDone())throw gcnew InvalidOperationException("Weld path wire failed.");
+                BRepBuilderAPI_MakeEdge circleEdge(gp_Circ(gp_Ax2(start,axis),radius));
+                if(!circleEdge.IsDone())throw gcnew InvalidOperationException("Weld profile edge failed.");
+                BRepBuilderAPI_MakeWire profile(circleEdge.Edge());
+                if(!profile.IsDone())throw gcnew InvalidOperationException("Weld profile wire failed.");
+
+                BRepOffsetAPI_MakePipe pipe(spine.Wire(),profile.Wire());
+                TopoDS_Shape bead=pipe.Shape();
+                if(bead.IsNull()||!BRepCheck_Analyzer(bead).IsValid())
+                    throw gcnew InvalidOperationException("Weld bead pipe failed.");
+
+                BRepAlgoAPI_Fuse fuse(result,bead);fuse.Build();
+                if(!fuse.IsDone())throw gcnew InvalidOperationException("Weld bead fuse failed.");
+                result=fuse.Shape();
+            }
+            const double after=featureVolume(result);
+            if(after-before<=std::max(1e-8,before*1e-10))
+                throw gcnew InvalidOperationException("Weld bead added no material.");
+            return encodeFeature(result);
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
     String^ OcctFeatureKernel::EndCap(String^ baseBody,String^ faceReference,double thickness,bool reverse)
     {
         if(!std::isfinite(thickness)||thickness<=1e-9)throw gcnew ArgumentException("End cap thickness must be positive.");
