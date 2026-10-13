@@ -2212,6 +2212,8 @@ public partial class MainWindow : Window
 
     private void FeatureTree_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
+        if(FeatureTree.SelectedItem is TreeViewItem materialItem&&materialItem.Tag as string=="material")
+        {BeginMaterialEdit();e.Handled=true;return;}
         if(_partSession is not null&&SelectedGraphId is Guid id){EditGraphFeature(id);e.Handled=true;return;}
         if (_inSketch || _extrudeCommandActive) return;
         if (FeatureTree.SelectedItem is TreeViewItem sketchItem && sketchItem.Tag as string == "sketch:1")
@@ -2271,6 +2273,16 @@ public partial class MainWindow : Window
             }
         }
         if (e.NewValue is not TreeViewItem item || item.Tag is not string tag) return;
+        if(tag=="material"&&_partSession is not null)
+        {
+            var material=_partSession.Document.Properties??PartProperties.Default;
+            PropertyTitle.Text="Malzeme";
+            PropertyInfo.Text=material.DensityGPerCm3>0
+                ?$"{material.MaterialName} • {material.DensityGPerCm3:0.###} g/cm³ • düzenlemek için çift tıklayın."
+                :"Malzeme belirlenmedi • düzenlemek için çift tıklayın.";
+            Status("Malzeme seçildi • çift tıklayarak düzenleyin.");
+            return;
+        }
         switch (tag)
         {
             case "plane:front": _selectedPlane = StandardPlanes.Front; break;
