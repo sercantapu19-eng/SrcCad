@@ -50,6 +50,37 @@ public abstract class SketchCommandBase : ISketchCommand
     }
 }
 
+public sealed class PointSketchCommand : SketchCommandBase
+{
+    public PointSketchCommand(SketchModel sketch) : base(sketch) { }
+    public override string Id => "sketch.point";
+    public override string Title => "Nokta";
+    public override bool HasPendingStep => false;
+
+    public override void Begin(CommandContext context)
+    {
+        base.Begin(context);
+        Context.SetStatus?.Invoke("Nokta: konumu seçin.");
+    }
+
+    public override void Pick(SketchPick pick)
+    {
+        var before=Sketch.Points.Count;
+        var id=ResolvePoint(pick);
+        if(Sketch.Points.Count==before)
+        {
+            Context.SetStatus?.Invoke(id==0?"Origin zaten mevcut.":"Seçilen konumda nokta zaten mevcut.");
+            return;
+        }
+        Changed("Çizim noktası oluşturuldu.");
+    }
+
+    public override IReadOnlyList<SketchPreviewPrimitive> Preview(Point2d cursor)
+        => Array.Empty<SketchPreviewPrimitive>();
+
+    public override void CancelStep() { }
+}
+
 public sealed class LineSketchCommand : SketchCommandBase
 {
     private int? _startPointId;
