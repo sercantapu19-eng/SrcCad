@@ -2639,6 +2639,47 @@ namespace SrcCad::Kernel::Occt
         }
         return values;
     }
+
+    static std::vector<double> projectShapeCirclesNative(const TopoDS_Shape& shape,
+                                                          const std::array<double,3>& direction,
+                                                          const std::array<double,3>& up)
+    {
+        gp_Vec d,u,right;
+        if(!projectionBasisNative(direction,up,d,u,right))return {};
+        std::vector<double> values;
+        for(TopExp_Explorer ex(shape,TopAbs_EDGE);ex.More();ex.Next())
+        {
+            BRepAdaptor_Curve curve(TopoDS::Edge(ex.Current()));
+            if(curve.GetType()!=GeomAbs_Circle)continue;
+            gp_Circ circle=curve.Circle();
+            gp_Dir normal=circle.Axis().Direction();
+            if(std::abs(std::abs(gp_Vec(normal).Dot(d))-1.0)>1e-4)continue;
+            gp_Pnt center=circle.Location();
+            gp_Vec centerVector(gp_Pnt(0,0,0),center);
+            values.push_back(centerVector.Dot(right));
+            values.push_back(centerVector.Dot(u));
+            values.push_back(circle.Radius());
+        }
+        return values;
+    }
+
+    static std::vector<double> sectionShapeEdgesNative(const TopoDS_Shape& shape,
+                                                       const std::array<double,3>& planeOrigin,
+                                                       const std::array<double,3>& planeNormal,
+                                                       const std::array<double,3>& direction,
+                                                       const std::array<double,3>& up)
+    {
+        gp_Vec normalVector(planeNormal[0],planeNormal[1],planeNormal[2]);
+        if(normalVector.Magnitude()<=1e-12)return {};
+        gp_Dir normal(normalVector);
+        gp_Pln plane(gp_Pnt(planeOrigin[0],planeOrigin[1],planeOrigin[2]),normal);
+        BRepAlgoAPI_Section section(shape,plane,false);
+        section.ComputePCurveOn1(false);
+        section.Approximation(true);
+        section.Build();
+        if(!section.IsDone())return {};
+        return projectShapeEdgesNative(section.Shape(),direction,up);
+    }
 #pragma managed(pop)
 
     array<double>^ OcctFeatureKernel::ProjectEdges(String^ body,array<double>^ direction,array<double>^ up)
@@ -2682,24 +2723,12 @@ namespace SrcCad::Kernel::Occt
         for each(double value in up)if(!std::isfinite(value))throw gcnew ArgumentException("Invalid projection up vector.");
         std::array<double,3> nativeDirection{direction[0],direction[1],direction[2]};
         std::array<double,3> nativeUp{up[0],up[1],up[2]};
-        gp_Vec d,u,right;
-        if(!projectionBasisNative(nativeDirection,nativeUp,d,u,right))
-            throw gcnew ArgumentException("Projection vectors are zero or parallel.");
         try
         {
-            TopoDS_Shape shape=decodeFeature(body);
-            auto values=gcnew System::Collections::Generic::List<double>();
-            for(TopExp_Explorer ex(shape,TopAbs_EDGE);ex.More();ex.Next())
-            {
-                BRepAdaptor_Curve curve(TopoDS::Edge(ex.Current()));
-                if(curve.GetType()!=GeomAbs_Circle)continue;
-                gp_Circ circle=curve.Circle();
-                gp_Dir normal=circle.Axis().Direction();
-                if(std::abs(std::abs(gp_Vec(normal).Dot(d))-1.0)>1e-4)continue;
-                gp_Pnt center=circle.Location();gp_Vec c(gp_Pnt(0,0,0),center);
-                values->Add(c.Dot(right));values->Add(c.Dot(u));values->Add(circle.Radius());
-            }
-            return values->ToArray();
+            auto nativeValues=projectShapeCirclesNative(decodeFeature(body),nativeDirection,nativeUp);
+            auto values=gcnew array<double>((int)nativeValues.size());
+            for(int i=0;i<values->Length;++i)values[i]=nativeValues[(size_t)i];
+            return values;
         }
         catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
     }
@@ -2715,19 +2744,13 @@ namespace SrcCad::Kernel::Occt
             throw gcnew ArgumentException("Projection requires direction and up vectors.");
         for each(double value in direction)if(!std::isfinite(value))throw gcnew ArgumentException("Invalid projection direction.");
         for each(double value in up)if(!std::isfinite(value))throw gcnew ArgumentException("Invalid projection up vector.");
+        std::array<double,3> nativeOrigin{planeOrigin[0],planeOrigin[1],planeOrigin[2]};
+        std::array<double,3> nativeNormal{planeNormal[0],planeNormal[1],planeNormal[2]};
         std::array<double,3> nativeDirection{direction[0],direction[1],direction[2]};
         std::array<double,3> nativeUp{up[0],up[1],up[2]};
-        gp_Vec d,u,right;
-        if(!projectionBasisNative(nativeDirection,nativeUp,d,u,right))
-            throw gcnew ArgumentException("Projection vectors are zero or parallel.");
         try
         {
-            TopoDS_Shape shape=decodeFeature(body);
-            gp_Dir normal(planeNormal[0],planeNormal[1],planeNormal[2]);
-            gp_Pln plane(gp_Pnt(planeOrigin[0],planeOrigin[1],planeOrigin[2]),normal);
-            BRepAlgoAPI_Section section(shape,plane,false);section.ComputePCurveOn1(false);section.Approximation(true);section.Build();
-            if(!section.IsDone())throw gcnew InvalidOperationException("OCCT section operation failed.");
-            auto nativeValues=projectShapeEdgesNative(section.Shape(),nativeDirection,nativeUp);
+            auto nativeValues=sectionShapeEdgesNative(decodeFeature(body),nativeOrigin,nativeNormal,nativeDirection,nativeUp);
             auto values=gcnew array<double>((int)nativeValues.size());
             for(int i=0;i<values->Length;++i)values[i]=nativeValues[(size_t)i];
             return values;
