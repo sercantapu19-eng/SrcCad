@@ -180,6 +180,16 @@ internal static class NativeFeatureGraphTests
             var bossEdges=OcctFeatureKernel.EdgeReferences(bossBody);
             Check(bossEdges.Length>=4,"extruded body exposes semantic edge references");
 
+            var staleEdgeRejected=false;
+            try{_=OcctFeatureKernel.Fillet(bossBody,new[]{"E;40;100000;100000;100000"},1);}
+            catch(InvalidOperationException){staleEdgeRejected=true;}
+            Check(staleEdgeRejected,"wildly stale persistent edge reference is rejected instead of remapped");
+
+            var staleFaceRejected=false;
+            try{_=OcctFeatureKernel.FaceFrame(bossBody,"F;1200;100000;100000;100000;0;0;1");}
+            catch(InvalidOperationException){staleFaceRejected=true;}
+            Check(staleFaceRejected,"wildly stale persistent face reference is rejected instead of remapped");
+
             string? weldEdge=null;string? weldedBody=null;
             foreach(var edgeRef in bossEdges)
             {
