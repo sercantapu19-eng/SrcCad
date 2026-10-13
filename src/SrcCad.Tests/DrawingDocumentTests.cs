@@ -103,6 +103,30 @@ internal static class DrawingDocumentTests
         }
         catch(InvalidDataException){_checks++;}
 
+        try
+        {
+            var brokenLinear=linear with{Data="L;0;0;40"};
+            DrawingDocumentFile.Serialize(doc with{Annotations=new[]{brokenLinear}});
+            throw new InvalidOperationException("drawing accepted malformed linear dimension payload");
+        }
+        catch(InvalidDataException){_checks++;}
+
+        try
+        {
+            var detachedRadius=radius with{ViewId=null};
+            DrawingDocumentFile.Serialize(doc with{Annotations=new[]{detachedRadius}});
+            throw new InvalidOperationException("drawing accepted detached associative radius dimension");
+        }
+        catch(InvalidDataException){_checks++;}
+
+        try
+        {
+            var zeroRadius=centerMark with{Data="R;20;15;0"};
+            DrawingDocumentFile.Serialize(doc with{Annotations=new[]{zeroRadius}});
+            throw new InvalidOperationException("drawing accepted zero-radius center mark payload");
+        }
+        catch(InvalidDataException){_checks++;}
+
         Console.WriteLine($"Drawing Document Tests: {_checks} PASS");
     }
 }
