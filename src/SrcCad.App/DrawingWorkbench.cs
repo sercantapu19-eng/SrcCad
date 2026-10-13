@@ -601,15 +601,18 @@ public partial class MainWindow
 
     private string ResolveHoleCallout(DrawingView view,string? data)
     {
-        var projection=DrawingProjectionData(view);
-        var circles=DrawingBodies(view.ModelPath).SelectMany(body=>
-            SrcCad.Kernel.Occt.OcctFeatureKernel.ProjectCircles(body,
-                new[]{projection.Direction.X,projection.Direction.Y,projection.Direction.Z},
-                new[]{projection.Up.X,projection.Up.Y,projection.Up.Z})).ToArray();
-        if(circles.Length<3)return "Ø?";
+        if(TryDrawingData(data,'D',3,out var persistent))
+        {
+            var resolved=ResolveCircleDimension(view,persistent);
+            return resolved is null?"Ø?":$"Ø{resolved.Radius*2:0.###}";
+        }
+
+        // Schema-v1 compatibility: older drawings stored only the projected circle index.
+        var circles=DrawingProjectedCircles(view);
+        if(circles.Length==0)return "Ø?";
         var index=0;
-        if(int.TryParse(data,out var parsed)&&parsed>=0&&parsed*3+2<circles.Length)index=parsed;
-        return $"Ø{circles[index*3+2]*2:0.###}";
+        if(int.TryParse(data,out var parsed)&&parsed>=0&&parsed<circles.Length)index=parsed;
+        return $"Ø{circles[index].Radius*2:0.###}";
     }
 
     private static IEnumerable<string> EnumerateBomParts(string modelPath,HashSet<string>? recursion=null)
@@ -812,16 +815,20 @@ public partial class MainWindow
         if(view is null){Status("Delik çağrısı için görünüş seçin.");return;}
         try
         {
-            var data=DrawingProjectionData(view);
-            var circles=DrawingBodies(view.ModelPath).SelectMany(body=>
-                SrcCad.Kernel.Occt.OcctFeatureKernel.ProjectCircles(body,
-                    new[]{data.Direction.X,data.Direction.Y,data.Direction.Z},new[]{data.Up.X,data.Up.Y,data.Up.Z})).ToArray();
-            if(circles.Length<3){Status("Bu görünüşte dairesel delik/kenar bulunamadı.");return;}
-            var x=(circles[0]-data.Cx)*view.Scale+view.Position.X;
-            var y=(circles[1]-data.Cy)*view.Scale+view.Position.Y;
-            var text=$"Ø{circles[2]*2:0.###}";
-            var note=new DrawingAnnotation(Guid.NewGuid(),view.SheetId,view.Id,new Point2d(x+20,y+20),text,
-                DrawingAnnotationKind.HoleCallout,"0");
+            var circles=DrawingProjectedCircles(view);
+            if(circles.Length==0){Status("Bu görünüşte dairesel delik/kenar bulunamadı.");return;}
+            Point2d pointer=view.Position;
+            if(_viewer.ScreenToPlane(_lastMouseX,_lastMouseY,0,0,0,0,0,1,out var world))
+                pointer=new Point2d(world.X,world.Y);
+            var choice=circles.Select(circle=>
+            {
+                var center=DrawingToSheet(view,circle.X,circle.Y);
+                return (Circle:circle,Center:center,Distance:Point2d.Distance(pointer,center));
+            }).OrderBy(x=>x.Distance).First();
+            var text=$"Ø{choice.Circle.Radius*2:0.###}";
+            var note=new DrawingAnnotation(Guid.NewGuid(),view.SheetId,view.Id,
+                new Point2d(choice.Center.X+20,choice.Center.Y+20),text,
+                DrawingAnnotationKind.HoleCallout,EncodeDiameterDimension(choice.Circle));
             SetDrawingDocument(_drawingDocument with{Annotations=_drawingDocument.Annotations.Append(note).ToArray()});
             RefreshDrawingTree(note.Id);RenderDrawing();Status("Delik çağrısı eklendi: "+text);
         }
