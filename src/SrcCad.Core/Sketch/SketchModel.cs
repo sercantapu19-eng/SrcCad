@@ -267,11 +267,63 @@ public sealed partial class SketchModel
 
     private double DistanceToEllipse(Point2d p,SketchEllipse ellipse)
     {
-        var sampled=SampleEllipse(ellipse,72);
-        var best=double.PositiveInfinity;
-        for(var i=0;i<sampled.Count;i++)
-            best=Math.Min(best,DistancePointToSegment(p,sampled[i],sampled[(i+1)%sampled.Count]));
-        return best;
+        var center=Point(ellipse.CenterPointId).Position;
+        var a=Math.Abs(ellipse.RadiusX);
+        var b=Math.Abs(ellipse.RadiusY);
+        if(a<=1e-12||b<=1e-12)return double.PositiveInfinity;
+
+        // Transform the pick point into the ellipse's local, unrotated frame.
+        var dx=p.X-center.X;
+        var dy=p.Y-center.Y;
+        var cos=Math.Cos(ellipse.RotationRadians);
+        var sin=Math.Sin(ellipse.RotationRadians);
+        var x= cos*dx+sin*dy;
+        var y=-sin*dx+cos*dy;
+
+        // Seed the closest-point solve from a small deterministic angular scan.
+        // This avoids the polygon-approximation error that made legitimate picks
+        // depend on the sampling count used elsewhere in the sketch pipeline.
+        var bestT=0.0;
+        var bestSq=double.PositiveInfinity;
+        const int seeds=32;
+        for(var i=0;i<seeds;i++)
+        {
+            var t=(Math.PI*2.0*i)/seeds;
+            var ex=a*Math.Cos(t);
+            var ey=b*Math.Sin(t);
+            var sx=ex-x;
+            var sy=ey-y;
+            var sq=sx*sx+sy*sy;
+            if(sq<bestSq){bestSq=sq;bestT=t;}
+        }
+
+        // Newton refinement of the squared-distance stationary point.
+        var theta=bestT;
+        for(var i=0;i<16;i++)
+        {
+            var ct=Math.Cos(theta);
+            var st=Math.Sin(theta);
+            var ex=a*ct;
+            var ey=b*st;
+            var tx=-a*st;
+            var ty= b*ct;
+            var ax=-a*ct;
+            var ay=-b*st;
+            var rx=ex-x;
+            var ry=ey-y;
+            var first=rx*tx+ry*ty;
+            var second=tx*tx+ty*ty+rx*ax+ry*ay;
+            if(Math.Abs(second)<=1e-15)break;
+            var step=first/second;
+            step=Math.Clamp(step,-Math.PI/4.0,Math.PI/4.0);
+            theta-=step;
+            if(Math.Abs(step)<=1e-13)break;
+        }
+
+        var nx=a*Math.Cos(theta)-x;
+        var ny=b*Math.Sin(theta)-y;
+        bestSq=Math.Min(bestSq,nx*nx+ny*ny);
+        return Math.Sqrt(Math.Max(0,bestSq));
     }
 
     private double DistanceToArc(Point2d p,SketchArc arc)
