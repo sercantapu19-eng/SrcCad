@@ -237,7 +237,9 @@
                     <Button Style="{StaticResource CadCommandButton}" Content="Kesit" Click="DrawingSectionView_Click" ToolTip="Seçili görünüşten model merkezinden geçen gerçek OCCT kesit eğrileri üretir."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Detay" Click="DrawingDetailView_Click" ToolTip="Seçili görünüşten 2× detay görünüşü oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Kopuk Görünüm" Click="DrawingBrokenView_Click" ToolTip="Seçili görünüşün orta bölgesini kaldırıp kalıcı kopuk görünüm oluşturur."/>
-                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadDimensionIcon}" Content="Akıllı Ölçü" Click="DrawingSmartDimension_Click" ToolTip="Seçili görünüşün gerçek izdüşüm sınırlarından genel X×Y ölçüsü üretir."/>
+                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadDimensionIcon}" Content="Akıllı Ölçü" Click="DrawingSmartDimension_Click" ToolTip="İmlece en yakın izdüşüm kenarı veya daire için ilişkili doğrusal/çap ölçüsü üretir."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Yarıçap Ölçü" Click="DrawingRadiusDimension_Click" ToolTip="İmlece en yakın dairesel izdüşüme ilişkili R ölçüsü ekler."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Açı Ölçü" Click="DrawingAngularDimension_Click" ToolTip="İmlece en yakın açılı iki izdüşüm kenarına ilişkili açı ölçüsü ekler."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Delik Çağrısı" Click="DrawingHoleCallout_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Merkez İşareti" Click="DrawingCenterMark_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Not" Click="DrawingAddNote_Click"/>
