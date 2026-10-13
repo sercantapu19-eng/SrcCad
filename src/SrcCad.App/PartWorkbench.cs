@@ -1224,6 +1224,302 @@ public partial class MainWindow
 
     private void MultiSketchFeatureCancel_Click(object sender,RoutedEventArgs e)=>EndGraphFeature();
 
+    private FeatureNode[] BodyFeatureNodes()
+        => _partSession?.Document.Ordered().Where(n=>_partSession.Output(n.Id)?.BRep is not null).ToArray()
+            ??Array.Empty<FeatureNode>();
+
+    private void FillBodyCombo(ComboBox combo,IEnumerable<FeatureNode> nodes,Guid? selected)
+    {
+        combo.Items.Clear();
+        foreach(var node in nodes)
+        {
+            var item=new ComboBoxItem{Content=node.Name,Tag=node.Id};
+            combo.Items.Add(item);
+            if(node.Id==selected)combo.SelectedItem=item;
+        }
+        if(combo.SelectedItem is null&&combo.Items.Count>0)combo.SelectedIndex=0;
+    }
+
+    private void BodyBoolean_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession()||_partSession is null)return;
+        var bodies=BodyFeatureNodes();
+        if(bodies.Length<2){Status("Boolean için en az iki gövde üreten feature gerekiyor.");return;}
+        BeginBodyBooleanFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Birleştir"),
+            new BodyBooleanFeatureParameters(bodies[^2].Id,bodies[^1].Id,BodyBooleanOperation.Add)));
+    }
+
+    private void BeginBodyBooleanFeature(FeatureNode node)
+    {
+        if(node.Parameters is not BodyBooleanFeatureParameters op)throw new InvalidOperationException("Unsupported body boolean.");
+        _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;
+        var bodies=BodyFeatureNodes().Where(n=>n.Id!=node.Id).ToArray();
+        FillBodyCombo(BooleanBodyA,bodies,op.BodyAId);FillBodyCombo(BooleanBodyB,bodies,op.BodyBId);
+        BooleanOperation.Items.Clear();
+        foreach(var operation in Enum.GetValues<BodyBooleanOperation>())
+            BooleanOperation.Items.Add(new ComboBoxItem{Content=operation switch
+            {
+                BodyBooleanOperation.Add=>"Birleştir (Add)",BodyBooleanOperation.Subtract=>"Çıkar (Subtract)",_=>"Ortak (Common)"
+            },Tag=operation});
+        BooleanOperation.SelectedIndex=(int)op.Operation;
+        BodyBooleanError.Text="";BodyBooleanPanel.Visibility=Visibility.Visible;
+        PropertyTitle.Text=node.Name;PropertyInfo.Text="Gerçek OCCT Fuse / Cut / Common • iki feature gövdesi • canlı B-Rep önizleme";
+        ManagerTabs.SelectedItem=PropertyManagerTab;_loadingGraphParameters=false;
+        UpdateBodyBooleanPreview();RefreshCommandState();
+    }
+
+    private FeatureDocument? BodyBooleanCandidate()
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not BodyBooleanFeatureParameters op||
+           ComboFeatureId(BooleanBodyA) is not Guid a||ComboFeatureId(BooleanBodyB) is not Guid b||a==b||
+           (BooleanOperation.SelectedItem as ComboBoxItem)?.Tag is not BodyBooleanOperation operation)return null;
+        return ReplaceGraphNode(_graphFeatureEdit with{Parameters=op with{BodyAId=a,BodyBId=b,Operation=operation}});
+    }
+
+    private void BodyBooleanParameterChanged(object sender,SelectionChangedEventArgs e)
+    {
+        if(!_loadingGraphParameters)UpdateBodyBooleanPreview();
+    }
+
+    private void UpdateBodyBooleanPreview()
+    {
+        var candidate=BodyBooleanCandidate();
+        if(candidate is null||_partSession is null){BodyBooleanError.Text="İki farklı gövde ve işlem seçin.";return;}
+        var preview=_partSession.Preview(candidate);
+        var body=preview.Success?LastBody(candidate,id=>preview.Outputs.GetValueOrDefault(id)):null;
+        if(body is not null&&_viewer.PreviewFeatureBody(body)){BodyBooleanError.Text="";return;}
+        _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();
+        BodyBooleanError.Text=preview.Report.Nodes.LastOrDefault(n=>n.State==RebuildState.Failed)?.Error??preview.Report.Error??"Boolean önizlemesi oluşturulamadı.";
+    }
+
+    private void BodyBooleanOk_Click(object sender,RoutedEventArgs e)
+    {
+        var candidate=BodyBooleanCandidate();
+        if(candidate is null||_partSession is null)return;
+        if(!_partSession.TryCommit(candidate)){BodyBooleanError.Text=GraphError();return;}
+        var id=_graphFeatureEdit!.Id;EndGraphFeature();RefreshPartTree(id);Status("Gövde Boolean işlemi onaylandı.");
+    }
+
+    private void MoveCopyBody_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession())return;
+        var baseNode=CurrentSolidFeature();if(baseNode is null){Status("Taşı/Kopyala için mevcut gövde gerekiyor.");return;}
+        BeginMoveCopyBodyFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Gövde Taşı"),
+            new MoveCopyBodyFeatureParameters(baseNode.Id,Vector3d.Zero,Vector3d.Zero,false)));
+    }
+
+    private void BeginMoveCopyBodyFeature(FeatureNode node)
+    {
+        if(node.Parameters is not MoveCopyBodyFeatureParameters move)throw new InvalidOperationException("Unsupported body transform.");
+        _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;
+        MoveBodyX.Text=move.Translation.X.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        MoveBodyY.Text=move.Translation.Y.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        MoveBodyZ.Text=move.Translation.Z.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        MoveBodyRx.Text=move.RotationDegrees.X.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        MoveBodyRy.Text=move.RotationDegrees.Y.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        MoveBodyRz.Text=move.RotationDegrees.Z.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        MoveBodyKeepOriginal.IsChecked=move.KeepOriginal;MoveCopyBodyError.Text="";
+        MoveCopyBodyPanel.Visibility=Visibility.Visible;PropertyTitle.Text=node.Name;
+        PropertyInfo.Text="Gerçek 3B transform • orijinali koru ile multibody kopya • canlı önizleme";
+        ManagerTabs.SelectedItem=PropertyManagerTab;_loadingGraphParameters=false;UpdateMoveCopyBodyPreview();RefreshCommandState();
+    }
+
+    private FeatureDocument? MoveCopyBodyCandidate()
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not MoveCopyBodyFeatureParameters move||
+           !TryReferenceScalar(MoveBodyX.Text,out var x)||!TryReferenceScalar(MoveBodyY.Text,out var y)||!TryReferenceScalar(MoveBodyZ.Text,out var z)||
+           !TryReferenceScalar(MoveBodyRx.Text,out var rx)||!TryReferenceScalar(MoveBodyRy.Text,out var ry)||!TryReferenceScalar(MoveBodyRz.Text,out var rz))
+            return null;
+        return ReplaceGraphNode(_graphFeatureEdit with{Parameters=move with
+        {
+            Translation=new Vector3d(x,y,z),RotationDegrees=new Vector3d(rx,ry,rz),KeepOriginal=MoveBodyKeepOriginal.IsChecked==true
+        }});
+    }
+
+    private void MoveCopyBodyParameterChanged(object sender,RoutedEventArgs e)
+    {
+        if(!_loadingGraphParameters)UpdateMoveCopyBodyPreview();
+    }
+
+    private void UpdateMoveCopyBodyPreview()
+    {
+        var candidate=MoveCopyBodyCandidate();
+        if(candidate is null||_partSession is null){MoveCopyBodyError.Text="Sonlu transform değerleri girin.";return;}
+        var preview=_partSession.Preview(candidate);
+        var body=preview.Success?LastBody(candidate,id=>preview.Outputs.GetValueOrDefault(id)):null;
+        if(body is not null&&_viewer.PreviewFeatureBody(body)){MoveCopyBodyError.Text="";return;}
+        _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();
+        MoveCopyBodyError.Text=preview.Report.Nodes.LastOrDefault(n=>n.State==RebuildState.Failed)?.Error??preview.Report.Error??"Transform önizlemesi oluşturulamadı.";
+    }
+
+    private void MoveCopyBodyOk_Click(object sender,RoutedEventArgs e)
+    {
+        var candidate=MoveCopyBodyCandidate();if(candidate is null||_partSession is null)return;
+        if(!_partSession.TryCommit(candidate)){MoveCopyBodyError.Text=GraphError();return;}
+        var id=_graphFeatureEdit!.Id;EndGraphFeature();RefreshPartTree(id);Status("Gövde transformu onaylandı.");
+    }
+
+    private void SplitBody_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession())return;
+        var baseNode=CurrentSolidFeature();if(baseNode is null)return;
+        if(!TryResolveMirrorPlane(out var plane))plane=_selectedPlane;
+        var node=new FeatureNode(Guid.NewGuid(),NextGraphName("Böl"),new SplitBodyFeatureParameters(baseNode.Id,plane));
+        if(_partSession!.TryCommit(ReplaceGraphNode(node)))
+        {
+            RefreshPartTree(node.Id);Status("Gövde seçili düzlemle iki gerçek B-Rep gövdeye bölündü.");
+        }
+        else Status("Gövde bölme başarısız: "+GraphError());
+    }
+
+    private void SketchPattern_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession()||_partSession is null)return;
+        var baseNode=CurrentSolidFeature();if(baseNode is null)return;
+        var sketch=SelectedGraphNode is {Kind:FeatureKind.Sketch} selected?selected:
+            _partSession.Document.Features.LastOrDefault(n=>n.Kind==FeatureKind.Sketch);
+        if(sketch?.Parameters is not SketchFeatureParameters source||source.Sketch.Points.Values.Count(p=>p.Id!=0)<1)
+        {Status("Çizim Güdümlü Dizilim için en az bir noktalı sketch seçin.");return;}
+        var node=new FeatureNode(Guid.NewGuid(),NextGraphName("Çizim Dizilimi"),
+            new SketchPatternFeatureParameters(baseNode.Id,sketch.Id));
+        if(_partSession.TryCommit(ReplaceGraphNode(node)))
+        {
+            RefreshPartTree(node.Id);Status("Çizim noktalarına göre gerçek multibody dizilim oluşturuldu.");
+        }
+        else Status("Çizim dizilimi başarısız: "+GraphError());
+    }
+
+    private void Dome_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession())return;
+        var baseNode=CurrentSolidFeature();if(baseNode is null)return;
+        _viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Face);
+        BeginDomeFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Kubbe"),new DomeFeatureParameters(baseNode.Id,10),
+            References:SelectedFaceReferences(baseNode.Id).Take(1).ToArray()));
+    }
+
+    private void BeginDomeFeature(FeatureNode node)
+    {
+        if(node.Parameters is not DomeFeatureParameters dome)throw new InvalidOperationException("Unsupported dome.");
+        _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;
+        DomeHeight.Text=dome.Height.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        DomeSelectionText.Text=(node.References?.Length??0)==1?"Yüz seçili":"Düzlemsel yüz seçin.";
+        DomeError.Text="";DomePanel.Visibility=Visibility.Visible;
+        PropertyTitle.Text=node.Name;PropertyInfo.Text="Gerçek küresel OCCT kubbe • negatif yükseklik içe çökertme • canlı önizleme";
+        ManagerTabs.SelectedItem=PropertyManagerTab;_loadingGraphParameters=false;
+        if((node.References?.Length??0)==1)UpdateDomePreview();RefreshCommandState();
+    }
+
+    internal void UpdateActiveDomeSelection()
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not DomeFeatureParameters dome)return;
+        var refs=SelectedFaceReferences(dome.BaseFeatureId).Take(1).ToArray();
+        _graphFeatureEdit=_graphFeatureEdit with{References=refs};
+        DomeSelectionText.Text=refs.Length==1?"Yüz seçili":"Düzlemsel yüz seçin.";UpdateDomePreview();
+    }
+
+    private FeatureDocument? DomeCandidate()
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not DomeFeatureParameters dome||
+           (_graphFeatureEdit.References?.Length??0)!=1||!TryReferenceScalar(DomeHeight.Text,out var height)||Math.Abs(height)<=1e-9)return null;
+        return ReplaceGraphNode(_graphFeatureEdit with{Parameters=dome with{Height=height}});
+    }
+
+    private void DomeParameterChanged(object sender,RoutedEventArgs e){if(!_loadingGraphParameters)UpdateDomePreview();}
+    private void UpdateDomePreview()
+    {
+        var candidate=DomeCandidate();
+        if(candidate is null||_partSession is null){DomeError.Text="Yüz ve sıfırdan farklı yükseklik gerekiyor.";return;}
+        var preview=_partSession.Preview(candidate);
+        var body=preview.Success?LastBody(candidate,id=>preview.Outputs.GetValueOrDefault(id)):null;
+        if(body is not null&&_viewer.PreviewFeatureBody(body)){DomeError.Text="";return;}
+        _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();
+        DomeError.Text=preview.Report.Nodes.LastOrDefault(n=>n.State==RebuildState.Failed)?.Error??preview.Report.Error??"Kubbe önizlemesi oluşturulamadı.";
+    }
+    private void DomeOk_Click(object sender,RoutedEventArgs e)
+    {
+        var candidate=DomeCandidate();if(candidate is null||_partSession is null)return;
+        if(!_partSession.TryCommit(candidate)){DomeError.Text=GraphError();return;}
+        var id=_graphFeatureEdit!.Id;EndGraphFeature();RefreshPartTree(id);Status("Kubbe onaylandı.");
+    }
+
+    private void HoleWizard_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession())return;
+        var baseNode=CurrentSolidFeature();if(baseNode is null)return;
+        _viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Face);
+        BeginHoleWizardFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Delik Sihirbazı"),
+            new HoleWizardFeatureParameters(baseNode.Id,Vector3d.Zero,10,20,HoleWizardType.Simple,18,5,true)));
+        UpdateActiveHoleWizardSelection();
+    }
+
+    private void BeginHoleWizardFeature(FeatureNode node)
+    {
+        if(node.Parameters is not HoleWizardFeatureParameters hole)throw new InvalidOperationException("Unsupported hole wizard.");
+        _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;
+        HoleWizardTypeBox.Items.Clear();
+        foreach(var type in Enum.GetValues<HoleWizardType>())HoleWizardTypeBox.Items.Add(new ComboBoxItem{Content=type switch
+        {HoleWizardType.Simple=>"Basit",HoleWizardType.Counterbore=>"Silindirik Havşa",_=>"Konik Havşa"},Tag=type});
+        HoleWizardTypeBox.SelectedIndex=(int)hole.Type;
+        HoleWizardDiameter.Text=hole.Diameter.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        HoleWizardDepth.Text=hole.Depth.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        HoleWizardCounterDiameter.Text=hole.CounterDiameter.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        HoleWizardCounterDepth.Text=hole.CounterDepth.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        HoleWizardReverse.IsChecked=hole.Reverse;HoleWizardSelectionText.Text="Düzlemsel yüz seçin ve delik merkezini tıklayın.";
+        HoleWizardError.Text="";HoleWizardPanel.Visibility=Visibility.Visible;
+        PropertyTitle.Text=node.Name;PropertyInfo.Text="Basit / Counterbore / Countersink • gerçek Boolean kesici • persistent yüz referansı";
+        ManagerTabs.SelectedItem=PropertyManagerTab;_loadingGraphParameters=false;RefreshCommandState();
+    }
+
+    internal void UpdateActiveHoleWizardSelection()
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not HoleWizardFeatureParameters hole)return;
+        if(!_viewer.TryGetSelectedPlanarFace(out var face))return;
+        var faceReference=_viewer.SelectedFaceReference();if(string.IsNullOrWhiteSpace(faceReference))return;
+        var center=new Vector3d(face.Origin.X,face.Origin.Y,face.Origin.Z);
+        if(_viewer.ScreenToPlane(_lastMouseX,_lastMouseY,face.Origin.X,face.Origin.Y,face.Origin.Z,
+            face.Normal.X,face.Normal.Y,face.Normal.Z,out var world))center=new Vector3d(world.X,world.Y,world.Z);
+        _graphFeatureEdit=_graphFeatureEdit with{Parameters=hole with{Center=center},
+            References=new[]{new FeatureReference(hole.BaseFeatureId,TopologyKind.Face,faceReference)}};
+        HoleWizardSelectionText.Text=$"Yüz seçildi • merkez X={center.X:0.###} Y={center.Y:0.###} Z={center.Z:0.###}";
+        UpdateHoleWizardPreview();
+    }
+
+    private FeatureDocument? HoleWizardCandidate()
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not HoleWizardFeatureParameters hole||
+           (_graphFeatureEdit.References?.Length??0)!=1||
+           (HoleWizardTypeBox.SelectedItem as ComboBoxItem)?.Tag is not HoleWizardType type||
+           !DimensionNumbers.TryParse(HoleWizardDiameter.Text,SketchDimensionType.LineLength,out var dia,out _)||
+           !DimensionNumbers.TryParse(HoleWizardDepth.Text,SketchDimensionType.LineLength,out var depth,out _)||
+           !DimensionNumbers.TryParse(HoleWizardCounterDiameter.Text,SketchDimensionType.LineLength,out var counterDia,out _)||
+           !DimensionNumbers.TryParse(HoleWizardCounterDepth.Text,SketchDimensionType.LineLength,out var counterDepth,out _))return null;
+        if(dia<=1e-9||depth<=1e-9||(type!=HoleWizardType.Simple&&(counterDia<=dia||counterDepth<=1e-9)))return null;
+        return ReplaceGraphNode(_graphFeatureEdit with{Parameters=hole with
+        {Diameter=dia,Depth=depth,Type=type,CounterDiameter=counterDia,CounterDepth=counterDepth,Reverse=HoleWizardReverse.IsChecked==true}});
+    }
+
+    private void HoleWizardParameterChanged(object sender,RoutedEventArgs e){if(!_loadingGraphParameters)UpdateHoleWizardPreview();}
+    private void HoleWizardParameterChanged(object sender,SelectionChangedEventArgs e){if(!_loadingGraphParameters)UpdateHoleWizardPreview();}
+    private void UpdateHoleWizardPreview()
+    {
+        var candidate=HoleWizardCandidate();
+        if(candidate is null||_partSession is null){HoleWizardError.Text="Yüz/konum ve geçerli delik ölçüleri gerekiyor.";return;}
+        var preview=_partSession.Preview(candidate);
+        var body=preview.Success?LastBody(candidate,id=>preview.Outputs.GetValueOrDefault(id)):null;
+        if(body is not null&&_viewer.PreviewFeatureBody(body)){HoleWizardError.Text="";return;}
+        _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();
+        HoleWizardError.Text=preview.Report.Nodes.LastOrDefault(n=>n.State==RebuildState.Failed)?.Error??preview.Report.Error??"Delik Sihirbazı önizlemesi oluşturulamadı.";
+    }
+    private void HoleWizardOk_Click(object sender,RoutedEventArgs e)
+    {
+        var candidate=HoleWizardCandidate();if(candidate is null||_partSession is null)return;
+        if(!_partSession.TryCommit(candidate)){HoleWizardError.Text=GraphError();return;}
+        var id=_graphFeatureEdit!.Id;EndGraphFeature();RefreshPartTree(id);Status("Delik Sihirbazı feature'ı onaylandı.");
+    }
+
+    private void AdvancedBodyCancel_Click(object sender,RoutedEventArgs e)=>EndGraphFeature();
+
     private void Shell_Click(object sender,RoutedEventArgs e)
     {
         if(_inSketch||_extrudeCommandActive||!EnsurePartSession())return;
@@ -2420,6 +2716,10 @@ public partial class MainWindow
             BoundaryFeatureParameters or BoundaryCutFeatureParameters or StructuralMemberFeatureParameters){BeginMultiSketchFeature(node);return;}
         if(node.Parameters is StructuralTrimFeatureParameters){BeginStructuralTrimFeature(node);return;}
         if(node.Parameters is EndCapFeatureParameters){BeginEndCapFeature(node);return;}
+        if(node.Parameters is BodyBooleanFeatureParameters){BeginBodyBooleanFeature(node);return;}
+        if(node.Parameters is MoveCopyBodyFeatureParameters){BeginMoveCopyBodyFeature(node);return;}
+        if(node.Parameters is DomeFeatureParameters){BeginDomeFeature(node);return;}
+        if(node.Parameters is HoleWizardFeatureParameters){BeginHoleWizardFeature(node);return;}
         if(node.Parameters is ShellFeatureParameters){BeginShellFeature(node);return;}
         if(node.Parameters is DraftFeatureParameters){BeginDraftFeature(node);return;}
         if(node.Parameters is RibFeatureParameters){BeginRibFeature(node);return;}
