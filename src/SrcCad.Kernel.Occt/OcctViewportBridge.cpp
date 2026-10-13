@@ -251,19 +251,38 @@ namespace SrcCad::Kernel::Occt
 
     struct FaceSemanticSignature
     {
+        int Type=0; // 0=planar, 1=cylindrical
         double Area=0.0;
-        double X=0.0,Y=0.0,Z=0.0;
-        double NX=0.0,NY=0.0,NZ=0.0;
+        double X=0.0,Y=0.0,Z=0.0;     // face center (plane) or nearest axis point (cylinder)
+        double NX=0.0,NY=0.0,NZ=0.0;  // plane normal or cylinder axis
+        double Radius=0.0;
     };
 
     static bool faceSemanticSignature(const TopoDS_Face& face,FaceSemanticSignature& signature)
     {
-        gp_Pnt origin;gp_Dir u,v,normal;
-        if(!planarFaceFrame(face,origin,u,v,normal))return false;
         GProp_GProps props;BRepGProp::SurfaceProperties(face,props);
+        if(!std::isfinite(props.Mass())||props.Mass()<=1e-12)return false;
+
+        gp_Pnt origin;gp_Dir u,v,normal;
+        if(planarFaceFrame(face,origin,u,v,normal))
+        {
+            gp_Pnt center=props.CentreOfMass();
+            signature={0,props.Mass(),center.X(),center.Y(),center.Z(),normal.X(),normal.Y(),normal.Z(),0.0};
+            return true;
+        }
+
+        BRepAdaptor_Surface surface(face,true);
+        if(surface.GetType()!=GeomAbs_Cylinder)return false;
+        gp_Cylinder cylinder=surface.Cylinder();
+        gp_Ax1 axis=cylinder.Axis();
+        gp_Dir direction=axis.Direction();
+        gp_Pnt base=axis.Location();
         gp_Pnt center=props.CentreOfMass();
-        signature={props.Mass(),center.X(),center.Y(),center.Z(),normal.X(),normal.Y(),normal.Z()};
-        return std::isfinite(signature.Area)&&signature.Area>1e-12;
+        gp_Vec toCenter(base,center);
+        gp_Pnt axisPoint=base.Translated(gp_Vec(direction).Multiplied(toCenter.Dot(gp_Vec(direction))));
+        signature={1,props.Mass(),axisPoint.X(),axisPoint.Y(),axisPoint.Z(),
+                   direction.X(),direction.Y(),direction.Z(),cylinder.Radius()};
+        return std::isfinite(signature.Radius)&&signature.Radius>1e-12;
     }
 
     static std::string encodeFaceReference(const TopoDS_Face& face)
@@ -271,21 +290,29 @@ namespace SrcCad::Kernel::Occt
         FaceSemanticSignature signature;
         if(!faceSemanticSignature(face,signature))return {};
         std::ostringstream stream;
-        stream<<std::setprecision(17)<<"F;"<<signature.Area<<";"<<signature.X<<";"<<signature.Y<<";"<<signature.Z
+        stream<<std::setprecision(17)<<(signature.Type==1?"C;":"F;")
+              <<signature.Area<<";"<<signature.X<<";"<<signature.Y<<";"<<signature.Z
               <<";"<<signature.NX<<";"<<signature.NY<<";"<<signature.NZ;
+        if(signature.Type==1)stream<<";"<<signature.Radius;
         return stream.str();
     }
 
     static bool decodeFaceReference(const std::string& text,FaceSemanticSignature& signature)
     {
-        if(text.rfind("F;",0)!=0)return false;
+        const bool cylindrical=text.rfind("C;",0)==0;
+        if(!cylindrical&&text.rfind("F;",0)!=0)return false;
         std::string payload=text.substr(2);
         std::replace(payload.begin(),payload.end(),';',' ');
         std::istringstream stream(payload);
-        return (stream>>signature.Area>>signature.X>>signature.Y>>signature.Z>>signature.NX>>signature.NY>>signature.NZ) &&
-               std::isfinite(signature.Area)&&signature.Area>1e-12&&
+        signature.Type=cylindrical?1:0;
+        const bool common=(stream>>signature.Area>>signature.X>>signature.Y>>signature.Z>>
+                           signature.NX>>signature.NY>>signature.NZ);
+        if(!common)return false;
+        if(cylindrical&&!(stream>>signature.Radius))return false;
+        return std::isfinite(signature.Area)&&signature.Area>1e-12&&
                std::isfinite(signature.X)&&std::isfinite(signature.Y)&&std::isfinite(signature.Z)&&
-               std::isfinite(signature.NX)&&std::isfinite(signature.NY)&&std::isfinite(signature.NZ);
+               std::isfinite(signature.NX)&&std::isfinite(signature.NY)&&std::isfinite(signature.NZ)&&
+               (!cylindrical||(std::isfinite(signature.Radius)&&signature.Radius>1e-12));
     }
 
     static bool supportFaceForEdge(const TopoDS_Shape& shape,const TopoDS_Edge& target,
