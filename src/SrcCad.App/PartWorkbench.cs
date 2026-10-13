@@ -2380,6 +2380,7 @@ public partial class MainWindow
         PropertyTitle.Text="Ölç";
         PropertyInfo.Text="Kenar, dairesel kenar, yüz veya köşe seçin. Sonuç her seçimde canlı güncellenir.";
         MeasureStatusText.Text="ÖLÇ: seçim bekleniyor";
+        StatusUnitText.Text="";
         ManagerTabs.SelectedItem=PropertyManagerTab;
         Status("Ölç aktif • geometriye tıklayın • Esc veya Yüz/Kenar/Köşe seçimiyle çıkın.");
     }
