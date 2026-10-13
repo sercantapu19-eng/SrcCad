@@ -33,7 +33,7 @@
                     <TextBlock Text="Parametrik CAD • OCCT B-Rep" FontSize="11" Foreground="#B8C6D2"/>
                 </StackPanel>
                 <Border Grid.Column="2" VerticalAlignment="Center" Background="#263541" CornerRadius="12" Padding="12,4">
-                    <TextBlock Text="PART DESIGN • ALPHA" Foreground="#DDE8F0" FontSize="11"/>
+                    <TextBlock Text="PARAMETRİK CAD • ALPHA" Foreground="#DDE8F0" FontSize="11"/>
                 </Border>
             </Grid>
         </Border>
@@ -58,9 +58,30 @@
                 <MenuItem Header="Geri Al" InputGestureText="Ctrl+Z" Click="UndoActiveDocument_Click"/>
                 <MenuItem Header="Yinele" InputGestureText="Ctrl+Y" Click="RedoActiveDocument_Click"/>
             </MenuItem>
-            <MenuItem Header="Görünüm" IsEnabled="False"/>
-            <MenuItem Header="Araçlar" IsEnabled="False"/>
-            <MenuItem Header="Yardım" IsEnabled="False"/>
+            <MenuItem Header="Görünüm">
+                <MenuItem Header="Ekrana Sığdır" InputGestureText="F" Click="Fit_Click"/>
+                <MenuItem Header="Seçime Dik Bak" InputGestureText="Ctrl+8" Click="NormalTo_Click"/>
+                <Separator/>
+                <MenuItem Header="İzometrik" Click="Iso_Click"/>
+                <MenuItem Header="Ön" Click="Front_Click"/>
+                <MenuItem Header="Üst" Click="Top_Click"/>
+                <MenuItem Header="Sağ" Click="Right_Click"/>
+                <Separator/>
+                <MenuItem Header="Gölgeli + Kenarlı" Click="ShadedEdges_Click"/>
+                <MenuItem Header="Gölgeli" Click="Shaded_Click"/>
+                <MenuItem Header="Tel Kafes" Click="Wireframe_Click"/>
+            </MenuItem>
+            <MenuItem Header="Araçlar">
+                <MenuItem Header="Ölç" Click="InspectMeasure_Click"/>
+                <MenuItem Header="Kütle / Geometri Özellikleri" Click="InspectMassProperties_Click"/>
+                <MenuItem Header="Geometri Kontrolü" Click="InspectGeometry_Click"/>
+                <Separator/>
+                <MenuItem Header="Kesit Görünümü" Click="InspectSection_Click"/>
+                <MenuItem Header="Draft Analizi" Click="InspectDraftAnalysis_Click"/>
+                <MenuItem Header="Çakışma Kontrolü" Click="InspectInterference_Click"/>
+                <MenuItem Header="B-Rep Karşılaştır" Click="InspectCompare_Click"/>
+            </MenuItem>
+            <MenuItem Header="Yardım" Click="About_Click"/>
         </Menu>
 
         <TabControl Grid.Row="2" x:Name="CommandTabs" Background="#F5F7F9" BorderBrush="#C8D1D9">
