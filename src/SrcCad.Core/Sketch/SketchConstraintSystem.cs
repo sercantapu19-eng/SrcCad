@@ -11,12 +11,12 @@ public sealed partial class SketchModel
             var p=ResolvePoint(r.ReferenceA!);
             var q=ResolvePoint(r.ReferenceB!);
             var axis=(SketchLine)Entity(r.ReferenceC!.Id)!;
-            var a=Point(axis.StartPointId).Position;var b=Point(axis.EndPointId).Position;
+            var axisStart=Point(axis.StartPointId).Position;var axisEnd=Point(axis.EndPointId).Position;
             var mid=new Point2d((p.X+q.X)/2,(p.Y+q.Y)/2);
-            var dx=b.X-a.X;var dy=b.Y-a.Y;
-            var length=Math.Max(1e-12,Point2d.Distance(a,b));
+            var dx=axisEnd.X-axisStart.X;var dy=axisEnd.Y-axisStart.Y;
+            var length=Math.Max(1e-12,Point2d.Distance(axisStart,axisEnd));
             return new[]{
-                SignedLineDistance(mid,a,b),
+                SignedLineDistance(mid,axisStart,axisEnd),
                 ((q.X-p.X)*dx+(q.Y-p.Y)*dy)/length
             };
         }
@@ -238,8 +238,8 @@ public sealed partial class SketchModel
             var badDimensions=Dimensions.Where(d=>d.Driving&&DimensionDiagnosticResiduals(d).Any(v=>!double.IsFinite(v)||Math.Abs(v)>tolerance))
                 .Select(d=>$"Ölçü #{d.Id}").ToArray();
             var details=badRelations.Concat(badDimensions).Take(8).ToArray();
-            var text=details.Length==0?"Çakışan ilişkiler / ölçüler":"Çakışma: "+string.Join(", ",details);
-            return new(vars.Count,false,true,text);
+            var conflictText=details.Length==0?"Çakışan ilişkiler / ölçüler":"Çakışma: "+string.Join(", ",details);
+            return new(vars.Count,false,true,conflictText);
         }
         var rank=Rank(Jacobian(vars,residual));var dof=vars.Count-rank;
         var redundant=Math.Max(0,residual.Length-rank);
