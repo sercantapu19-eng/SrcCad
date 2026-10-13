@@ -7,6 +7,7 @@ namespace SrcCad.Core.Features;
 public interface IPartGeometryKernel
 {
     string Extrude(SketchModel source,double depth);
+    string ExtrudeUpToFace(string baseBody,SketchModel source,string faceReference);
     string Cut(string baseBody,SketchModel source,double depth,ExtrusionTermination termination);
     string Fillet(string baseBody,IReadOnlyList<string> edgeReferences,double radius);
     string Chamfer(string baseBody,IReadOnlyList<string> edgeReferences,double distance);
@@ -71,7 +72,15 @@ public sealed class PartFeatureEvaluator(IPartGeometryKernel kernel) : IFeatureE
         {
             var sketch=Sketch(extrude.SketchId);
             string tool;
-            if(extrude.MidPlane)
+            if(extrude.UpToFace)
+            {
+                if(extrude.BaseFeatureId is not Guid targetBase)
+                    throw new InvalidOperationException("Up-to-face extrusion requires a base solid.");
+                var reference=(node.References??Array.Empty<FeatureReference>())
+                    .Single(r=>r.Kind==TopologyKind.Face&&r.ProducerId==targetBase).SemanticName;
+                tool=kernel.ExtrudeUpToFace(Base(targetBase),sketch,reference);
+            }
+            else if(extrude.MidPlane)
             {
                 var half=Math.Abs(extrude.Depth)/2.0;
                 var positive=kernel.Extrude(sketch,half);
