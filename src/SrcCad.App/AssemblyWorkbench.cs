@@ -604,7 +604,9 @@ public partial class MainWindow
 
     private void AssemblyMateCancel_Click(object sender,RoutedEventArgs e)
     {
-        AssemblyMatePanel.Visibility=Visibility.Collapsed;_assemblyEditingMateId=null;ManagerTabs.SelectedItem=FeatureManagerTab;
+        AssemblyMatePanel.Visibility=Visibility.Collapsed;_assemblyEditingMateId=null;
+        _assemblyPickedMateA=null;_assemblyPickedMateB=null;
+        ManagerTabs.SelectedItem=FeatureManagerTab;
     }
 
     private void AssemblyExplode_Click(object sender,RoutedEventArgs e)
