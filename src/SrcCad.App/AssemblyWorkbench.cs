@@ -346,6 +346,21 @@ public partial class MainWindow
         _assemblyBodies.Remove(id);RefreshAssemblyTree();RenderAssembly();Status("Bileşen montajdan kaldırıldı.");
     }
 
+    internal bool DeleteSelectedAssemblyTreeItem()
+    {
+        if(_assemblyDocument is null||FeatureTree.SelectedItem is not TreeViewItem item)return false;
+        if(item.Tag is Guid componentId&&_assemblyDocument.Components.Any(c=>c.Id==componentId))
+        {
+            RemoveAssemblyComponent(componentId);return true;
+        }
+        if(item.Tag is string tag&&tag.StartsWith("assembly-mate:",StringComparison.Ordinal)&&
+           Guid.TryParse(tag["assembly-mate:".Length..],out var mateId))
+        {
+            RemoveAssemblyMate(mateId);return true;
+        }
+        return false;
+    }
+
     private void AssemblyMove_Click(object sender,RoutedEventArgs e)=>BeginAssemblyMove();
 
     private void AssemblyMate_Click(object sender,RoutedEventArgs e)=>BeginAssemblyMate(null);
