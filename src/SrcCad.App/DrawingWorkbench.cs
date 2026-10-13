@@ -122,6 +122,10 @@ public partial class MainWindow
     {
         if(_drawingDocument is null)return;
         var active=ActiveDrawingSheet();
+        if(_drawingDocument.Sheets.Length<=1)
+        {
+            Status("Teknik resimde en az bir pafta kalmalı.");return;
+        }
         try
         {
             var index=Array.FindIndex(_drawingDocument.Sheets,s=>s.Id==active.Id);
