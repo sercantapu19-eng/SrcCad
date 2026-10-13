@@ -7,7 +7,7 @@ using SrcCad.Core.Persistence;
 
 namespace SrcCad.Core.Features;
 
-public enum FeatureKind { Sketch, SpatialSketch, Extrude, ExtrudedCut, Fillet, Chamfer, Hole, Revolve, RevolvedCut, Sweep, SweptCut, Loft, LoftedCut, Shell, Draft, Rib, Mirror, LinearPattern, CircularPattern, ReferencePlane, ReferenceAxis, ReferencePoint, SheetMetalBase, SheetMetalCut, SheetMetalEdgeFlange, SheetMetalMiterFlange, SheetMetalConvert, SheetMetalHem, SheetMetalJog, SheetMetalRip, SheetMetalCornerRelief, StructuralMember, EndCap, WeldBead }
+public enum FeatureKind { Sketch, SpatialSketch, Extrude, ExtrudedCut, Fillet, Chamfer, Hole, Revolve, RevolvedCut, Sweep, SweptCut, Loft, LoftedCut, Shell, Draft, Rib, Mirror, LinearPattern, CircularPattern, ReferencePlane, ReferenceAxis, ReferencePoint, SheetMetalBase, SheetMetalCut, SheetMetalEdgeFlange, SheetMetalMiterFlange, SheetMetalConvert, SheetMetalHem, SheetMetalJog, SheetMetalRip, SheetMetalCornerRelief, StructuralMember, StructuralTrim, EndCap, WeldBead }
 public enum RebuildState { Clean, Dirty, Suppressed, Blocked, Failed }
 public enum ExtrusionTermination { Blind, ThroughAll }
 public enum TopologyKind { Body, Face, Edge, Vertex }
@@ -47,6 +47,7 @@ public sealed record FeatureReference(Guid ProducerId, TopologyKind Kind, string
 [JsonDerivedType(typeof(SheetMetalRipFeatureParameters), "sheet-metal-rip")]
 [JsonDerivedType(typeof(SheetMetalCornerReliefFeatureParameters), "sheet-metal-corner-relief")]
 [JsonDerivedType(typeof(StructuralMemberFeatureParameters), "structural-member")]
+[JsonDerivedType(typeof(StructuralTrimFeatureParameters), "structural-trim")]
 [JsonDerivedType(typeof(EndCapFeatureParameters), "end-cap")]
 [JsonDerivedType(typeof(WeldBeadFeatureParameters), "weld-bead")]
 public abstract record FeatureParameters;
@@ -87,6 +88,7 @@ public sealed record SheetMetalJogFeatureParameters(Guid BaseFeatureId,double He
 public sealed record SheetMetalRipFeatureParameters(Guid BaseFeatureId,double Gap) : FeatureParameters;
 public sealed record SheetMetalCornerReliefFeatureParameters(Guid BaseFeatureId,double Radius) : FeatureParameters;
 public sealed record StructuralMemberFeatureParameters(Guid ProfileSketchId, Guid PathSketchId) : FeatureParameters;
+public sealed record StructuralTrimFeatureParameters(Guid BaseFeatureId,PlaneFrame Plane,bool KeepPositive=true) : FeatureParameters;
 public sealed record EndCapFeatureParameters(Guid BaseFeatureId,double Thickness,bool Reverse=false) : FeatureParameters;
 public sealed record WeldBeadFeatureParameters(Guid BaseFeatureId,double Radius) : FeatureParameters;
 public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Parameters,
@@ -112,7 +114,8 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
       SheetMetalJogFeatureParameters => FeatureKind.SheetMetalJog,
       SheetMetalRipFeatureParameters => FeatureKind.SheetMetalRip,
       SheetMetalCornerReliefFeatureParameters => FeatureKind.SheetMetalCornerRelief,
-      StructuralMemberFeatureParameters => FeatureKind.StructuralMember, EndCapFeatureParameters => FeatureKind.EndCap,
+      StructuralMemberFeatureParameters => FeatureKind.StructuralMember, StructuralTrimFeatureParameters => FeatureKind.StructuralTrim,
+      EndCapFeatureParameters => FeatureKind.EndCap,
       WeldBeadFeatureParameters => FeatureKind.WeldBead,
       _ => throw new InvalidDataException("Unsupported feature") };
     [JsonIgnore] public Guid[] Dependencies => (Parameters switch
@@ -148,6 +151,7 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
         SheetMetalRipFeatureParameters s => new[] { s.BaseFeatureId },
         SheetMetalCornerReliefFeatureParameters s => new[] { s.BaseFeatureId },
         StructuralMemberFeatureParameters s => new[] { s.ProfileSketchId,s.PathSketchId },
+        StructuralTrimFeatureParameters s => new[] { s.BaseFeatureId },
         EndCapFeatureParameters e => new[] { e.BaseFeatureId },
         WeldBeadFeatureParameters w => new[] { w.BaseFeatureId },
         _ => Array.Empty<Guid>()
@@ -418,6 +422,10 @@ public static class FeatureDocumentFile
                        document.Node(s.ProfileSketchId).Kind!=FeatureKind.Sketch||
                        document.Node(s.PathSketchId).Kind is not (FeatureKind.Sketch or FeatureKind.SpatialSketch))
                         throw new InvalidDataException("Invalid structural member.");
+                    break;
+                case StructuralTrimFeatureParameters s:
+                    if(document.Node(s.BaseFeatureId).Kind==FeatureKind.Sketch)throw new InvalidDataException("Invalid structural trim base.");
+                    _=s.Plane.Validate();
                     break;
                 case EndCapFeatureParameters e:
                     if(document.Node(e.BaseFeatureId).Kind==FeatureKind.Sketch||!double.IsFinite(e.Thickness)||e.Thickness<=1e-9||
