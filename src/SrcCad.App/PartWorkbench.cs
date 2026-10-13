@@ -256,6 +256,37 @@ public partial class MainWindow
         BeginEdgeFeature(node);
     }
 
+    private void Hem_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession())return;
+        var defaults=SheetMetalDefaults();var baseNode=CurrentSolidFeature();
+        if(defaults is null||baseNode is null){Status("Hem için sac levha gövdesi gerekiyor.");return;}
+        _viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Edge);
+        BeginEdgeFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Hem"),
+            new SheetMetalHemFeatureParameters(baseNode.Id,15,defaults.Value.Thickness,defaults.Value.BendRadius,false),
+            References:SelectedEdgeReferences(baseNode.Id)));
+    }
+
+    private void Rip_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession())return;
+        var baseNode=CurrentSolidFeature();
+        if(SheetMetalDefaults() is null||baseNode is null){Status("Yırtık için sac levha gövdesi gerekiyor.");return;}
+        _viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Edge);
+        BeginEdgeFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Yırtık"),
+            new SheetMetalRipFeatureParameters(baseNode.Id,1),References:SelectedEdgeReferences(baseNode.Id)));
+    }
+
+    private void CornerRelief_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession())return;
+        var baseNode=CurrentSolidFeature();
+        if(SheetMetalDefaults() is null||baseNode is null){Status("Köşe Rölyefi için sac levha gövdesi gerekiyor.");return;}
+        _viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Edge);
+        BeginEdgeFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Köşe Rölyefi"),
+            new SheetMetalCornerReliefFeatureParameters(baseNode.Id,3),References:SelectedEdgeReferences(baseNode.Id)));
+    }
+
     private void WeldBead_Click(object sender,RoutedEventArgs e)
     {
         if(_inSketch||_extrudeCommandActive||!EnsurePartSession())return;
