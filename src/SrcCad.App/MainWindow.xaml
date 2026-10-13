@@ -192,8 +192,8 @@
                     <Button Style="{StaticResource CadCommandButton}" Content="Hem" Click="Hem_Click" ToolTip="Sac kenarını seçin; gerçek geri-kıvrılmış hem B-Rep oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Jog" Click="Jog_Click" ToolTip="Sac kenarını seçin; yükseklik ve ofsetle gerçek Z-step jog oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Çizilmiş Büküm" Click="SketchedBend_Click" ToolTip="Tek çizgili sketch'i büküm ekseni olarak kullanıp gerçek sac bükümü oluşturur."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Açınım" Click="Unfold_Click" ToolTip="Son parametrik çizilmiş bükümü ters açıyla açar."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Katla" Click="Fold_Click" ToolTip="Son açınım işlemini yeniden katlar."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Açınım" Click="Unfold_Click" ToolTip="Tüm aktif parametrik bükümleri ters sırada açarak gerçek düz sac gövdesi oluşturur."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Katla" Click="Fold_Click" ToolTip="Son çoklu açınımın büküm setini parametrik sırada yeniden uygular."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Yırtık" Click="Rip_Click" ToolTip="Seçili sac kenarı boyunca parametrik boşluk keser."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Köşe Rölyefi" Click="CornerRelief_Click" ToolTip="Seçili kenar uçlarında gerçek dairesel köşe rahatlatması keser."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Sac'a Dönüştür" Click="ConvertToSheetMetal_Click" x:Name="ConvertToSheetMetalButton" ToolTip="Mevcut katıya sac kalınlığı, büküm yarıçapı ve K-faktörü meta verisini parametrik feature olarak bağlar."/>
@@ -407,6 +407,18 @@
                                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                     <Button Content="✓" Width="52" Height="34" Click="SheetBendOk_Click"/>
                                     <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="SheetBendCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="SheetFlattenPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock x:Name="SheetFlattenTitle" Text="Açınım" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <TextBlock Text="Büküm Seti" FontWeight="Bold"/>
+                                <TextBlock x:Name="SheetFlattenSummary" TextWrapping="Wrap" Margin="0,4,0,8"/>
+                                <TextBlock Text="Tüm aktif bükümler parametrik sıraya göre birlikte açılır/yeniden katlanır." Foreground="#5F6B76" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="SheetFlattenError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="SheetFlattenOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="SheetFlattenCancel_Click"/>
                                 </StackPanel>
                             </StackPanel>
 
