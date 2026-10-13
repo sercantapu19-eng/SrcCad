@@ -1522,11 +1522,12 @@ namespace SrcCad::Kernel::Occt
         catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
     }
 
-    String^ OcctFeatureKernel::Loft(String^ baseBody,array<array<double>^>^ outers,array<array<double>^>^ circles,array<array<double>^>^ frames)
+    String^ OcctFeatureKernel::Loft(String^ baseBody,array<array<double>^>^ outers,array<array<double>^>^ holes,
+        array<array<double>^>^ circleHoles,array<array<double>^>^ circles,array<array<double>^>^ frames)
     {
         try
         {
-            TopoDS_Shape lofted=featureLoft(outers,circles,frames);
+            TopoDS_Shape lofted=featureLoft(outers,holes,circleHoles,circles,frames);
             if(String::IsNullOrWhiteSpace(baseBody))return encodeFeature(lofted);
             TopoDS_Shape baseShape=decodeFeature(baseBody);
             BRepAlgoAPI_Fuse fuse(baseShape,lofted);fuse.Build();
@@ -1536,12 +1537,13 @@ namespace SrcCad::Kernel::Occt
         catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
     }
 
-    String^ OcctFeatureKernel::LoftCut(String^ baseBody,array<array<double>^>^ outers,array<array<double>^>^ circles,array<array<double>^>^ frames)
+    String^ OcctFeatureKernel::LoftCut(String^ baseBody,array<array<double>^>^ outers,array<array<double>^>^ holes,
+        array<array<double>^>^ circleHoles,array<array<double>^>^ circles,array<array<double>^>^ frames)
     {
         try
         {
             TopoDS_Shape baseShape=decodeFeature(baseBody);const double before=featureVolume(baseShape);
-            TopoDS_Shape tool=featureLoft(outers,circles,frames);
+            TopoDS_Shape tool=featureLoft(outers,holes,circleHoles,circles,frames);
             BRepAlgoAPI_Cut cut(baseShape,tool);cut.Build();
             if(!cut.IsDone())throw gcnew InvalidOperationException("OCCT lofted cut failed.");
             TopoDS_Shape result=cut.Shape();const double after=featureVolume(result);
