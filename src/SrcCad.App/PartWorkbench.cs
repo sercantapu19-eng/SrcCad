@@ -664,6 +664,66 @@ public partial class MainWindow
         => path.Entities.OfType<SketchLine>().Where(l=>!l.Construction)
             .Sum(l=>Point2d.Distance(path.Point(l.StartPointId).Position,path.Point(l.EndPointId).Position));
 
+    private void ProfileLibrary_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession()||_partSession is null)return;
+        var menu=new ContextMenu();
+        void Add(string title,Action action)
+        {
+            var item=new MenuItem{Header=title};item.Click+=(_,_)=>action();menu.Items.Add(item);
+        }
+        Add("Dikdörtgen Profil",()=>CreateLibraryProfile(false));
+        Add("Dairesel Profil",()=>CreateLibraryProfile(true));
+        menu.PlacementTarget=sender as UIElement;menu.Placement=System.Windows.Controls.Primitives.PlacementMode.Bottom;menu.IsOpen=true;
+    }
+
+    private void CreateLibraryProfile(bool circle)
+    {
+        if(_partSession is null)return;
+        double width=circle?40:60,height=circle?40:40;
+        var title=circle?"Dairesel Profil Çapı":"Profil Genişliği";
+        var first=new DimensionEditDialog(title,width,"mm",text=>
+        {
+            if(!DimensionNumbers.TryParseScalar(text,out var value)||value<=1e-9)return "Pozitif ölçü girin.";
+            width=value;return null;
+        }){Owner=this};
+        if(first.ShowDialog()!=true)return;
+        if(!circle)
+        {
+            var second=new DimensionEditDialog("Profil Yüksekliği",height,"mm",text=>
+            {
+                if(!DimensionNumbers.TryParseScalar(text,out var value)||value<=1e-9)return "Pozitif ölçü girin.";
+                height=value;return null;
+            }){Owner=this};
+            if(second.ShowDialog()!=true)return;
+        }
+
+        var sketch=new SketchModel(_selectedPlane);
+        if(circle)
+        {
+            var center=sketch.CreatePointExact(new Point2d(0,0));
+            sketch.AddCircle(center,width*0.5);
+        }
+        else sketch.AddCornerRectangle(new Point2d(-width*0.5,-height*0.5),new Point2d(width*0.5,height*0.5),1e-9);
+
+        var node=new FeatureNode(Guid.NewGuid(),NextGraphName(circle?"Profil Daire":"Profil Dikdörtgen"),
+            new SketchFeatureParameters(sketch.Plane,sketch.CaptureSnapshot()));
+        if(!_partSession.TryCommit(ReplaceGraphNode(node))){Status(GraphError());return;}
+        RefreshPartTree(node.Id);
+        Status($"{node.Name} oluşturuldu • {width:0.###}"+(circle?" mm çap":$" × {height:0.###} mm"));
+    }
+
+    private void Gusset_Click(object sender,RoutedEventArgs e)
+    {
+        if(_partSession is null||!_hasSolid){Status("Köşebent için mevcut yapısal/katı gövde gerekiyor.");return;}
+        var sketch=RibSketchCandidate();
+        if(sketch is null){Status("Köşebent için gövdeye temas eden açık çizgi sketch'i oluşturun.");return;}
+        var baseNode=CurrentSolidFeature();
+        if(baseNode is null)return;
+        BeginRibFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Köşebent"),
+            new RibFeatureParameters(baseNode.Id,sketch.Id,6,30,false)));
+    }
+
     private void StructuralCutList_Click(object sender,RoutedEventArgs e)
     {
         if(_partSession is null){Status("Kesim listesi için yapısal eleman içeren parça gerekiyor.");return;}
