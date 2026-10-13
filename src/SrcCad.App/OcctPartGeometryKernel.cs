@@ -188,6 +188,10 @@ internal sealed class OcctPartGeometryKernel : IPartGeometryKernel
         => OcctFeatureKernel.Rip(baseBody,edgeReferences.ToArray(),gap);
     public string CornerRelief(string baseBody,IReadOnlyList<string> edgeReferences,double radius)
         => OcctFeatureKernel.CornerRelief(baseBody,edgeReferences.ToArray(),radius);
+    public string TrimToPlane(string baseBody,SrcCad.Core.Geometry.PlaneFrame plane,bool keepPositive)
+        => OcctFeatureKernel.TrimToPlane(baseBody,
+            new[]{plane.Origin.X,plane.Origin.Y,plane.Origin.Z,plane.U.X,plane.U.Y,plane.U.Z,plane.V.X,plane.V.Y,plane.V.Z,plane.Normal.X,plane.Normal.Y,plane.Normal.Z},
+            keepPositive);
     public string EndCap(string baseBody,string faceReference,double thickness,bool reverse)
         => OcctFeatureKernel.EndCap(baseBody,faceReference,thickness,reverse);
     public string WeldBead(string baseBody,IReadOnlyList<string> edgeReferences,double radius)
