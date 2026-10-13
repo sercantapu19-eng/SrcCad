@@ -2904,7 +2904,7 @@ public partial class MainWindow
             try
             {
                 var model=GraphSketchModel(n);
-                return model.TryGetExtrusionProfile(out _,out _)||model.TryGetSingleCircle(out _);
+                return model.TryGetExtrusionRegions(out var regions)&&regions.Count>0;
             }
             catch{return false;}
         }
