@@ -2265,6 +2265,8 @@ public partial class MainWindow : Window
         CircularPatternButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
         ReferenceGeometryButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&(_sketch is not null||_partSession is not null);
         BaseFlangeButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&!_hasSolid&&(_sketch is not null||_partSession is not null);
+        SheetCutButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid&&_partSession is not null&&
+            _partSession.Document.Features.Any(n=>n.Kind==SrcCad.Core.Features.FeatureKind.SheetMetalBase)&&CutProfileCandidate() is not null;
         if(_partSession is not null)
         {
             ExtrudeButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&!_hasSolid&&SelectedGraphId is Guid sketchId&&SelectedGraphNode?.Kind==SrcCad.Core.Features.FeatureKind.Sketch;

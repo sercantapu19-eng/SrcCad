@@ -201,6 +201,29 @@ public partial class MainWindow
 
         BeginGraphFeature(node);
     }
+    private void SheetCut_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||_partSession is null)return;
+        if(!_partSession.Document.Features.Any(n=>n.Kind==FeatureKind.SheetMetalBase))
+        {Status("Sac Kes yalnız sac levha parçasında kullanılabilir.");return;}
+        var sketchNode=CutProfileCandidate();
+        if(sketchNode is null){Status("Sac Kes için sac yüzünde kapalı bir Çizim oluşturun.");return;}
+        var baseNode=CurrentSolidFeature();
+        if(baseNode is null){Status("Sac Kes için sac gövdesi gerekiyor.");return;}
+        var sketch=(SketchFeatureParameters)sketchNode.Parameters;
+        var reverse=string.Equals(sketch.Plane.Name,"Seçili Yüz",StringComparison.Ordinal);
+        var node=new FeatureNode(Guid.NewGuid(),NextGraphName("Sac Kes"),
+            new SheetMetalCutFeatureParameters(baseNode.Id,sketchNode.Id,10,ExtrusionTermination.ThroughAll,reverse));
+        var first=_partSession.Preview(ReplaceGraphNode(node));
+        if(!first.Success)
+        {
+            var cut=(SheetMetalCutFeatureParameters)node.Parameters;
+            var alternate=node with{Parameters=cut with{Reverse=!cut.Reverse}};
+            if(_partSession.Preview(ReplaceGraphNode(alternate)).Success)node=alternate;
+        }
+        BeginGraphFeature(node);
+    }
+
     private FeatureNode? CurrentSolidFeature()
         => _partSession?.Document.Ordered().LastOrDefault(n=>_partSession.Output(n.Id)?.BRep is not null);
 
@@ -1511,11 +1534,12 @@ public partial class MainWindow
         if(node.Parameters is SheetMetalBaseFeatureParameters){BeginSheetMetalBaseFeature(node);return;}
         _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;_depthWheel.Reset();
         var cut=node.Parameters as CutFeatureParameters;
-        var depth=cut?.Depth??Math.Abs(((ExtrudeFeatureParameters)node.Parameters).Depth);
+        var sheetCut=node.Parameters as SheetMetalCutFeatureParameters;
+        var depth=cut?.Depth??sheetCut?.Depth??Math.Abs(((ExtrudeFeatureParameters)node.Parameters).Depth);
         GraphDepth.Text=depth.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
-        GraphReverse.IsChecked=cut?.Reverse??((ExtrudeFeatureParameters)node.Parameters).Depth<0;
-        GraphThroughAll.IsChecked=cut?.Termination==ExtrusionTermination.ThroughAll;
-        GraphThroughAll.Visibility=cut is null?Visibility.Collapsed:Visibility.Visible;
+        GraphReverse.IsChecked=cut?.Reverse??sheetCut?.Reverse??((ExtrudeFeatureParameters)node.Parameters).Depth<0;
+        GraphThroughAll.IsChecked=(cut?.Termination??sheetCut?.Termination)==ExtrusionTermination.ThroughAll;
+        GraphThroughAll.Visibility=cut is null&&sheetCut is null?Visibility.Collapsed:Visibility.Visible;
         _loadingGraphParameters=false;
         GraphFeaturePanel.Visibility=Visibility.Visible;PropertyTitle.Text=node.Name;
         PropertyInfo.Text="Gerçek B-Rep önizleme • ✓ tek transaction • Esc iptal";
@@ -1525,9 +1549,14 @@ public partial class MainWindow
     {
         if(_graphFeatureEdit is null||!DimensionNumbers.TryParse(GraphDepth.Text,SketchDimensionType.LineLength,out var depth,out _))return null;
         var node=_graphFeatureEdit;
-        var parameters=node.Parameters is CutFeatureParameters cut
-            ? (FeatureParameters)(cut with{Depth=depth,Reverse=GraphReverse.IsChecked==true,Termination=GraphThroughAll.IsChecked==true?ExtrusionTermination.ThroughAll:ExtrusionTermination.Blind})
-            : ((ExtrudeFeatureParameters)node.Parameters) with{Depth=GraphReverse.IsChecked==true?-depth:depth};
+        var termination=GraphThroughAll.IsChecked==true?ExtrusionTermination.ThroughAll:ExtrusionTermination.Blind;
+        FeatureParameters parameters=node.Parameters switch
+        {
+            CutFeatureParameters cut=>cut with{Depth=depth,Reverse=GraphReverse.IsChecked==true,Termination=termination},
+            SheetMetalCutFeatureParameters cut=>cut with{Depth=depth,Reverse=GraphReverse.IsChecked==true,Termination=termination},
+            ExtrudeFeatureParameters extrude=>extrude with{Depth=GraphReverse.IsChecked==true?-depth:depth},
+            _=>throw new InvalidOperationException("Unsupported depth feature.")
+        };
         return ReplaceGraphNode(node with{Parameters=parameters});
     }
     private void GraphParameterChanged(object sender,RoutedEventArgs e){if(!_loadingGraphParameters)UpdateGraphPreview();}

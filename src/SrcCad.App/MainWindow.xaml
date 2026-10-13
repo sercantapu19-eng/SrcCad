@@ -140,7 +140,7 @@
                     <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadExtrudeIcon}" Content="Taban Flanş" Click="BaseFlange_Click" x:Name="BaseFlangeButton" ToolTip="Kapalı çizimden gerçek sac gövdesi oluşturur; kalınlık, büküm yarıçapı ve K-faktörü parametriktir."/>
                     <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadExtrudeIcon}" Content="Kenar Flanşı" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Gönye Flanşı" Click="CadCommandPlaceholder_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadCutIcon}" Content="Sac Kes" Click="CadCommandPlaceholder_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadCutIcon}" Content="Sac Kes" Click="SheetCut_Click" x:Name="SheetCutButton" ToolTip="Sac yüzünde oluşturulan kapalı çizimi gerçek Through-All kesme olarak uygular."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Hem" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Jog" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Çizilmiş Büküm" Click="CadCommandPlaceholder_Click"/>
