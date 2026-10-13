@@ -83,6 +83,23 @@ internal static class DrawingDocumentTests
 
         try
         {
+            var orphanDetail=new DrawingView(Guid.NewGuid(),"DETAY","C:\\Models\\Body.scpart",
+                DrawingViewType.Detail,sheet.Id,new Point2d(200,120),2.0);
+            DrawingDocumentFile.Serialize(doc with{Views=new[]{front,orphanDetail}});
+            throw new InvalidOperationException("drawing accepted dependent view without parent");
+        }
+        catch(InvalidDataException){_checks++;}
+
+        try
+        {
+            var wrongModel=top with{ModelPath="C:\\Models\\Other.scpart"};
+            DrawingDocumentFile.Serialize(doc with{Views=new[]{front,wrongModel}});
+            throw new InvalidOperationException("drawing accepted dependent view with different model");
+        }
+        catch(InvalidDataException){_checks++;}
+
+        try
+        {
             DrawingDocumentFile.Serialize(new DrawingDocument(
                 Guid.NewGuid(),
                 new[]{sheet,secondSheet},
