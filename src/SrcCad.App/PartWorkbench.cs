@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using Microsoft.Win32;
 using SrcCad.Core.Features;
 using SrcCad.Core.Geometry;
+using SrcCad.Core.Interop;
 using SrcCad.Core.Sketch;
 
 namespace SrcCad.App;
@@ -88,6 +89,78 @@ public partial class MainWindow
         catch(Exception ex)
         {
             MessageBox.Show(this,ex.Message,"CAD dışa aktarımı başarısız",MessageBoxButton.OK,MessageBoxImage.Error);
+        }
+    }
+
+    private void ImportSketchDxf_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive)return;
+        var dialog=new OpenFileDialog
+        {
+            Title="DXF Çizim İçe Aktar",
+            Filter="AutoCAD DXF (*.dxf)|*.dxf"
+        };
+        if(dialog.ShowDialog(this)!=true)return;
+        try
+        {
+            var model=DxfSketch.Import(File.ReadAllText(dialog.FileName),_selectedPlane);
+            var node=new FeatureNode(Guid.NewGuid(),NextGraphNameSafe("Çizim"),
+                new SketchFeatureParameters(model.Plane,model.CaptureSnapshot()));
+
+            if(_partSession is null)
+            {
+                var document=new FeatureDocument(Guid.NewGuid(),new[]{node});
+                _partSession=new FeatureSession<PartFeatureOutput>(
+                    document,new PartFeatureEvaluator(new OcctPartGeometryKernel()),PublishGraph);
+            }
+            else
+            {
+                if(!_partSession.TryCommit(_partSession.Document with
+                   {Features=_partSession.Document.Features.Append(node).ToArray()}))
+                    throw new InvalidOperationException(GraphError());
+            }
+
+            RefreshPartTree(node.Id);
+            Status($"DXF çizim içe aktarıldı • {model.Entities.Count} geometri • {model.Plane.Name}");
+        }
+        catch(Exception ex)
+        {
+            MessageBox.Show(this,ex.Message,"DXF içe aktarımı başarısız",MessageBoxButton.OK,MessageBoxImage.Error);
+        }
+    }
+
+    private string NextGraphNameSafe(string prefix)
+    {
+        if(_partSession is not null)return NextGraphName(prefix);
+        return prefix+"1";
+    }
+
+    private void ExportSketchDxf_Click(object sender,RoutedEventArgs e)
+    {
+        SketchModel? model=null;
+        string name="Çizim";
+        if(_inSketch&&_sketch is not null){model=_sketch;name=_graphSketchEdit?.Name??"Çizim";}
+        else if(SelectedGraphNode is {Kind:FeatureKind.Sketch} node)
+        {
+            model=GraphSketchModel(node);name=node.Name;
+        }
+        if(model is null){Status("DXF için aktif veya FeatureManager'da seçili bir Çizim gerekiyor.");return;}
+
+        var dialog=new SaveFileDialog
+        {
+            Title="Çizimi DXF Dışa Aktar",
+            Filter="AutoCAD DXF (*.dxf)|*.dxf",
+            DefaultExt=".dxf",AddExtension=true,FileName=name+".dxf"
+        };
+        if(dialog.ShowDialog(this)!=true)return;
+        try
+        {
+            File.WriteAllText(dialog.FileName,DxfSketch.Export(model),new System.Text.UTF8Encoding(false));
+            Status("Çizim DXF oluşturuldu: "+Path.GetFileName(dialog.FileName));
+        }
+        catch(Exception ex)
+        {
+            MessageBox.Show(this,ex.Message,"DXF dışa aktarımı başarısız",MessageBoxButton.OK,MessageBoxImage.Error);
         }
     }
 
