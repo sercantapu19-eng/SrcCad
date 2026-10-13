@@ -898,6 +898,41 @@ public partial class MainWindow
         }
     }
 
+    private IEnumerable<(double X1,double Y1,double X2,double Y2)> DrawingDimensionDxfLines(DrawingAnnotation note)
+    {
+        if(_drawingDocument is null||note.ViewId is not Guid viewId)yield break;
+        var view=_drawingDocument.Views.FirstOrDefault(v=>v.Id==viewId);
+        if(view is null)yield break;
+
+        if(note.Kind==DrawingAnnotationKind.LinearDimension&&ResolveLinearDimension(view,note.Data) is ProjectedSegment segment)
+        {
+            var a=DrawingToSheet(view,segment.X1,segment.Y1);
+            var b=DrawingToSheet(view,segment.X2,segment.Y2);
+            var dx=b.X-a.X;var dy=b.Y-a.Y;var length=Math.Sqrt(dx*dx+dy*dy);
+            if(length<=1e-9)yield break;
+            var nx=-dy/length;var ny=dx/length;
+            var mid=new Point2d((a.X+b.X)*0.5,(a.Y+b.Y)*0.5);
+            var offset=(note.Position.X-mid.X)*nx+(note.Position.Y-mid.Y)*ny;
+            if(Math.Abs(offset)<6)offset=offset<0?-12:12;
+            var qa=new Point2d(a.X+nx*offset,a.Y+ny*offset);
+            var qb=new Point2d(b.X+nx*offset,b.Y+ny*offset);
+            yield return(a.X,a.Y,qa.X,qa.Y);
+            yield return(b.X,b.Y,qb.X,qb.Y);
+            yield return(qa.X,qa.Y,qb.X,qb.Y);
+        }
+        else if(note.Kind==DrawingAnnotationKind.DiameterDimension&&ResolveDiameterDimension(view,note.Data) is ProjectedCircle circle)
+        {
+            var center=DrawingToSheet(view,circle.X,circle.Y);
+            var radius=circle.Radius*view.Scale;
+            var dx=note.Position.X-center.X;var dy=note.Position.Y-center.Y;
+            var len=Math.Sqrt(dx*dx+dy*dy);var ux=len>1e-9?dx/len:1.0;var uy=len>1e-9?dy/len:0.0;
+            var a=new Point2d(center.X-ux*radius,center.Y-uy*radius);
+            var b=new Point2d(center.X+ux*radius,center.Y+uy*radius);
+            yield return(a.X,a.Y,b.X,b.Y);
+            yield return(b.X,b.Y,note.Position.X,note.Position.Y);
+        }
+    }
+
     private void DrawingExportDxf_Click(object sender,RoutedEventArgs e)
     {
         if(_drawingDocument is null||_drawingDocument.Sheets.Length==0)
@@ -952,7 +987,12 @@ public partial class MainWindow
             }
 
             foreach(var note in _drawingDocument.Annotations.Where(a=>a.SheetId==sheet.Id))
-                Text(note.Position.X,note.Position.Y,ResolveDrawingAnnotationText(note));
+            {
+                foreach(var dimensionLine in DrawingDimensionDxfLines(note))
+                    Line(dimensionLine.X1,dimensionLine.Y1,dimensionLine.X2,dimensionLine.Y2,"DIMENSION");
+                Text(note.Position.X,note.Position.Y,ResolveDrawingAnnotationText(note),
+                    note.Kind is DrawingAnnotationKind.LinearDimension or DrawingAnnotationKind.DiameterDimension?"DIMENSION":"ANNOTATION");
+            }
 
             Pair(0,"ENDSEC");Pair(0,"EOF");
             Status("DXF oluşturuldu: "+Path.GetFileName(dialog.FileName));
