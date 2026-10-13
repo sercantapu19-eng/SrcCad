@@ -198,8 +198,19 @@ public static class DrawingDocumentFile
                !double.IsFinite(view.Scale)||view.Scale<=1e-9||
                (view.ParentViewId is Guid parent&&(!viewIds.Contains(parent)||parent==view.Id)))
                 throw new InvalidDataException("Invalid drawing view.");
-            if(view.ParentViewId is Guid parentId&&viewsById[parentId].SheetId!=view.SheetId)
-                throw new InvalidDataException("Dependent drawing views must stay on the same sheet.");
+            if(view.ParentViewId is Guid parentId)
+            {
+                var parent=viewsById[parentId];
+                if(parent.SheetId!=view.SheetId)
+                    throw new InvalidDataException("Dependent drawing views must stay on the same sheet.");
+                if(!string.Equals(parent.ModelPath,view.ModelPath,StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("Dependent drawing views must reference the same model.");
+            }
+            if(view.Type is DrawingViewType.Projected or DrawingViewType.Section or DrawingViewType.Detail or DrawingViewType.Broken)
+            {
+                if(view.ParentViewId is null)
+                    throw new InvalidDataException("Dependent drawing view requires a parent view.");
+            }
             if(view.Type==DrawingViewType.Section)
             {
                 if(view.SectionOrigin is not Vector3d origin||view.SectionNormal is not Vector3d normal||
