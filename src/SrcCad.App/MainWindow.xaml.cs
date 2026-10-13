@@ -731,7 +731,14 @@ public partial class MainWindow : Window
             return;
         }
 
-        var pointId = _sketch.FindPointNear(uv, tolerance);
+        // Prefer an endpoint/center handle for dragging even when the adjacent
+        // line is also inside the hit tolerance. This makes line lengthening /
+        // shortening behave like SOLIDWORKS when an under-defined endpoint is grabbed.
+        var dragTolerance=Math.Max(tolerance,_viewer.PixelToWorldLength(16));
+        var dragTarget=SketchPointerProbe.Probe(_sketch,uv,dragTolerance);
+        var pointId=dragTarget?.Reference.IsPointLike==true
+            ?_sketch.ReferencePointId(dragTarget.Reference)
+            :_sketch.FindPointNear(uv,dragTolerance);
         if (!toggle && pointId > 0 && !_sketch.Point(pointId).Fixed)
         {
             _dragSketchPointId = pointId;
