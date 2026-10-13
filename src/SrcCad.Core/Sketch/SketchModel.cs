@@ -7,10 +7,13 @@ public sealed record SketchPoint(int Id, Point2d Position, bool Fixed = false);
 [System.Text.Json.Serialization.JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]
 [System.Text.Json.Serialization.JsonDerivedType(typeof(SketchLine), "line")]
 [System.Text.Json.Serialization.JsonDerivedType(typeof(SketchCircle), "circle")]
+[System.Text.Json.Serialization.JsonDerivedType(typeof(SketchArc), "arc")]
 public abstract record SketchEntity(int Id, bool Construction);
 public sealed record SketchLine(int Id, int StartPointId, int EndPointId, bool Construction = false)
     : SketchEntity(Id, Construction);
 public sealed record SketchCircle(int Id, int CenterPointId, double Radius, bool Construction = false)
+    : SketchEntity(Id, Construction);
+public sealed record SketchArc(int Id, int CenterPointId, int StartPointId, int EndPointId, bool Clockwise = false, bool Construction = false)
     : SketchEntity(Id, Construction);
 
 public enum SketchRelationType
@@ -211,6 +214,9 @@ public sealed partial class SketchModel
                 case SketchCircle circle:
                     d = Math.Abs(Point2d.Distance(p, Point(circle.CenterPointId).Position) - circle.Radius);
                     break;
+                case SketchArc arc:
+                    d = DistanceToArc(p,arc);
+                    break;
                 default:
                     continue;
             }
@@ -239,6 +245,31 @@ public sealed partial class SketchModel
             }
         }
         return bestId;
+    }
+
+    private double DistanceToArc(Point2d p,SketchArc arc)
+    {
+        var c=Point(arc.CenterPointId).Position;
+        var a=Point(arc.StartPointId).Position;
+        var b=Point(arc.EndPointId).Position;
+        var radius=Point2d.Distance(c,a);
+        if(radius<=1e-12)return double.PositiveInfinity;
+        var angle=Math.Atan2(p.Y-c.Y,p.X-c.X);
+        var start=Math.Atan2(a.Y-c.Y,a.X-c.X);
+        var end=Math.Atan2(b.Y-c.Y,b.X-c.X);
+        static double Norm(double x){while(x<0)x+=Math.PI*2;while(x>=Math.PI*2)x-=Math.PI*2;return x;}
+        start=Norm(start);end=Norm(end);angle=Norm(angle);
+        bool within;
+        if(!arc.Clockwise)
+        {
+            var span=Norm(end-start);var rel=Norm(angle-start);within=rel<=span+1e-9;
+        }
+        else
+        {
+            var span=Norm(start-end);var rel=Norm(start-angle);within=rel<=span+1e-9;
+        }
+        if(within)return Math.Abs(Point2d.Distance(p,c)-radius);
+        return Math.Min(Point2d.Distance(p,a),Point2d.Distance(p,b));
     }
 
     private static double DistancePointToSegment(Point2d p, Point2d a, Point2d b)
@@ -291,6 +322,22 @@ public sealed partial class SketchModel
         var circle = new SketchCircle(_nextEntityId++, centerPointId, radius, construction);
         Entities.Add(circle);
         return circle;
+    }
+
+    public SketchArc AddArc(int centerPointId,int startPointId,int endPointId,bool clockwise=false,bool construction=false)
+    {
+        if(!Points.ContainsKey(centerPointId)||!Points.ContainsKey(startPointId)||!Points.ContainsKey(endPointId))
+            throw new ArgumentException("Yay noktası bulunamadı.");
+        if(startPointId==endPointId)throw new InvalidOperationException("Yay başlangıç ve bitiş noktaları farklı olmalı.");
+        var c=Point(centerPointId).Position;
+        var a=Point(startPointId).Position;
+        var b=Point(endPointId).Position;
+        var ra=Point2d.Distance(c,a);var rb=Point2d.Distance(c,b);
+        if(ra<=1e-9||Math.Abs(ra-rb)>Math.Max(1e-6,ra*1e-5))
+            throw new InvalidOperationException("Yay başlangıç ve bitiş noktaları aynı yarıçapta olmalı.");
+        var arc=new SketchArc(_nextEntityId++,centerPointId,startPointId,endPointId,clockwise,construction);
+        Entities.Add(arc);
+        return arc;
     }
 
     public SketchRelation AddRelation(
@@ -1124,6 +1171,25 @@ public sealed partial class SketchModel
 
     public IEnumerable<SketchCircle> Circles(bool includeConstruction = true)
         => Entities.OfType<SketchCircle>().Where(x => includeConstruction || !x.Construction);
+
+    public IEnumerable<SketchArc> Arcs(bool includeConstruction = true)
+        => Entities.OfType<SketchArc>().Where(x => includeConstruction || !x.Construction);
+
+    public IReadOnlyList<Point2d> SampleArc(SketchArc arc,int segments=24)
+    {
+        segments=Math.Clamp(segments,2,256);
+        var c=Point(arc.CenterPointId).Position;
+        var a=Point(arc.StartPointId).Position;
+        var b=Point(arc.EndPointId).Position;
+        var radius=Point2d.Distance(c,a);
+        var start=Math.Atan2(a.Y-c.Y,a.X-c.X);
+        var end=Math.Atan2(b.Y-c.Y,b.X-c.X);
+        static double Positive(double x){while(x<0)x+=Math.PI*2;while(x>=Math.PI*2)x-=Math.PI*2;return x;}
+        var span=!arc.Clockwise?Positive(end-start):-Positive(start-end);
+        return Enumerable.Range(0,segments+1)
+            .Select(i=>new Point2d(c.X+Math.Cos(start+span*i/segments)*radius,
+                                  c.Y+Math.Sin(start+span*i/segments)*radius)).ToArray();
+    }
 
     public bool TryGetSingleCircle(out SketchCircle circle)
     {
