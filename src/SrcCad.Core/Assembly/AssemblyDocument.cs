@@ -148,10 +148,14 @@ public static class AssemblyMateSolver
         return r;
     }
 
-    private static Vector3d WorldDirection(AssemblyComponent component,AssemblyReference reference)
-        => AssemblyReferenceCatalog.TryDirection(reference,out var local)
-            ?Multiply(RotationMatrix(component.Transform.RotationDegrees),local).Normalized()
-            :Vector3d.Zero;
+    private static Vector3d WorldDirection(AssemblyComponent component,Vector3d localDirection)
+        => Multiply(RotationMatrix(component.Transform.RotationDegrees),localDirection).Normalized();
+
+    private static Vector3d WorldPoint(AssemblyComponent component,Vector3d localPoint)
+        => Multiply(RotationMatrix(component.Transform.RotationDegrees),localPoint)+component.Transform.Translation;
+
+    private static Vector3d LocalDirectionOrZero(AssemblyReference reference)
+        => AssemblyReferenceCatalog.TryDirection(reference,out var local)?local:Vector3d.Zero;
 
     private static Vector3d PerpendicularTarget(Vector3d a,Vector3d current)
     {
@@ -170,20 +174,43 @@ public static class AssemblyMateSolver
 
     public static AssemblyDocument Apply(AssemblyDocument document,AssemblyMate mate)
     {
+        var aLocalDirection=LocalDirectionOrZero(mate.A);
+        var bLocalDirection=LocalDirectionOrZero(mate.B);
+        return ApplyResolved(
+            document,mate,
+            Vector3d.Zero,aLocalDirection.Length>1e-12?aLocalDirection:null,
+            Vector3d.Zero,bLocalDirection.Length>1e-12?bLocalDirection:null);
+    }
+
+    public static AssemblyDocument ApplyResolved(
+        AssemblyDocument document,
+        AssemblyMate mate,
+        Vector3d localOriginA,
+        Vector3d? localDirectionA,
+        Vector3d localOriginB,
+        Vector3d? localDirectionB)
+    {
         AssemblyDocumentFile.Validate(document);
         if(mate.Suppressed)return document;
         var a=document.Component(mate.A.ComponentId);
         var b=document.Component(mate.B.ComponentId);
         if(b.Fixed)throw new InvalidOperationException("Sabit bileşen montaj ilişkisiyle taşınamaz.");
 
+        static bool Finite(Vector3d value)
+            => double.IsFinite(value.X)&&double.IsFinite(value.Y)&&double.IsFinite(value.Z);
+        if(!Finite(localOriginA)||!Finite(localOriginB)||
+           (localDirectionA is Vector3d da&&(!Finite(da)||da.Length<=1e-12))||
+           (localDirectionB is Vector3d db&&(!Finite(db)||db.Length<=1e-12)))
+            throw new InvalidOperationException("Montaj referans geometrisi geçersiz.");
+
         var transform=b.Transform;
-        var aHasDirection=AssemblyReferenceCatalog.TryDirection(mate.A,out _);
-        var bHasDirection=AssemblyReferenceCatalog.TryDirection(mate.B,out _);
+        var aHasDirection=localDirectionA is Vector3d;
+        var bHasDirection=localDirectionB is Vector3d;
 
         if(aHasDirection&&bHasDirection)
         {
-            var aDir=WorldDirection(a,mate.A);
-            var bDir=WorldDirection(b,mate.B);
+            var aDir=WorldDirection(a,localDirectionA!.Value);
+            var bDir=WorldDirection(b,localDirectionB!.Value);
             Vector3d desired=bDir;
             switch(mate.Type)
             {
@@ -209,35 +236,39 @@ public static class AssemblyMateSolver
                 }
             }
             var delta=Align(bDir,desired);
-            transform=transform with{RotationDegrees=EulerDegrees(Multiply(delta,RotationMatrix(transform.RotationDegrees)))};
+            transform=transform with
+            {
+                RotationDegrees=EulerDegrees(Multiply(delta,RotationMatrix(transform.RotationDegrees)))
+            };
         }
 
-        var aOrigin=a.Transform.Translation;
-        var bOrigin=transform.Translation;
+        var aOrigin=WorldPoint(a,localOriginA);
+        var rotatedBOrigin=Multiply(RotationMatrix(transform.RotationDegrees),localOriginB);
+        var currentBOrigin=rotatedBOrigin+transform.Translation;
         switch(mate.Type)
         {
             case MateType.Coincident:
-                transform=transform with{Translation=aOrigin};
+                transform=transform with{Translation=aOrigin-rotatedBOrigin};
                 break;
             case MateType.Distance:
             {
-                var normal=aHasDirection?WorldDirection(a,mate.A):Vector3d.UnitX;
-                transform=transform with{Translation=aOrigin+normal*mate.Value};
+                var normal=aHasDirection?WorldDirection(a,localDirectionA!.Value):Vector3d.UnitX;
+                transform=transform with{Translation=(aOrigin+normal*mate.Value)-rotatedBOrigin};
                 break;
             }
             case MateType.Concentric when aHasDirection:
             {
-                var axis=WorldDirection(a,mate.A);
-                var along=Vector3d.Dot(bOrigin-aOrigin,axis);
-                transform=transform with{Translation=aOrigin+axis*along};
+                var axis=WorldDirection(a,localDirectionA!.Value);
+                var along=Vector3d.Dot(currentBOrigin-aOrigin,axis);
+                var desiredOrigin=aOrigin+axis*along;
+                transform=transform with{Translation=desiredOrigin-rotatedBOrigin};
                 break;
             }
         }
 
         var updated=b with{Transform=transform.Validate()};
         return document with{Components=document.Components.Select(c=>c.Id==b.Id?updated:c).ToArray()};
-    }
-}
+    }}
 
 public sealed record AssemblyDocument(Guid Id,AssemblyComponent[] Components,AssemblyMate[] Mates)
 {
