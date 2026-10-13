@@ -151,6 +151,49 @@ internal static class FeatureGraphTests
               ((HoleFeatureParameters)holeClone.Node(holeNode.Id).Parameters).Diameter==8,
             "hole parameters and persistent face reference roundtrip");
 
+        Check(FeatureReferenceCatalog.IsPersistentEdge(edgeReference,boss.Id),
+            "native persistent edge signature accepted");
+        Check(FeatureReferenceCatalog.IsPersistentFace(holeNode.References![0],boss.Id),
+            "native persistent planar face signature accepted");
+        var cylinderReference=new FeatureReference(boss.Id,TopologyKind.Face,"C;500;20;15;20;0;0;1;4");
+        Check(FeatureReferenceCatalog.IsPersistentFace(cylinderReference,boss.Id),
+            "native persistent cylindrical face signature accepted");
+        Check(!FeatureReferenceCatalog.IsPersistentEdge(
+            new FeatureReference(boss.Id,TopologyKind.Edge,"E;-10;0;0;0"),boss.Id),
+            "negative edge length rejected");
+        Check(!FeatureReferenceCatalog.IsPersistentFace(
+            new FeatureReference(boss.Id,TopologyKind.Face,"F;1200;20;15;20;0;0"),boss.Id),
+            "truncated face signature rejected");
+        Check(!FeatureReferenceCatalog.IsPersistentFace(
+            new FeatureReference(boss.Id,TopologyKind.Face,"C;500;20;15;20;0;0;1;0"),boss.Id),
+            "zero cylindrical radius rejected");
+
+        try
+        {
+            var brokenFillet=filletNode with
+            {
+                Id=Guid.NewGuid(),
+                Name="RadyusBozuk",
+                References=new[]{new FeatureReference(boss.Id,TopologyKind.Edge,"E;10;0;0")}
+            };
+            FeatureDocumentFile.Serialize(initial with{Features=initial.Features.Append(brokenFillet).ToArray()});
+            throw new InvalidOperationException("feature graph accepted malformed edge signature");
+        }
+        catch(InvalidDataException){n++;}
+
+        try
+        {
+            var brokenHole=holeNode with
+            {
+                Id=Guid.NewGuid(),
+                Name="DelikBozuk",
+                References=new[]{new FeatureReference(boss.Id,TopologyKind.Face,"F;1200;20;15;20;0;0")}
+            };
+            FeatureDocumentFile.Serialize(initial with{Features=initial.Features.Append(brokenHole).ToArray()});
+            throw new InvalidOperationException("feature graph accepted malformed face signature");
+        }
+        catch(InvalidDataException){n++;}
+
         var revolveSketch=new SketchModel(StandardPlanes.Front);
         var axisA=revolveSketch.CreatePointExact(new(0,-10));
         var axisB=revolveSketch.CreatePointExact(new(0,50));
