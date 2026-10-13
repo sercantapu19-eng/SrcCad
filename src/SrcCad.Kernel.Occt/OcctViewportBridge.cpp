@@ -2687,7 +2687,10 @@ namespace SrcCad::Kernel::Occt
         {
             TopoDS_Shape shape=decodeFeature(body); TopTools_IndexedMapOfShape solids,faces,edges;
             TopExp::MapShapes(shape,TopAbs_SOLID,solids);TopExp::MapShapes(shape,TopAbs_FACE,faces);TopExp::MapShapes(shape,TopAbs_EDGE,edges);
-            return gcnew array<double>{featureVolume(shape),(double)solids.Extent(),(double)faces.Extent(),(double)edges.Extent()};
+            GProp_GProps volume;BRepGProp::VolumeProperties(shape,volume);
+            gp_Pnt center=volume.CentreOfMass();
+            return gcnew array<double>{volume.Mass(),(double)solids.Extent(),(double)faces.Extent(),(double)edges.Extent(),
+                center.X(),center.Y(),center.Z()};
         }
         catch (const Standard_Failure& ex) { throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString())); }
     }
