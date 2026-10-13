@@ -61,6 +61,10 @@ namespace SrcCad::Kernel::Occt
         static System::String^ WeldBead(System::String^ baseBody,array<System::String^>^ edgeReferences,double radius);
         static System::String^ Transform(System::String^ body, array<double>^ transform6);
         static System::String^ Compound(array<System::String^>^ bodies);
+        static System::String^ ImportStep(System::String^ path);
+        static System::String^ ImportIges(System::String^ path);
+        static void ExportStep(System::String^ body,System::String^ path);
+        static void ExportIges(System::String^ body,System::String^ path);
         static double CommonVolume(System::String^ bodyA, array<double>^ transformA,
             System::String^ bodyB, array<double>^ transformB);
         static array<double>^ ProjectEdges(System::String^ body, array<double>^ direction, array<double>^ up);
