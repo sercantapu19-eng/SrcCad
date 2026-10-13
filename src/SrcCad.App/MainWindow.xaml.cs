@@ -1825,6 +1825,28 @@ public partial class MainWindow : Window
         }
     }
 
+    private void SketchFillet_Click(object sender,RoutedEventArgs e)
+    {
+        if(_sketch is null||_selectedSketchEntities.Count!=2||
+           _selectedSketchEntities.Select(id=>_sketch.Entity(id)).Any(e=>e is not SketchLine))
+        {Status("Çizim Radyusu için ortak köşeli iki çizgi seçin.");return;}
+        if(!PromptSketchNumber("Çizim Radyusu","mm",5,v=>v>1e-9,out var radius))return;
+        var ids=_selectedSketchEntities.ToArray();
+        ApplySketchTransform(()=>new[]{_sketch.AddSketchFillet(ids[0],ids[1],radius)},
+            $"Çizim radyusu R{radius:0.###} oluşturuldu.");
+    }
+
+    private void SketchChamfer_Click(object sender,RoutedEventArgs e)
+    {
+        if(_sketch is null||_selectedSketchEntities.Count!=2||
+           _selectedSketchEntities.Select(id=>_sketch.Entity(id)).Any(e=>e is not SketchLine))
+        {Status("Çizim Pahı için ortak köşeli iki çizgi seçin.");return;}
+        if(!PromptSketchNumber("Çizim Pahı","mm",5,v=>v>1e-9,out var distance))return;
+        var ids=_selectedSketchEntities.ToArray();
+        ApplySketchTransform(()=>new[]{_sketch.AddSketchChamfer(ids[0],ids[1],distance)},
+            $"Çizim pahı {distance:0.###} mm oluşturuldu.");
+    }
+
     private void ExtendSketch_Click(object sender,RoutedEventArgs e)
     {
         if(_sketch is null||_selectedSketchEntities.Count==0){Status("Uzat için çizgi seçin.");return;}
