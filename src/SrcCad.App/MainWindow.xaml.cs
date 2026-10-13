@@ -1042,6 +1042,19 @@ public partial class MainWindow : Window
                 state);
         }
 
+        foreach(var arc in _sketch.Arcs())
+        {
+            var state=_selectedSketchEntities.Contains(arc.Id)||_hoverSketchEntityId==arc.Id
+                ?2:arc.Construction?1:baseGeometryState;
+            var sampled=_sketch.SampleArc(arc,32);
+            for(var i=0;i+1<sampled.Count;i++)
+            {
+                var a=_sketch.Plane.SketchToWorld(sampled[i].X,sampled[i].Y);
+                var b=_sketch.Plane.SketchToWorld(sampled[i+1].X,sampled[i+1].Y);
+                _viewer.AddStyledSketchLine(a.X,a.Y,a.Z,b.X,b.Y,b.Z,state);
+            }
+        }
+
         foreach (var point in _sketch.Points.Values)
         {
             var w = _sketch.Plane.SketchToWorld(point.Position.X, point.Position.Y);
@@ -1739,6 +1752,16 @@ public partial class MainWindow : Window
     private void Circle_Click(object sender, RoutedEventArgs e)
     {
         if (_sketch is not null) ActivateSketchCommand(new CircleSketchCommand(_sketch));
+    }
+
+    private void Arc_Click(object sender,RoutedEventArgs e)
+    {
+        if(_sketch is not null)ActivateSketchCommand(new CenterArcSketchCommand(_sketch));
+    }
+
+    private void Slot_Click(object sender,RoutedEventArgs e)
+    {
+        if(_sketch is not null)ActivateSketchCommand(new StraightSlotSketchCommand(_sketch));
     }
 
     private void Polygon_Click(object sender,RoutedEventArgs e)
