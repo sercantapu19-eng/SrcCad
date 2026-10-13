@@ -7,7 +7,8 @@ namespace SrcCad::Kernel::Occt
         Object = 0,
         Vertex = 1,
         Edge = 2,
-        Face = 4
+        Face = 4,
+        AnyTopology = 7
     };
 
     public enum class CadDisplayStyle
@@ -48,8 +49,11 @@ namespace SrcCad::Kernel::Occt
         void FitAll();
         void SetOrthographic(bool enabled);
         void SetFrontView();
+        void SetBackView();
         void SetTopView();
+        void SetBottomView();
         void SetRightView();
+        void SetLeftView();
         void SetIsoView();
         void SetNormalView(double nx, double ny, double nz,
                            double upx, double upy, double upz);
@@ -58,6 +62,7 @@ namespace SrcCad::Kernel::Occt
         void Rotate(int x, int y);
         void Pan(int dx, int dy);
         void ZoomWheel(int delta);
+        void ZoomWheelAt(int x, int y, int delta);
 
         void MoveTo(int x, int y);
         bool SelectDetected(bool toggle);
