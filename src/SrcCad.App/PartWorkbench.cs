@@ -2352,6 +2352,8 @@ public partial class MainWindow
         var rows=new List<string>();var index=1;
         foreach(var reference in refs)
         {
+            // Cylindrical references encode an axis direction, not a planar face normal.
+            if(!reference.StartsWith("F;",StringComparison.Ordinal))continue;
             var parts=reference.Split(';');
             if(parts.Length<8||
                !double.TryParse(parts[5],System.Globalization.NumberStyles.Float,System.Globalization.CultureInfo.InvariantCulture,out var nx)||
@@ -2371,12 +2373,12 @@ public partial class MainWindow
     {
         var dialog=new Microsoft.Win32.OpenFileDialog
         {
-            Title="Çakışma için iki SrcCad parçası seçin",
-            Filter="SrcCad Parça (*.scpart)|*.scpart",
+            Title="Çakışma için iki SrcCad model seçin",
+            Filter="SrcCad Model (*.scpart;*.scasm)|*.scpart;*.scasm|SrcCad Parça (*.scpart)|*.scpart|SrcCad Montaj (*.scasm)|*.scasm",
             Multiselect=true
         };
         if(dialog.ShowDialog(this)!=true)return;
-        if(dialog.FileNames.Length!=2){Status("Çakışma kontrolü için tam iki .scpart seçin.");return;}
+        if(dialog.FileNames.Length!=2){Status("Çakışma kontrolü için tam iki .scpart/.scasm model seçin.");return;}
         try
         {
             var a=RebuildAssemblyComponent(dialog.FileNames[0]);var b=RebuildAssemblyComponent(dialog.FileNames[1]);
@@ -2394,12 +2396,12 @@ public partial class MainWindow
     {
         var dialog=new Microsoft.Win32.OpenFileDialog
         {
-            Title="Karşılaştırmak için iki SrcCad parçası seçin",
-            Filter="SrcCad Parça (*.scpart)|*.scpart",
+            Title="Karşılaştırmak için iki SrcCad model seçin",
+            Filter="SrcCad Model (*.scpart;*.scasm)|*.scpart;*.scasm|SrcCad Parça (*.scpart)|*.scpart|SrcCad Montaj (*.scasm)|*.scasm",
             Multiselect=true
         };
         if(dialog.ShowDialog(this)!=true)return;
-        if(dialog.FileNames.Length!=2){Status("Karşılaştırma için tam iki .scpart seçin.");return;}
+        if(dialog.FileNames.Length!=2){Status("Karşılaştırma için tam iki .scpart/.scasm model seçin.");return;}
         try
         {
             var a=SrcCad.Kernel.Occt.OcctFeatureKernel.Inspect(RebuildAssemblyComponent(dialog.FileNames[0]));
