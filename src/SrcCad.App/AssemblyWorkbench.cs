@@ -192,8 +192,23 @@ public partial class MainWindow
         {
             try
             {
-                var body=ResolvedAssemblyBody(component);
-                _viewer.AddAssemblyBody(body,0,0,0,0,0,0);
+                if(!_assemblyBodies.TryGetValue(component.Id,out var source))
+                    throw new InvalidOperationException("Bileşen gövdesi yüklenmedi: "+component.Name);
+                var t=component.Transform;
+                if(component.MirrorPlane is null)
+                {
+                    _viewer.AddAssemblyBody(source,component.Id.ToString("D"),
+                        t.Translation.X,t.Translation.Y,t.Translation.Z,
+                        t.RotationDegrees.X,t.RotationDegrees.Y,t.RotationDegrees.Z);
+                }
+                else
+                {
+                    // Mirrored component is already resolved in world space. It keeps
+                    // component identity but topology capture is intentionally disabled
+                    // because the persisted reference belongs to the pre-mirror source.
+                    var body=ResolvedAssemblyBody(component);
+                    _viewer.AddAssemblyBody(body,component.Id.ToString("D"),0,0,0,0,0,0);
+                }
             }
             catch(Exception ex){Status(component.Name+" görüntülenemedi: "+ex.Message);}
         }
