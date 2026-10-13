@@ -84,6 +84,28 @@ internal static class SketchFoundationTests
             var midpoint=new GeometryReference(GeometryReferenceKind.Midpoint,axis.Id);
             Check(construction.ResolvePoint(midpoint)==new Point2d(45,20),"midpoint derived from endpoints");
         }
+
+        {
+            var s=new SketchModel(StandardPlanes.Front);
+            var p0=s.CreatePointExact(new(0,0));var p1=s.CreatePointExact(new(20,0));var line=s.AddLine(p0,p1);
+            var offset=s.OffsetEntities(new[]{line.Id},5);
+            Check(offset.Count==1&&s.Entity(offset[0]) is SketchLine ol&&Near(s.Point(ol.StartPointId).Position.Y,5),"line offset creates parallel geometry");
+            var a0=s.CreatePointExact(new(0,-10));var a1=s.CreatePointExact(new(0,30));var axis=s.AddLine(a0,a1,true);
+            var mirrored=s.MirrorEntities(new[]{line.Id},axis.Id);
+            Check(mirrored.Count==1&&s.Entity(mirrored[0]) is SketchLine ml&&Near(s.Point(ml.EndPointId).Position.X,-20),"mirror across construction line");
+            var linear=s.LinearPatternEntities(new[]{line.Id},1,0,30,3);
+            Check(linear.Count==2&&s.Entity(linear[^1]) is SketchLine ll&&Near(s.Point(ll.StartPointId).Position.X,60),"linear sketch pattern");
+            var circular=s.CircularPatternEntities(new[]{line.Id},new Point2d(0,0),360,4);
+            Check(circular.Count==3,"circular sketch pattern");
+        }
+
+        {
+            var s=new SketchModel(StandardPlanes.Front);
+            var a=s.CreatePointExact(new(0,0));var b=s.CreatePointExact(new(10,0));var target=s.AddLine(a,b);
+            var c=s.CreatePointExact(new(20,-10));var d=s.CreatePointExact(new(20,10));s.AddLine(c,d);
+            Check(s.ExtendLinesToNearest(new[]{target.Id})==1&&Near(s.Point(b).Position.X,20),"extend line to nearest boundary");
+        }
+
         Console.WriteLine($"SKETCH FOUNDATION: {count} PASS (shared selection, solver, dimension, rank; Windows UI pending)");
     }
 }
