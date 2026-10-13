@@ -138,7 +138,7 @@ public static class DxfSketch
         return model;
     }
 
-    private static void Pair(StringBuilder b,int code,string value)
+    private static void WritePair(StringBuilder b,int code,string value)
     {
         b.AppendLine(code.ToString(Inv));b.AppendLine(value);
     }
@@ -148,8 +148,8 @@ public static class DxfSketch
     {
         if(model is null)throw new ArgumentNullException(nameof(model));
         var b=new StringBuilder();
-        Pair(b,0,"SECTION");Pair(b,2,"HEADER");Pair(b,9,"$INSUNITS");Pair(b,70,"4");Pair(b,0,"ENDSEC");
-        Pair(b,0,"SECTION");Pair(b,2,"ENTITIES");
+        WritePair(b,0,"SECTION");WritePair(b,2,"HEADER");WritePair(b,9,"$INSUNITS");WritePair(b,70,"4");WritePair(b,0,"ENDSEC");
+        WritePair(b,0,"SECTION");WritePair(b,2,"ENTITIES");
 
         foreach(var entity in model.Entities.Where(e=>!e.Construction))
         {
@@ -158,16 +158,16 @@ public static class DxfSketch
                 case SketchLine line:
                 {
                     var a=model.Point(line.StartPointId).Position;var c=model.Point(line.EndPointId).Position;
-                    Pair(b,0,"LINE");Pair(b,8,"SKETCH");
-                    Pair(b,10,N(a.X));Pair(b,20,N(a.Y));Pair(b,30,"0");
-                    Pair(b,11,N(c.X));Pair(b,21,N(c.Y));Pair(b,31,"0");
+                    WritePair(b,0,"LINE");WritePair(b,8,"SKETCH");
+                    WritePair(b,10,N(a.X));WritePair(b,20,N(a.Y));WritePair(b,30,"0");
+                    WritePair(b,11,N(c.X));WritePair(b,21,N(c.Y));WritePair(b,31,"0");
                     break;
                 }
                 case SketchCircle circle:
                 {
                     var c=model.Point(circle.CenterPointId).Position;
-                    Pair(b,0,"CIRCLE");Pair(b,8,"SKETCH");
-                    Pair(b,10,N(c.X));Pair(b,20,N(c.Y));Pair(b,30,"0");Pair(b,40,N(circle.Radius));
+                    WritePair(b,0,"CIRCLE");WritePair(b,8,"SKETCH");
+                    WritePair(b,10,N(c.X));WritePair(b,20,N(c.Y));WritePair(b,30,"0");WritePair(b,40,N(circle.Radius));
                     break;
                 }
                 case SketchArc arc:
@@ -179,9 +179,9 @@ public static class DxfSketch
                     var end=Math.Atan2(c.Y-center.Y,c.X-center.X)*180/Math.PI;
                     if(arc.Clockwise)(start,end)=(end,start);
                     if(start<0)start+=360;if(end<0)end+=360;
-                    Pair(b,0,"ARC");Pair(b,8,"SKETCH");
-                    Pair(b,10,N(center.X));Pair(b,20,N(center.Y));Pair(b,30,"0");Pair(b,40,N(radius));
-                    Pair(b,50,N(start));Pair(b,51,N(end));
+                    WritePair(b,0,"ARC");WritePair(b,8,"SKETCH");
+                    WritePair(b,10,N(center.X));WritePair(b,20,N(center.Y));WritePair(b,30,"0");WritePair(b,40,N(radius));
+                    WritePair(b,50,N(start));WritePair(b,51,N(end));
                     break;
                 }
                 case SketchEllipse ellipse:
@@ -189,15 +189,15 @@ public static class DxfSketch
                     var c=model.Point(ellipse.CenterPointId).Position;
                     var mx=ellipse.RadiusX*Math.Cos(ellipse.RotationRadians);
                     var my=ellipse.RadiusX*Math.Sin(ellipse.RotationRadians);
-                    Pair(b,0,"ELLIPSE");Pair(b,8,"SKETCH");
-                    Pair(b,10,N(c.X));Pair(b,20,N(c.Y));Pair(b,30,"0");
-                    Pair(b,11,N(mx));Pair(b,21,N(my));Pair(b,31,"0");
-                    Pair(b,40,N(ellipse.RadiusY/ellipse.RadiusX));Pair(b,41,"0");Pair(b,42,N(Math.PI*2));
+                    WritePair(b,0,"ELLIPSE");WritePair(b,8,"SKETCH");
+                    WritePair(b,10,N(c.X));WritePair(b,20,N(c.Y));WritePair(b,30,"0");
+                    WritePair(b,11,N(mx));WritePair(b,21,N(my));WritePair(b,31,"0");
+                    WritePair(b,40,N(ellipse.RadiusY/ellipse.RadiusX));WritePair(b,41,"0");WritePair(b,42,N(Math.PI*2));
                     break;
                 }
             }
         }
-        Pair(b,0,"ENDSEC");Pair(b,0,"EOF");
+        WritePair(b,0,"ENDSEC");WritePair(b,0,"EOF");
         return b.ToString();
     }
 }
