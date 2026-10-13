@@ -185,6 +185,16 @@ internal static class AssemblyDocumentTests
         Check(!AssemblyReferenceCatalog.IsMateCompatible(new AssemblyMate(Guid.NewGuid(),"AçıHatalı",MateType.Angle,
             new AssemblyReference(a.Id,TopologyKind.Vertex,AssemblyReferenceCatalog.Origin),planarB,30)),
             "angle mate accepted origin without direction");
+        Check(!AssemblyReferenceCatalog.IsMateCompatible(new AssemblyMate(Guid.NewGuid(),"EşmerkezDüzlem",MateType.Concentric,planarA,planarB)),
+            "concentric mate accepted planar faces");
+        Check(AssemblyReferenceCatalog.IsMateCompatible(new AssemblyMate(Guid.NewGuid(),"EşmerkezSilindir",MateType.Concentric,
+            new AssemblyReference(a.Id,TopologyKind.Face,"C;100;0;0;0;1;0;0;5"),
+            new AssemblyReference(b.Id,TopologyKind.Face,"C;90;0;10;0;1;0;0;3"))),
+            "concentric mate rejected cylindrical faces");
+        Check(!AssemblyReferenceCatalog.IsMateCompatible(new AssemblyMate(Guid.NewGuid(),"AçıSıfır",MateType.Angle,planarA,planarB,0)),
+            "zero angle mate accepted");
+        Check(!AssemblyReferenceCatalog.IsMateCompatible(new AssemblyMate(Guid.NewGuid(),"Açı180",MateType.Angle,planarA,planarB,180)),
+            "180-degree angle mate accepted");
 
         try
         {
