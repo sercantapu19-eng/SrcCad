@@ -188,6 +188,14 @@ internal sealed class OcctPartGeometryKernel : IPartGeometryKernel
         => OcctFeatureKernel.Rip(baseBody,edgeReferences.ToArray(),gap);
     public string CornerRelief(string baseBody,IReadOnlyList<string> edgeReferences,double radius)
         => OcctFeatureKernel.CornerRelief(baseBody,edgeReferences.ToArray(),radius);
+    public string Bend(string baseBody,SketchModel bendSketch,double angleDegrees,bool reverse)
+    {
+        var line=bendSketch.Entities.OfType<SketchLine>().Single(l=>!l.Construction);
+        var a2=bendSketch.Point(line.StartPointId).Position;var b2=bendSketch.Point(line.EndPointId).Position;
+        var a=bendSketch.Plane.SketchToWorld(a2.X,a2.Y);var b=bendSketch.Plane.SketchToWorld(b2.X,b2.Y);
+        var n=bendSketch.Plane.Normal;
+        return OcctFeatureKernel.Bend(baseBody,new[]{a.X,a.Y,a.Z,b.X,b.Y,b.Z,n.X,n.Y,n.Z},angleDegrees,reverse);
+    }
     public string TrimToPlane(string baseBody,SrcCad.Core.Geometry.PlaneFrame plane,bool keepPositive)
         => OcctFeatureKernel.TrimToPlane(baseBody,
             new[]{plane.Origin.X,plane.Origin.Y,plane.Origin.Z,plane.U.X,plane.U.Y,plane.U.Z,plane.V.X,plane.V.Y,plane.V.Z,plane.Normal.X,plane.Normal.Y,plane.Normal.Z},
