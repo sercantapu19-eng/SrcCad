@@ -59,6 +59,42 @@ internal sealed class OcctPartGeometryKernel : IPartGeometryKernel
         return bodies.Length==1?bodies[0]:OcctFeatureKernel.Compound(bodies);
     }
 
+    public string ExtrudeUpToFace(string baseBody,SketchModel source,string faceReference)
+    {
+        if(string.IsNullOrWhiteSpace(baseBody)||string.IsNullOrWhiteSpace(faceReference))
+            throw new InvalidOperationException("Up-to-face requires a base body and target face.");
+        var frame=OcctFeatureKernel.FaceFrame(baseBody,faceReference);
+        if(frame.Length<8||Math.Abs(frame[6])>0.5)
+            throw new InvalidOperationException("Up-to-face target must be a planar face.");
+
+        var targetOrigin=new SrcCad.Core.Geometry.Vector3d(frame[0],frame[1],frame[2]);
+        var targetNormal=new SrcCad.Core.Geometry.Vector3d(frame[3],frame[4],frame[5]).Normalized();
+        var direction=source.Plane.Normal.Normalized();
+        var denominator=SrcCad.Core.Geometry.Vector3d.Dot(direction,targetNormal);
+        if(Math.Abs(denominator)<1e-8)
+            throw new InvalidOperationException("Extrusion direction is parallel to the target face.");
+        var distance=SrcCad.Core.Geometry.Vector3d.Dot(targetOrigin-source.Plane.Origin,targetNormal)/denominator;
+        if(Math.Abs(distance)<1e-7)
+            throw new InvalidOperationException("Target face coincides with the sketch plane.");
+
+        var bounds=OcctFeatureKernel.Bounds(baseBody);
+        var dx=bounds[3]-bounds[0];var dy=bounds[4]-bounds[1];var dz=bounds[5]-bounds[2];
+        var diagonal=Math.Sqrt(dx*dx+dy*dy+dz*dz);
+        var extent=Math.Max(100.0,Math.Abs(distance)+diagonal*4.0+10.0);
+        var tool=Extrude(source,Math.Sign(distance)*extent);
+
+        var helper=Math.Abs(SrcCad.Core.Geometry.Vector3d.Dot(targetNormal,SrcCad.Core.Geometry.Vector3d.UnitX))<0.9
+            ?SrcCad.Core.Geometry.Vector3d.UnitX
+            :SrcCad.Core.Geometry.Vector3d.UnitY;
+        var u=SrcCad.Core.Geometry.Vector3d.Cross(helper,targetNormal).Normalized();
+        var v=SrcCad.Core.Geometry.Vector3d.Cross(targetNormal,u).Normalized();
+        var keepPositive=SrcCad.Core.Geometry.Vector3d.Dot(source.Plane.Origin-targetOrigin,targetNormal)>=0;
+        return OcctFeatureKernel.TrimToPlane(tool,new[]{
+            targetOrigin.X,targetOrigin.Y,targetOrigin.Z,
+            u.X,u.Y,u.Z,v.X,v.Y,v.Z,
+            targetNormal.X,targetNormal.Y,targetNormal.Z},keepPositive);
+    }
+
     public string Cut(string baseBody,SketchModel source,double depth,ExtrusionTermination termination)
     {
         var current=baseBody;
