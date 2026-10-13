@@ -54,6 +54,7 @@ internal static class FeatureGraphTests
                 SheetMetalRipFeatureParameters p=>p.Gap,
                 SheetMetalCornerReliefFeatureParameters p=>p.Radius,
                 SheetMetalBendFeatureParameters p=>p.AngleDegrees,
+                SheetMetalFlattenFeatureParameters p=>p.Steps.Sum(step=>Math.Abs(step.AngleDegrees)),
                 SpatialSketchFeatureParameters p=>p.Points.Length,
                 StructuralMemberFeatureParameters=>1,
                 StructuralTrimFeatureParameters=>1,
@@ -294,6 +295,23 @@ internal static class FeatureGraphTests
         var bendDoc=new FeatureDocument(Guid.NewGuid(),new[]{source,sheetBaseNode,bendSketchNode,bendNode});
         Check(FeatureDocumentFile.Clone(bendDoc).Node(bendNode.Id).Kind==FeatureKind.SheetMetalBend,
             "sketched bend axis angle dependency roundtrip");
+
+        var secondBendSketch=new SketchModel(StandardPlanes.Front);
+        var bend2A=secondBendSketch.CreatePointExact(new(10,-10));var bend2B=secondBendSketch.CreatePointExact(new(10,40));secondBendSketch.AddLine(bend2A,bend2B);
+        var bendSketchNode2=new FeatureNode(Guid.NewGuid(),"Büküm Çizgisi2",new SketchFeatureParameters(secondBendSketch.Plane,secondBendSketch.CaptureSnapshot()));
+        var flattenNode=new FeatureNode(Guid.NewGuid(),"Açınım1",
+            new SheetMetalFlattenFeatureParameters(bendNode.Id,new[]{
+                new SheetMetalBendStep(bendSketchNode.Id,90,false),
+                new SheetMetalBendStep(bendSketchNode2.Id,45,true)
+            },false));
+        var flattenDoc=new FeatureDocument(Guid.NewGuid(),new[]{source,sheetBaseNode,bendSketchNode,bendNode,bendSketchNode2,flattenNode});
+        var flattenClone=FeatureDocumentFile.Clone(flattenDoc);
+        var flatParams=(SheetMetalFlattenFeatureParameters)flattenClone.Node(flattenNode.Id).Parameters;
+        Check(flattenClone.Node(flattenNode.Id).Kind==FeatureKind.SheetMetalFlatten&&flatParams.Steps.Length==2&&!flatParams.Refold,
+            "multi-bend flatten step set roundtrip");
+        Check(flattenClone.Node(flattenNode.Id).Dependencies.Contains(bendSketchNode.Id)&&
+              flattenClone.Node(flattenNode.Id).Dependencies.Contains(bendSketchNode2.Id),
+            "flatten feature depends on every bend sketch");
 
         var trimNode=new FeatureNode(Guid.NewGuid(),"Kırp1",new StructuralTrimFeatureParameters(boss.Id,StandardPlanes.Right,true));
         var trimDoc=initial with{Features=initial.Features.Append(trimNode).ToArray()};
