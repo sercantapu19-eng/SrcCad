@@ -342,8 +342,11 @@ public partial class MainWindow
         foreach(var note in _drawingDocument.Annotations.Where(a=>a.SheetId==sheet.Id))
         {
             RenderDrawingDimensionGraphics(note);
-            var text=ResolveDrawingAnnotationText(note);
-            _viewer.AddSketchText(note.Position.X,note.Position.Y,0,text,0);
+            if(note.Kind!=DrawingAnnotationKind.CenterMark)
+            {
+                var text=ResolveDrawingAnnotationText(note);
+                _viewer.AddSketchText(note.Position.X,note.Position.Y,0,text,0);
+            }
         }
         _viewer.SetTopView();_viewer.FitAll();
     }
@@ -403,6 +406,13 @@ public partial class MainWindow
             var am=new Point2d((a1.X+a2.X)*0.5,(a1.Y+a2.Y)*0.5);
             var bm=new Point2d((b1.X+b2.X)*0.5,(b1.Y+b2.Y)*0.5);
             Line(am,note.Position);Line(bm,note.Position);
+        }
+        else if(note.Kind==DrawingAnnotationKind.CenterMark&&ResolveRadiusDimension(view,note.Data) is ProjectedCircle markCircle)
+        {
+            var center=DrawingToSheet(view,markCircle.X,markCircle.Y);
+            var half=Math.Max(4,markCircle.Radius*view.Scale*0.35);
+            Line(new Point2d(center.X-half,center.Y),new Point2d(center.X+half,center.Y));
+            Line(new Point2d(center.X,center.Y-half),new Point2d(center.X,center.Y+half));
         }
     }
 
@@ -776,17 +786,20 @@ public partial class MainWindow
         if(view is null){Status("Merkez işareti için görünüş seçin.");return;}
         try
         {
-            var data=DrawingProjectionData(view);
-            var circles=DrawingBodies(view.ModelPath).SelectMany(body=>
-                SrcCad.Kernel.Occt.OcctFeatureKernel.ProjectCircles(body,
-                    new[]{data.Direction.X,data.Direction.Y,data.Direction.Z},new[]{data.Up.X,data.Up.Y,data.Up.Z})).ToArray();
-            if(circles.Length<3){Status("Bu görünüşte eksene dik dairesel kenar bulunamadı.");return;}
-            var x=(circles[0]-data.Cx)*view.Scale+view.Position.X;
-            var y=(circles[1]-data.Cy)*view.Scale+view.Position.Y;
-            var r=Math.Max(4,circles[2]*view.Scale*0.35);
-            _viewer.AddStyledSketchLine(x-r,y,0,x+r,y,0,1);
-            _viewer.AddStyledSketchLine(x,y-r,0,x,y+r,0,1);
-            Status("İlk dairesel kenara gerçek merkez işareti eklendi.");
+            Point2d pointer=view.Position;
+            if(_viewer.ScreenToPlane(_lastMouseX,_lastMouseY,0,0,0,0,0,1,out var world))
+                pointer=new Point2d(world.X,world.Y);
+            var circles=DrawingProjectedCircles(view);
+            if(circles.Length==0){Status("Bu görünüşte eksene dik dairesel kenar bulunamadı.");return;}
+            var choice=circles.Select(circle=>
+            {
+                var center=DrawingToSheet(view,circle.X,circle.Y);
+                return (Circle:circle,Center:center,Distance:Point2d.Distance(pointer,center));
+            }).OrderBy(x=>x.Distance).First();
+            var note=new DrawingAnnotation(Guid.NewGuid(),view.SheetId,view.Id,choice.Center,"MERKEZ",
+                DrawingAnnotationKind.CenterMark,EncodeRadiusDimension(choice.Circle));
+            SetDrawingDocument(_drawingDocument with{Annotations=_drawingDocument.Annotations.Append(note).ToArray()});
+            RefreshDrawingTree(note.Id);RenderDrawing();Status("İlişkili merkez işareti eklendi ve .scdrw içine kaydedilecek.");
         }
         catch(Exception ex){Status("Merkez işareti oluşturulamadı: "+ex.Message);}
     }
@@ -1089,6 +1102,13 @@ public partial class MainWindow
             yield return(am.X,am.Y,note.Position.X,note.Position.Y);
             yield return(bm.X,bm.Y,note.Position.X,note.Position.Y);
         }
+        else if(note.Kind==DrawingAnnotationKind.CenterMark&&ResolveRadiusDimension(view,note.Data) is ProjectedCircle markCircle)
+        {
+            var center=DrawingToSheet(view,markCircle.X,markCircle.Y);
+            var half=Math.Max(4,markCircle.Radius*view.Scale*0.35);
+            yield return(center.X-half,center.Y,center.X+half,center.Y);
+            yield return(center.X,center.Y-half,center.X,center.Y+half);
+        }
     }
 
     private void DrawingExportDxf_Click(object sender,RoutedEventArgs e)
@@ -1148,9 +1168,10 @@ public partial class MainWindow
             {
                 foreach(var dimensionLine in DrawingDimensionDxfLines(note))
                     Line(dimensionLine.X1,dimensionLine.Y1,dimensionLine.X2,dimensionLine.Y2,"DIMENSION");
-                Text(note.Position.X,note.Position.Y,ResolveDrawingAnnotationText(note),
-                    note.Kind is DrawingAnnotationKind.LinearDimension or DrawingAnnotationKind.DiameterDimension or DrawingAnnotationKind.RadiusDimension or DrawingAnnotationKind.AngularDimension
-                        ?"DIMENSION":"ANNOTATION");
+                if(note.Kind!=DrawingAnnotationKind.CenterMark)
+                    Text(note.Position.X,note.Position.Y,ResolveDrawingAnnotationText(note),
+                        note.Kind is DrawingAnnotationKind.LinearDimension or DrawingAnnotationKind.DiameterDimension or DrawingAnnotationKind.RadiusDimension or DrawingAnnotationKind.AngularDimension
+                            ?"DIMENSION":"ANNOTATION");
             }
 
             Pair(0,"ENDSEC");Pair(0,"EOF");
