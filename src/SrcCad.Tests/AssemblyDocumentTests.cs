@@ -55,6 +55,24 @@ internal static class AssemblyDocumentTests
         Check((concentricSolved.Component(movable.Id).Transform.Translation-new Vector3d(10,0,0)).Length<1e-8,
             "concentric standard axes remove perpendicular offset");
 
+        var faceA=new AssemblyReference(a.Id,TopologyKind.Face,"F;A");
+        var faceB=new AssemblyReference(movable.Id,TopologyKind.Face,"F;B");
+        var faceMate=new AssemblyMate(Guid.NewGuid(),"YüzÇakışık",MateType.Coincident,faceA,faceB);
+        var faceSolved=AssemblyMateSolver.ApplyResolved(
+            solveDoc,faceMate,
+            new Vector3d(0,0,5),Vector3d.UnitZ,
+            new Vector3d(0,0,-5),Vector3d.UnitZ);
+        Check((faceSolved.Component(movable.Id).Transform.Translation-new Vector3d(0,0,10)).Length<1e-8,
+            "resolved planar face mate aligns local face origins");
+
+        var faceDistance=faceMate with{Id=Guid.NewGuid(),Name="YüzMesafe",Type=MateType.Distance,Value=2};
+        var faceDistanceSolved=AssemblyMateSolver.ApplyResolved(
+            solveDoc,faceDistance,
+            new Vector3d(0,0,5),Vector3d.UnitZ,
+            new Vector3d(0,0,-5),Vector3d.UnitZ);
+        Check((faceDistanceSolved.Component(movable.Id).Transform.Translation-new Vector3d(0,0,12)).Length<1e-8,
+            "resolved planar face distance mate honors offset");
+
 
         try
         {
