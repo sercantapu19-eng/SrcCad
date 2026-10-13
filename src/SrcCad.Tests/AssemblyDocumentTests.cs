@@ -93,6 +93,32 @@ internal static class AssemblyDocumentTests
         Check((faceDistanceSolved.Component(movable.Id).Transform.Translation-new Vector3d(0,0,12)).Length<1e-8,
             "resolved planar face distance mate honors offset");
 
+        var tangentComponent=movable with{Transform=new RigidTransform(new Vector3d(0,0,20),Vector3d.Zero)};
+        var tangentDoc=new AssemblyDocument(Guid.NewGuid(),new[]{a,tangentComponent},Array.Empty<AssemblyMate>());
+        var tangent=new AssemblyMate(Guid.NewGuid(),"Teğet1",MateType.Tangent,
+            new AssemblyReference(a.Id,TopologyKind.Face,"F;plane"),
+            new AssemblyReference(tangentComponent.Id,TopologyKind.Face,"C;cylinder"));
+        var tangentSolved=AssemblyMateSolver.ApplyResolved(
+            tangentDoc,tangent,
+            Vector3d.Zero,Vector3d.UnitZ,
+            Vector3d.Zero,Vector3d.UnitX,
+            false,0,true,5);
+        Check(Math.Abs(tangentSolved.Component(tangentComponent.Id).Transform.Translation.Z-5)<1e-8,
+            "plane-cylinder tangent mate offsets cylinder axis by its radius");
+
+        var cylinderComponent=movable with{Transform=new RigidTransform(new Vector3d(0,10,0),Vector3d.Zero)};
+        var cylinderDoc=new AssemblyDocument(Guid.NewGuid(),new[]{a,cylinderComponent},Array.Empty<AssemblyMate>());
+        var cylinderTangent=new AssemblyMate(Guid.NewGuid(),"Teğet2",MateType.Tangent,
+            new AssemblyReference(a.Id,TopologyKind.Face,"C;fixed"),
+            new AssemblyReference(cylinderComponent.Id,TopologyKind.Face,"C;moving"));
+        var cylinderSolved=AssemblyMateSolver.ApplyResolved(
+            cylinderDoc,cylinderTangent,
+            Vector3d.Zero,Vector3d.UnitX,
+            Vector3d.Zero,Vector3d.UnitX,
+            true,5,true,3);
+        Check(Math.Abs(cylinderSolved.Component(cylinderComponent.Id).Transform.Translation.Y-8)<1e-8,
+            "cylinder-cylinder tangent mate sets external center distance to radius sum");
+
 
         try
         {
