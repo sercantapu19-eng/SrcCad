@@ -1622,7 +1622,7 @@ namespace SrcCad::Kernel::Occt
                 gp_Pnt mid((a.X()+b.X())*0.5,(a.Y()+b.Y())*0.5,(a.Z()+b.Z())*0.5);
                 gp_Vec inward(mid,faceCenter);
                 inward-=gp_Vec(n.X(),n.Y(),n.Z())*inward.Dot(gp_Vec(n.X(),n.Y(),n.Z()));
-                gp_Vec side=t.Crossed(gp_Vec(n.X(),n.Y(),n.Z()));
+                gp_Vec side=gp_Vec(t.X(),t.Y(),t.Z()).Crossed(gp_Vec(n.X(),n.Y(),n.Z()));
                 if(inward.Magnitude()>1e-9&&side.Dot(inward)>0)side.Reverse();
                 side.Normalize();
 
@@ -1630,7 +1630,7 @@ namespace SrcCad::Kernel::Occt
                 gp_Vec lift=side*std::cos(radians)+gp_Vec(n.X(),n.Y(),n.Z())*((reverse?-1.0:1.0)*std::sin(radians));
                 if(lift.Magnitude()<=1e-9)throw gcnew InvalidOperationException("Invalid flange direction.");
                 lift.Normalize();
-                gp_Vec width=t.Crossed(lift);
+                gp_Vec width=gp_Vec(t.X(),t.Y(),t.Z()).Crossed(lift);
                 if(width.Magnitude()<=1e-9)throw gcnew InvalidOperationException("Invalid flange thickness direction.");
                 width.Normalize();
 
