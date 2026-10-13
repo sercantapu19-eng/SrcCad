@@ -7,9 +7,11 @@ using SrcCad.Core.Persistence;
 
 namespace SrcCad.Core.Features;
 
-public enum FeatureKind { Sketch, SpatialSketch, Extrude, ExtrudedCut, Fillet, Chamfer, Hole, Revolve, RevolvedCut, Sweep, SweptCut, Loft, LoftedCut, Shell, Draft, Rib, Mirror, LinearPattern, CircularPattern, ReferencePlane, ReferenceAxis, ReferencePoint, SheetMetalBase, SheetMetalCut, SheetMetalEdgeFlange, SheetMetalMiterFlange, SheetMetalConvert, SheetMetalHem, SheetMetalJog, SheetMetalRip, SheetMetalCornerRelief, SheetMetalBend, StructuralMember, StructuralTrim, EndCap, WeldBead }
+public enum FeatureKind { Sketch, SpatialSketch, Extrude, Boundary, BoundaryCut, ExtrudedCut, Fillet, Chamfer, Hole, Revolve, RevolvedCut, Sweep, SweptCut, Loft, LoftedCut, Shell, Draft, Rib, Mirror, LinearPattern, CircularPattern, SketchPattern, BodyBoolean, MoveCopyBody, SplitBody, Dome, HoleWizard, ReferencePlane, ReferenceAxis, ReferencePoint, SheetMetalBase, SheetMetalCut, SheetMetalEdgeFlange, SheetMetalMiterFlange, SheetMetalConvert, SheetMetalHem, SheetMetalJog, SheetMetalRip, SheetMetalCornerRelief, SheetMetalBend, StructuralMember, StructuralTrim, EndCap, WeldBead }
 public enum RebuildState { Clean, Dirty, Suppressed, Blocked, Failed }
 public enum ExtrusionTermination { Blind, ThroughAll }
+public enum BodyBooleanOperation { Add, Subtract, Common }
+public enum HoleWizardType { Simple, Counterbore, Countersink }
 public enum TopologyKind { Body, Face, Edge, Vertex }
 // Producer provenance + a semantic name; never a transient OCCT selection index.
 public sealed record FeatureReference(Guid ProducerId, TopologyKind Kind, string SemanticName);
@@ -18,6 +20,8 @@ public sealed record FeatureReference(Guid ProducerId, TopologyKind Kind, string
 [JsonDerivedType(typeof(SketchFeatureParameters), "sketch")]
 [JsonDerivedType(typeof(SpatialSketchFeatureParameters), "spatial-sketch")]
 [JsonDerivedType(typeof(ExtrudeFeatureParameters), "extrude")]
+[JsonDerivedType(typeof(BoundaryFeatureParameters), "boundary")]
+[JsonDerivedType(typeof(BoundaryCutFeatureParameters), "boundary-cut")]
 [JsonDerivedType(typeof(CutFeatureParameters), "extruded-cut")]
 [JsonDerivedType(typeof(FilletFeatureParameters), "fillet")]
 [JsonDerivedType(typeof(ChamferFeatureParameters), "chamfer")]
@@ -34,6 +38,12 @@ public sealed record FeatureReference(Guid ProducerId, TopologyKind Kind, string
 [JsonDerivedType(typeof(MirrorFeatureParameters), "mirror")]
 [JsonDerivedType(typeof(LinearPatternFeatureParameters), "linear-pattern")]
 [JsonDerivedType(typeof(CircularPatternFeatureParameters), "circular-pattern")]
+[JsonDerivedType(typeof(SketchPatternFeatureParameters), "sketch-pattern")]
+[JsonDerivedType(typeof(BodyBooleanFeatureParameters), "body-boolean")]
+[JsonDerivedType(typeof(MoveCopyBodyFeatureParameters), "move-copy-body")]
+[JsonDerivedType(typeof(SplitBodyFeatureParameters), "split-body")]
+[JsonDerivedType(typeof(DomeFeatureParameters), "dome")]
+[JsonDerivedType(typeof(HoleWizardFeatureParameters), "hole-wizard")]
 [JsonDerivedType(typeof(ReferencePlaneFeatureParameters), "reference-plane")]
 [JsonDerivedType(typeof(ReferenceAxisFeatureParameters), "reference-axis")]
 [JsonDerivedType(typeof(ReferencePointFeatureParameters), "reference-point")]
@@ -55,6 +65,8 @@ public abstract record FeatureParameters;
 public sealed record SketchFeatureParameters(PlaneFrame Plane, SketchSnapshot Sketch) : FeatureParameters;
 public sealed record SpatialSketchFeatureParameters(Vector3d[] Points,bool Closed=false) : FeatureParameters;
 public sealed record ExtrudeFeatureParameters(Guid SketchId, double Depth) : FeatureParameters;
+public sealed record BoundaryFeatureParameters(Guid[] ProfileSketchIds,Guid? BaseFeatureId=null) : FeatureParameters;
+public sealed record BoundaryCutFeatureParameters(Guid BaseFeatureId,Guid[] ProfileSketchIds) : FeatureParameters;
 public sealed record CutFeatureParameters(Guid BaseFeatureId, Guid SketchId, double Depth,
     ExtrusionTermination Termination = ExtrusionTermination.Blind, bool Reverse = false) : FeatureParameters;
 public sealed record FilletFeatureParameters(Guid BaseFeatureId, double Radius) : FeatureParameters;
@@ -73,6 +85,13 @@ public sealed record RibFeatureParameters(Guid BaseFeatureId, Guid SketchId, dou
 public sealed record MirrorFeatureParameters(Guid BaseFeatureId, PlaneFrame Plane, bool KeepOriginal = true) : FeatureParameters;
 public sealed record LinearPatternFeatureParameters(Guid BaseFeatureId, Vector3d Direction, double Spacing, int Count) : FeatureParameters;
 public sealed record CircularPatternFeatureParameters(Guid BaseFeatureId, Vector3d AxisOrigin, Vector3d AxisDirection, double AngleDegrees, int Count) : FeatureParameters;
+public sealed record SketchPatternFeatureParameters(Guid BaseFeatureId,Guid SketchId) : FeatureParameters;
+public sealed record BodyBooleanFeatureParameters(Guid BodyAId,Guid BodyBId,BodyBooleanOperation Operation) : FeatureParameters;
+public sealed record MoveCopyBodyFeatureParameters(Guid BaseFeatureId,Vector3d Translation,Vector3d RotationDegrees,bool KeepOriginal=false) : FeatureParameters;
+public sealed record SplitBodyFeatureParameters(Guid BaseFeatureId,PlaneFrame Plane) : FeatureParameters;
+public sealed record DomeFeatureParameters(Guid BaseFeatureId,double Height) : FeatureParameters;
+public sealed record HoleWizardFeatureParameters(Guid BaseFeatureId,Vector3d Center,double Diameter,double Depth,
+    HoleWizardType Type=HoleWizardType.Simple,double CounterDiameter=0,double CounterDepth=0,bool Reverse=true) : FeatureParameters;
 public sealed record ReferencePlaneFeatureParameters(PlaneFrame BasePlane, double Offset) : FeatureParameters;
 public sealed record ReferenceAxisFeatureParameters(Vector3d Origin, Vector3d Direction) : FeatureParameters;
 public sealed record ReferencePointFeatureParameters(Vector3d Position) : FeatureParameters;
@@ -98,7 +117,8 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
 {
     [JsonIgnore] public FeatureKind Kind => Parameters switch
     { SketchFeatureParameters => FeatureKind.Sketch, SpatialSketchFeatureParameters => FeatureKind.SpatialSketch,
-      ExtrudeFeatureParameters => FeatureKind.Extrude,
+      ExtrudeFeatureParameters => FeatureKind.Extrude, BoundaryFeatureParameters => FeatureKind.Boundary,
+      BoundaryCutFeatureParameters => FeatureKind.BoundaryCut,
       CutFeatureParameters => FeatureKind.ExtrudedCut, FilletFeatureParameters => FeatureKind.Fillet,
       ChamferFeatureParameters => FeatureKind.Chamfer, HoleFeatureParameters => FeatureKind.Hole,
       RevolveFeatureParameters => FeatureKind.Revolve, RevolveCutFeatureParameters => FeatureKind.RevolvedCut,
@@ -107,6 +127,9 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
       ShellFeatureParameters => FeatureKind.Shell, DraftFeatureParameters => FeatureKind.Draft,
       RibFeatureParameters => FeatureKind.Rib, MirrorFeatureParameters => FeatureKind.Mirror,
       LinearPatternFeatureParameters => FeatureKind.LinearPattern, CircularPatternFeatureParameters => FeatureKind.CircularPattern,
+      SketchPatternFeatureParameters => FeatureKind.SketchPattern, BodyBooleanFeatureParameters => FeatureKind.BodyBoolean,
+      MoveCopyBodyFeatureParameters => FeatureKind.MoveCopyBody, SplitBodyFeatureParameters => FeatureKind.SplitBody,
+      DomeFeatureParameters => FeatureKind.Dome, HoleWizardFeatureParameters => FeatureKind.HoleWizard,
       ReferencePlaneFeatureParameters => FeatureKind.ReferencePlane, ReferenceAxisFeatureParameters => FeatureKind.ReferenceAxis,
       ReferencePointFeatureParameters => FeatureKind.ReferencePoint, SheetMetalBaseFeatureParameters => FeatureKind.SheetMetalBase,
       SheetMetalCutFeatureParameters => FeatureKind.SheetMetalCut, SheetMetalEdgeFlangeFeatureParameters => FeatureKind.SheetMetalEdgeFlange,
@@ -125,6 +148,8 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
     {
         SpatialSketchFeatureParameters => Array.Empty<Guid>(),
         ExtrudeFeatureParameters e => new[] { e.SketchId },
+        BoundaryFeatureParameters b => (b.BaseFeatureId is Guid baseId?new[]{baseId}.Concat(b.ProfileSketchIds):b.ProfileSketchIds).ToArray(),
+        BoundaryCutFeatureParameters b => new[]{b.BaseFeatureId}.Concat(b.ProfileSketchIds).ToArray(),
         CutFeatureParameters c => new[] { c.BaseFeatureId, c.SketchId },
         FilletFeatureParameters f => new[] { f.BaseFeatureId },
         ChamferFeatureParameters c => new[] { c.BaseFeatureId },
@@ -141,6 +166,12 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
         MirrorFeatureParameters m => new[] { m.BaseFeatureId },
         LinearPatternFeatureParameters p => new[] { p.BaseFeatureId },
         CircularPatternFeatureParameters p => new[] { p.BaseFeatureId },
+        SketchPatternFeatureParameters p => new[] { p.BaseFeatureId,p.SketchId },
+        BodyBooleanFeatureParameters b => new[] { b.BodyAId,b.BodyBId },
+        MoveCopyBodyFeatureParameters m => new[] { m.BaseFeatureId },
+        SplitBodyFeatureParameters s => new[] { s.BaseFeatureId },
+        DomeFeatureParameters d => new[] { d.BaseFeatureId },
+        HoleWizardFeatureParameters h => new[] { h.BaseFeatureId },
         ReferencePlaneFeatureParameters => Array.Empty<Guid>(),
         ReferenceAxisFeatureParameters => Array.Empty<Guid>(),
         ReferencePointFeatureParameters => Array.Empty<Guid>(),
@@ -255,6 +286,17 @@ public static class FeatureDocumentFile
                     break;
                 case ExtrudeFeatureParameters e:
                     if(!double.IsFinite(e.Depth)||Math.Abs(e.Depth)<1e-9||document.Node(e.SketchId).Kind!=FeatureKind.Sketch)throw new InvalidDataException("Invalid extrusion.");break;
+                case BoundaryFeatureParameters b:
+                    if(b.ProfileSketchIds is null||b.ProfileSketchIds.Length<2||b.ProfileSketchIds.Distinct().Count()!=b.ProfileSketchIds.Length||
+                       b.ProfileSketchIds.Any(id=>document.Node(id).Kind!=FeatureKind.Sketch)||
+                       (b.BaseFeatureId is Guid bb&&document.Node(bb).Kind==FeatureKind.Sketch))
+                        throw new InvalidDataException("Invalid boundary boss.");
+                    break;
+                case BoundaryCutFeatureParameters b:
+                    if(document.Node(b.BaseFeatureId).Kind==FeatureKind.Sketch||b.ProfileSketchIds is null||b.ProfileSketchIds.Length<2||
+                       b.ProfileSketchIds.Distinct().Count()!=b.ProfileSketchIds.Length||b.ProfileSketchIds.Any(id=>document.Node(id).Kind!=FeatureKind.Sketch))
+                        throw new InvalidDataException("Invalid boundary cut.");
+                    break;
                 case CutFeatureParameters c:
                     if(!Enum.IsDefined(c.Termination)||!double.IsFinite(c.Depth)||c.Depth<=1e-9||document.Node(c.SketchId).Kind!=FeatureKind.Sketch||document.Node(c.BaseFeatureId).Kind==FeatureKind.Sketch)throw new InvalidDataException("Invalid cut.");break;
                 case FilletFeatureParameters f:
@@ -346,6 +388,39 @@ public static class FeatureDocumentFile
                        p.Count<2||p.Count>500||!double.IsFinite(p.AxisOrigin.X)||!double.IsFinite(p.AxisOrigin.Y)||!double.IsFinite(p.AxisOrigin.Z)||
                        !double.IsFinite(p.AxisDirection.X)||!double.IsFinite(p.AxisDirection.Y)||!double.IsFinite(p.AxisDirection.Z)||
                        p.AxisDirection.Length<=1e-9)throw new InvalidDataException("Invalid circular pattern.");
+                    break;
+                case SketchPatternFeatureParameters p:
+                    if(document.Node(p.BaseFeatureId).Kind==FeatureKind.Sketch||
+                       document.Node(p.SketchId).Parameters is not SketchFeatureParameters patternSketch||
+                       patternSketch.Sketch.Points.Values.Count(point=>point.Id!=0)<1)
+                        throw new InvalidDataException("Invalid sketch pattern.");
+                    break;
+                case BodyBooleanFeatureParameters b:
+                    if(b.BodyAId==b.BodyBId||document.Node(b.BodyAId).Kind==FeatureKind.Sketch||document.Node(b.BodyBId).Kind==FeatureKind.Sketch||
+                       !Enum.IsDefined(b.Operation))throw new InvalidDataException("Invalid body boolean.");
+                    break;
+                case MoveCopyBodyFeatureParameters m:
+                    if(document.Node(m.BaseFeatureId).Kind==FeatureKind.Sketch||
+                       !double.IsFinite(m.Translation.X)||!double.IsFinite(m.Translation.Y)||!double.IsFinite(m.Translation.Z)||
+                       !double.IsFinite(m.RotationDegrees.X)||!double.IsFinite(m.RotationDegrees.Y)||!double.IsFinite(m.RotationDegrees.Z))
+                        throw new InvalidDataException("Invalid move/copy body.");
+                    break;
+                case SplitBodyFeatureParameters s:
+                    if(document.Node(s.BaseFeatureId).Kind==FeatureKind.Sketch)throw new InvalidDataException("Invalid split body.");
+                    _=s.Plane.Validate();break;
+                case DomeFeatureParameters d:
+                    if(document.Node(d.BaseFeatureId).Kind==FeatureKind.Sketch||!double.IsFinite(d.Height)||Math.Abs(d.Height)<=1e-9||
+                       node.References is null||node.References.Length!=1||node.References[0].Kind!=TopologyKind.Face||node.References[0].ProducerId!=d.BaseFeatureId)
+                        throw new InvalidDataException("Invalid dome.");
+                    break;
+                case HoleWizardFeatureParameters h:
+                    if(document.Node(h.BaseFeatureId).Kind==FeatureKind.Sketch||!Enum.IsDefined(h.Type)||
+                       !double.IsFinite(h.Center.X)||!double.IsFinite(h.Center.Y)||!double.IsFinite(h.Center.Z)||
+                       !double.IsFinite(h.Diameter)||h.Diameter<=1e-9||!double.IsFinite(h.Depth)||h.Depth<=1e-9||
+                       !double.IsFinite(h.CounterDiameter)||!double.IsFinite(h.CounterDepth)||
+                       (h.Type!=HoleWizardType.Simple&&(h.CounterDiameter<=h.Diameter||h.CounterDepth<=1e-9))||
+                       node.References is null||node.References.Length!=1||node.References[0].Kind!=TopologyKind.Face||node.References[0].ProducerId!=h.BaseFeatureId)
+                        throw new InvalidDataException("Invalid hole wizard.");
                     break;
                 case ReferencePlaneFeatureParameters p:
                     _=p.BasePlane.Validate();
