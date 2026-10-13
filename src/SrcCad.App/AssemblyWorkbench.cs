@@ -16,6 +16,7 @@ public partial class MainWindow
     private readonly Dictionary<Guid,string> _assemblyBodies=new();
     private TreeViewItem? _assemblyRoot;
     private Guid? _assemblyEditingComponentId;
+    private Guid? _assemblyEditingMateId;
     private readonly Stack<AssemblyDocument> _assemblyUndo=new();
     private readonly Stack<AssemblyDocument> _assemblyRedo=new();
 
@@ -74,6 +75,7 @@ public partial class MainWindow
         _assemblyBodies.Clear();
         ResetAssemblyHistory();
         _assemblyEditingComponentId=null;
+        _assemblyEditingMateId=null;
         PartNode.Visibility=Visibility.Visible;
         AssemblyMovePanel.Visibility=Visibility.Collapsed;
         AssemblyMatePanel.Visibility=Visibility.Collapsed;
@@ -119,6 +121,8 @@ public partial class MainWindow
                 Tag="assembly-mate:"+mate.Id
             };
             var menu=new ContextMenu();
+            var edit=new MenuItem{Header="İlişkiyi Düzenle"};
+            edit.Click+=(_,_)=>BeginAssemblyMate(mate.Id);menu.Items.Add(edit);
             var suppress=new MenuItem{Header=mate.Suppressed?"Baskılamayı Kaldır":"Baskıla"};
             suppress.Click+=(_,_)=>ToggleAssemblyMateSuppressed(mate.Id);menu.Items.Add(suppress);
             var del=new MenuItem{Header="İlişkiyi Sil"};
@@ -344,22 +348,36 @@ public partial class MainWindow
 
     private void AssemblyMove_Click(object sender,RoutedEventArgs e)=>BeginAssemblyMove();
 
-    private void AssemblyMate_Click(object sender,RoutedEventArgs e)
+    private void AssemblyMate_Click(object sender,RoutedEventArgs e)=>BeginAssemblyMate(null);
+
+    private void BeginAssemblyMate(Guid? mateId)
     {
         if(_assemblyDocument is null||_assemblyDocument.Components.Length<2)
         {Status("Montaj ilişkisi için en az iki bileşen gerekiyor.");return;}
+        _assemblyEditingMateId=mateId;
+        var existing=mateId is Guid id?_assemblyDocument.Mates.FirstOrDefault(m=>m.Id==id):null;
+
         AssemblyMateA.Items.Clear();AssemblyMateB.Items.Clear();AssemblyMateType.Items.Clear();
         foreach(var component in _assemblyDocument.Components)
         {
-            AssemblyMateA.Items.Add(new ComboBoxItem{Content=component.Name,Tag=component.Id});
-            AssemblyMateB.Items.Add(new ComboBoxItem{Content=component.Name,Tag=component.Id});
+            var aItem=new ComboBoxItem{Content=component.Name,Tag=component.Id};
+            var bItem=new ComboBoxItem{Content=component.Name,Tag=component.Id};
+            AssemblyMateA.Items.Add(aItem);AssemblyMateB.Items.Add(bItem);
+            if(existing?.A.ComponentId==component.Id)AssemblyMateA.SelectedItem=aItem;
+            if(existing?.B.ComponentId==component.Id)AssemblyMateB.SelectedItem=bItem;
         }
         foreach(var type in new[]{MateType.Coincident,MateType.Concentric,MateType.Parallel,MateType.Perpendicular,MateType.Distance,MateType.Angle})
-            AssemblyMateType.Items.Add(new ComboBoxItem{Content=type.ToString(),Tag=type});
-        AssemblyMateA.SelectedIndex=0;AssemblyMateB.SelectedIndex=1;AssemblyMateType.SelectedIndex=0;AssemblyMateValue.Text="0";
+        {
+            var item=new ComboBoxItem{Content=type.ToString(),Tag=type};AssemblyMateType.Items.Add(item);
+            if(existing?.Type==type)AssemblyMateType.SelectedItem=item;
+        }
+        if(AssemblyMateA.SelectedItem is null)AssemblyMateA.SelectedIndex=0;
+        if(AssemblyMateB.SelectedItem is null)AssemblyMateB.SelectedIndex=Math.Min(1,AssemblyMateB.Items.Count-1);
+        if(AssemblyMateType.SelectedItem is null)AssemblyMateType.SelectedIndex=0;
+        AssemblyMateValue.Text=(existing?.Value??0).ToString("G17",CultureInfo.CurrentCulture);
         AssemblyMatePanel.Visibility=Visibility.Visible;AssemblyMovePanel.Visibility=Visibility.Collapsed;
-        PropertyTitle.Text="Montaj İlişkisi";
-        PropertyInfo.Text="İlk montaj çekirdeği bileşen orijinleri/yönelimleri üzerinde gerçek transform ilişkisi uygular; mate kaydı .scasm içinde kalıcıdır.";
+        PropertyTitle.Text=existing is null?"Montaj İlişkisi":"Montaj İlişkisini Düzenle";
+        PropertyInfo.Text="İlişki .scasm içinde kalıcıdır; ✓ tek Undo/Redo transaction olarak uygulanır.";
         ManagerTabs.SelectedItem=PropertyManagerTab;
     }
 
@@ -383,21 +401,26 @@ public partial class MainWindow
             MateType.Angle=>bt with{RotationDegrees=new Vector3d(at.RotationDegrees.X,at.RotationDegrees.Y,at.RotationDegrees.Z+value)},
             _=>bt
         };
-        var mate=new AssemblyMate(Guid.NewGuid(),"İlişki"+(_assemblyDocument.Mates.Length+1),type,
+        var previous=_assemblyEditingMateId is Guid editId?_assemblyDocument.Mates.FirstOrDefault(m=>m.Id==editId):null;
+        var mate=new AssemblyMate(previous?.Id??Guid.NewGuid(),previous?.Name??"İlişki"+(_assemblyDocument.Mates.Length+1),type,
             new AssemblyReference(aId,TopologyKind.Body,"BODY"),
-            new AssemblyReference(bId,TopologyKind.Body,"BODY"),value);
+            new AssemblyReference(bId,TopologyKind.Body,"BODY"),value,previous?.Suppressed??false);
+        var mates=previous is null
+            ?_assemblyDocument.Mates.Append(mate).ToArray()
+            :_assemblyDocument.Mates.Select(m=>m.Id==mate.Id?mate:m).ToArray();
         SetAssemblyDocument(_assemblyDocument with
         {
             Components=_assemblyDocument.Components.Select(c=>c.Id==bId?c with{Transform=bt.Validate()}:c).ToArray(),
-            Mates=_assemblyDocument.Mates.Append(mate).ToArray()
+            Mates=mates
         });
+        _assemblyEditingMateId=null;
         AssemblyMatePanel.Visibility=Visibility.Collapsed;RefreshAssemblyTree(bId);RenderAssembly(false);
-        Status(mate.Name+" uygulandı.");
+        Status(mate.Name+(previous is null?" uygulandı.":" güncellendi."));
     }
 
     private void AssemblyMateCancel_Click(object sender,RoutedEventArgs e)
     {
-        AssemblyMatePanel.Visibility=Visibility.Collapsed;ManagerTabs.SelectedItem=FeatureManagerTab;
+        AssemblyMatePanel.Visibility=Visibility.Collapsed;_assemblyEditingMateId=null;ManagerTabs.SelectedItem=FeatureManagerTab;
     }
 
     private void AssemblyExplode_Click(object sender,RoutedEventArgs e)
