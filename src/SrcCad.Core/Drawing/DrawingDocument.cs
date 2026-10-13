@@ -22,7 +22,9 @@ public sealed record DrawingView(
     Point2d Position,
     double Scale = 1.0,
     Guid? ParentViewId = null,
-    string? Configuration = null);
+    string? Configuration = null,
+    Vector3d? SectionOrigin = null,
+    Vector3d? SectionNormal = null);
 
 public sealed record DrawingAnnotation(
     Guid Id,
@@ -109,6 +111,13 @@ public static class DrawingDocumentFile
                !double.IsFinite(view.Scale)||view.Scale<=1e-9||
                (view.ParentViewId is Guid parent&&(!viewIds.Contains(parent)||parent==view.Id)))
                 throw new InvalidDataException("Invalid drawing view.");
+            if(view.Type==DrawingViewType.Section)
+            {
+                if(view.SectionOrigin is not Vector3d origin||view.SectionNormal is not Vector3d normal||
+                   !double.IsFinite(origin.X)||!double.IsFinite(origin.Y)||!double.IsFinite(origin.Z)||
+                   !double.IsFinite(normal.X)||!double.IsFinite(normal.Y)||!double.IsFinite(normal.Z)||normal.Length<=1e-9)
+                    throw new InvalidDataException("Section view requires a valid section plane.");
+            }
         }
 
         if(document.Annotations.Select(a=>a.Id).Distinct().Count()!=document.Annotations.Length)
