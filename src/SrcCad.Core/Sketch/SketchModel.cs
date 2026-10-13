@@ -187,6 +187,40 @@ public sealed partial class SketchModel
         return false;
     }
 
+    public bool TryTranslateEntity(int entityId, Point2d delta)
+    {
+        if(!double.IsFinite(delta.X)||!double.IsFinite(delta.Y))return false;
+        if(Math.Abs(delta.X)<=1e-12&&Math.Abs(delta.Y)<=1e-12)return true;
+
+        var entity=Entity(entityId);
+        if(entity is null)return false;
+
+        var pointIds=entity switch
+        {
+            SketchLine line=>new[]{line.StartPointId,line.EndPointId},
+            SketchCircle circle=>new[]{circle.CenterPointId},
+            SketchArc arc=>new[]{arc.CenterPointId,arc.StartPointId,arc.EndPointId},
+            SketchEllipse ellipse=>new[]{ellipse.CenterPointId},
+            _=>Array.Empty<int>()
+        };
+        if(pointIds.Length==0)return false;
+
+        var unique=pointIds.Distinct().ToArray();
+        if(unique.Any(id=>!Points.ContainsKey(id)||Point(id).Fixed))return false;
+
+        var before=CaptureSnapshot();
+        foreach(var id in unique)
+        {
+            var p=Point(id).Position;
+            SetPointPosition(id,new Point2d(p.X+delta.X,p.Y+delta.Y));
+        }
+
+        SolveRelations();
+        if(ConstraintsSatisfied())return true;
+        RestoreSnapshot(before);
+        return false;
+    }
+
     public void SetPointFixed(int id, bool isFixed)
     {
         if (id == 0) return;
