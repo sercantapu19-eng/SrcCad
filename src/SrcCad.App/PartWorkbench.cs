@@ -61,6 +61,10 @@ public partial class MainWindow
         _sketchNode=_extrudeNode=null;
         foreach(var node in _partNodes)PartNode.Items.Remove(node);_partNodes.Clear();
         var document=_partSession.Document;
+        var material=document.Properties??PartProperties.Default;
+        MaterialNode.Header=material.DensityGPerCm3>0
+            ?$"Malzeme <{material.MaterialName}>"
+            :"Malzeme <belirli değil>";
         foreach(var feature in document.Features)
         {
             var state=_partSession.State(feature.Id);
@@ -75,6 +79,97 @@ public partial class MainWindow
         _hasSolid=LastBody(document,_partSession.Output) is not null;
         RefreshCommandState();
     }
+    private static readonly (string Name,double Density)[] MaterialPresets =
+    {
+        ("Belirli değil",0),
+        ("Çelik",7.85),
+        ("Paslanmaz Çelik",8.00),
+        ("Alüminyum",2.70),
+        ("Bakır",8.96),
+        ("Pirinç",8.50),
+        ("Dökme Demir",7.20),
+        ("Titanyum",4.51),
+        ("ABS",1.04),
+        ("PLA",1.24)
+    };
+
+    internal void BeginMaterialEdit()
+    {
+        if(_partSession is null||_inSketch||_extrudeCommandActive)return;
+        var material=_partSession.Document.Properties??PartProperties.Default;
+        _loadingGraphParameters=true;
+        MaterialPresetBox.Items.Clear();
+        foreach(var preset in MaterialPresets)
+        {
+            var item=new ComboBoxItem{Content=preset.Name,Tag=preset.Density};
+            MaterialPresetBox.Items.Add(item);
+            if(string.Equals(material.MaterialName,preset.Name,StringComparison.OrdinalIgnoreCase))
+                MaterialPresetBox.SelectedItem=item;
+        }
+        if(MaterialPresetBox.SelectedItem is null)
+        {
+            var custom=new ComboBoxItem{Content=material.MaterialName,Tag=material.DensityGPerCm3};
+            MaterialPresetBox.Items.Add(custom);MaterialPresetBox.SelectedItem=custom;
+        }
+        MaterialDensity.Text=material.DensityGPerCm3.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        MaterialInfo.Text="Yoğunluk parça belgesinde saklanır. Kütle = gerçek OCCT B-Rep hacmi × yoğunluk.";
+        MaterialError.Text="";
+        MaterialPanel.Visibility=Visibility.Visible;
+        PropertyTitle.Text="Malzeme";
+        PropertyInfo.Text="Malzeme ve yoğunluk • kalıcı .scpart verisi • Undo/Redo • gerçek kütle hesabı";
+        ManagerTabs.SelectedItem=PropertyManagerTab;
+        _loadingGraphParameters=false;
+    }
+
+    private void MaterialPresetChanged(object sender,SelectionChangedEventArgs e)
+    {
+        if(_loadingGraphParameters)return;
+        if(MaterialPresetBox.SelectedItem is ComboBoxItem item&&item.Tag is double density)
+        {
+            MaterialDensity.Text=density.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+            MaterialError.Text="";
+        }
+    }
+
+    private void MaterialDensityChanged(object sender,RoutedEventArgs e)
+    {
+        if(_loadingGraphParameters)return;
+        MaterialError.Text=TryMaterialCandidate(out _)?"":"Yoğunluk 0–100 g/cm³ arasında sonlu bir değer olmalı.";
+    }
+
+    private bool TryMaterialCandidate(out PartProperties material)
+    {
+        material=PartProperties.Default;
+        if(MaterialPresetBox.SelectedItem is not ComboBoxItem item||
+           !DimensionNumbers.TryParseScalar(MaterialDensity.Text,out var density)||
+           !double.IsFinite(density)||density<0||density>100)return false;
+        var name=item.Content?.ToString()?.Trim();
+        if(string.IsNullOrWhiteSpace(name))return false;
+        material=new PartProperties(name,density);
+        return true;
+    }
+
+    private void MaterialOk_Click(object sender,RoutedEventArgs e)
+    {
+        if(_partSession is null||!TryMaterialCandidate(out var material))
+        {MaterialError.Text="Geçerli malzeme ve yoğunluk gerekiyor.";return;}
+        if(!_partSession.TryCommit(_partSession.Document with{Properties=material}))
+        {MaterialError.Text=GraphError();return;}
+        MaterialPanel.Visibility=Visibility.Collapsed;
+        RefreshPartTree();
+        ManagerTabs.SelectedItem=FeatureManagerTab;
+        Status(material.DensityGPerCm3>0
+            ?$"{material.MaterialName} atandı • yoğunluk {material.DensityGPerCm3:0.###} g/cm³"
+            :"Parça malzemesi temizlendi.");
+    }
+
+    private void MaterialCancel_Click(object sender,RoutedEventArgs e)
+    {
+        MaterialPanel.Visibility=Visibility.Collapsed;
+        ManagerTabs.SelectedItem=FeatureManagerTab;
+        Status("Malzeme düzenlemesi iptal edildi.");
+    }
+
     private bool CommitGraphDocument(FeatureDocument candidate)
     {
         if(_partSession is null||_inSketch||_extrudeCommandActive)return false;
