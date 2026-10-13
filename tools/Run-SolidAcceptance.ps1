@@ -94,38 +94,3 @@ try {
     $env:PATH = $previousPath
     Pop-Location
 }
-,
-        '^TRIM INTERACTION: [1-9][0-9]* PASS ',
-        '^PARALLEL DIMENSIONS: [1-9][0-9]* PASS ',
-        '^GENERAL CONSTRAINTS: [1-9][0-9]* PASS ',
-        '^THREE POINT TOOLS: [1-9][0-9]* PASS ',
-        '^PERFORMANCE SMOKE: 2/2 PASS ',
-        '^NATIVE THREE POINT: 9/9 PASS$',
-        '^NATIVE PARALLEL DIMENSIONS: 9/9 PASS$',
-        '^NATIVE REFERENCE ROUNDTRIP: 12/12 PASS$',
-        '^NATIVE SOURCE SKETCH REGRESSION: 12/12 PASS '
-    )) {
-        if (@(Select-String -Path "$logs\solid-acceptance.log" -Pattern $summary).Count -ne 1) {
-            throw "Ek regresyon paketi eksik veya tekrarlandi: $summary"
-        }
-    }
-    if ($RunInteraction) {
-        $uiExe=(Get-Content -LiteralPath $uiManifest -Raw).Trim()
-        if (!(Test-Path -LiteralPath $uiExe)) { throw "Built UI executable missing: $uiExe" }
-        $uiDir=Split-Path $uiExe -Parent
-        # Deploy the exact bridge/host used by this build before testing UI events.
-        foreach ($source in @($bridge,$ijwHost)) {
-            $dest=Join-Path $uiDir (Split-Path $source -Leaf)
-            if ([IO.Path]::GetFullPath($source) -ne [IO.Path]::GetFullPath($dest)) { Copy-Item -LiteralPath $source -Destination $dest -Force }
-        }
-        Assert-NativeAcceptanceDeployment -TestDirectory $uiDir -BridgePath $bridge -IjwHostPath $ijwHost -OcctBin $occtBin -LogPath "$logs\solid-ui-deployment.log"
-        $env:PATH="$uiDir;$previousPath"
-        & (Join-Path $PSScriptRoot 'Run-WindowsInteraction.ps1') -AppPath $uiExe -ReportPath (Join-Path $logs 'windows-interaction.json')
-    } else {
-        Write-Host 'Windows UI interaction NOT RUN. Use -RunInteraction on an interactive desktop.'
-    }
-    Write-Host '72 kabul kontrolu ve ek regresyon paketleri gecti. SM-073..120 ve Windows manuel akisi ayrica dogrulanmalidir; Kati Model tamamlandi sayilmaz.'
-} finally {
-    $env:PATH = $previousPath
-    Pop-Location
-}
