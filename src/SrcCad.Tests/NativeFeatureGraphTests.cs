@@ -139,9 +139,10 @@ internal static class NativeFeatureGraphTests
             var cylindricalRef=cylinderFaces.FirstOrDefault(value=>value.StartsWith("C;",StringComparison.Ordinal));
             Check(cylindricalRef is not null,"cylindrical body exposes persistent cylindrical face reference");
             var cylinderFrame=OcctFeatureKernel.FaceFrame(cylinderBody,cylindricalRef!);
-            Check(cylinderFrame.Length==6&&
-                  Math.Abs(new Vector3d(cylinderFrame[3],cylinderFrame[4],cylinderFrame[5]).Length-1)<1e-8,
-                "cylindrical face resolves normalized axis frame for concentric mates");
+            Check(cylinderFrame.Length>=8&&
+                  Math.Abs(new Vector3d(cylinderFrame[3],cylinderFrame[4],cylinderFrame[5]).Length-1)<1e-8&&
+                  Math.Abs(cylinderFrame[6]-1)<1e-9&&Math.Abs(cylinderFrame[7]-8)<1e-6,
+                "cylindrical face resolves normalized axis and radius frame for concentric/tangent mates");
 
             var bossEdges=OcctFeatureKernel.EdgeReferences(bossBody);
             Check(bossEdges.Length>=4,"extruded body exposes semantic edge references");
