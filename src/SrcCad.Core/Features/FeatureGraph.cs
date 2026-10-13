@@ -71,7 +71,9 @@ public sealed record ExtrudeFeatureParameters(
     Guid SketchId,
     double Depth,
     bool MidPlane = false,
-    double Direction2Depth = 0) : FeatureParameters;
+    double Direction2Depth = 0,
+    Guid? BaseFeatureId = null,
+    bool MergeResult = true) : FeatureParameters;
 public sealed record BoundaryFeatureParameters(Guid[] ProfileSketchIds,Guid? BaseFeatureId=null) : FeatureParameters;
 public sealed record BoundaryCutFeatureParameters(Guid BaseFeatureId,Guid[] ProfileSketchIds) : FeatureParameters;
 public sealed record CutFeatureParameters(Guid BaseFeatureId, Guid SketchId, double Depth,
@@ -159,7 +161,9 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
     {
         ImportedBodyFeatureParameters => Array.Empty<Guid>(),
         SpatialSketchFeatureParameters => Array.Empty<Guid>(),
-        ExtrudeFeatureParameters e => new[] { e.SketchId },
+        ExtrudeFeatureParameters e => e.BaseFeatureId is Guid baseId
+            ? new[] { baseId,e.SketchId }
+            : new[] { e.SketchId },
         BoundaryFeatureParameters b => (b.BaseFeatureId is Guid baseId?new[]{baseId}.Concat(b.ProfileSketchIds):b.ProfileSketchIds).ToArray(),
         BoundaryCutFeatureParameters b => new[]{b.BaseFeatureId}.Concat(b.ProfileSketchIds).ToArray(),
         CutFeatureParameters c => new[] { c.BaseFeatureId, c.SketchId },
@@ -361,7 +365,8 @@ public static class FeatureDocumentFile
                     if(!double.IsFinite(e.Depth)||Math.Abs(e.Depth)<1e-9||
                        !double.IsFinite(e.Direction2Depth)||e.Direction2Depth<0||
                        (e.MidPlane&&e.Direction2Depth>1e-9)||
-                       document.Node(e.SketchId).Kind!=FeatureKind.Sketch)
+                       document.Node(e.SketchId).Kind!=FeatureKind.Sketch||
+                       (e.BaseFeatureId is Guid baseId&&(baseId==e.SketchId||document.Node(baseId).Kind==FeatureKind.Sketch)))
                         throw new InvalidDataException("Invalid extrusion.");
                     break;
                 case BoundaryFeatureParameters b:
