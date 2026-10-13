@@ -269,6 +269,8 @@ DeletionHistoryTests.Run();
 FeatureGraphTests.Run();
 ThreePointToolTests.Run();
 PerformanceSmokeTests.Run();
+AssemblyDocumentTests.Run();
+DrawingDocumentTests.Run();
 
 #if NATIVE_ACCEPTANCE
 NativeAcceptanceBootstrap.Run();
