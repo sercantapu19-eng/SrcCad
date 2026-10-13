@@ -2387,6 +2387,7 @@ public partial class MainWindow : Window
         SheetCutButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid&&_partSession is not null&&
             _partSession.Document.Features.Any(n=>n.Kind is SrcCad.Core.Features.FeatureKind.SheetMetalBase or SrcCad.Core.Features.FeatureKind.SheetMetalConvert)&&CutProfileCandidate() is not null;
         EndCapButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid&&_partSession is not null;
+        WeldBeadButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid&&_partSession is not null;
         if(_partSession is not null)
         {
             ExtrudeButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&!_hasSolid&&SelectedGraphId is Guid sketchId&&SelectedGraphNode?.Kind==SrcCad.Core.Features.FeatureKind.Sketch;
