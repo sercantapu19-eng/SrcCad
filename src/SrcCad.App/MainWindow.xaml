@@ -61,8 +61,18 @@
                     <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadCutIcon}" Content="Ekstrüzyon Kes" Click="Cut_Click" x:Name="CutButton" IsEnabled="False" ToolTip="Bir yüz/düzlemde Çizim oluşturun; çizimden çıkınca bu komut seçili profili katıdan keser."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Döndürme" Click="Revolve_Click" x:Name="RevolveButton" ToolTip="Kapalı profil + tek merkez çizgisi ekseni ile gerçek OCCT döndürme oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadCutIcon}" Content="Döndürerek Kes" Click="RevolveCut_Click" x:Name="RevolveCutButton" ToolTip="Kapalı profil + tek merkez çizgisi ekseni ile mevcut katıdan döndürerek keser."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Süpürme" Click="CadCommandPlaceholder_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Loft" Click="CadCommandPlaceholder_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Süpürme ▾" Click="CommandFamily_Click" x:Name="SweepButton">
+                        <Button.ContextMenu><ContextMenu>
+                            <MenuItem Header="Süpürme (Boss)" Click="SweepBoss_Click"/>
+                            <MenuItem Header="Süpürerek Kes" Click="SweepCut_Click"/>
+                        </ContextMenu></Button.ContextMenu>
+                    </Button>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Loft ▾" Click="CommandFamily_Click" x:Name="LoftButton">
+                        <Button.ContextMenu><ContextMenu>
+                            <MenuItem Header="Loft (Boss)" Click="LoftBoss_Click"/>
+                            <MenuItem Header="Loft Kes" Click="LoftCut_Click"/>
+                        </ContextMenu></Button.ContextMenu>
+                    </Button>
                     <Button Style="{StaticResource CadCommandButton}" Content="Radyus" Click="Fillet_Click" x:Name="FilletButton" ToolTip="Kenarları seçin; gerçek OCCT 3B radyus oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Pah" Click="Chamfer_Click" x:Name="ChamferButton" ToolTip="Kenarları seçin; gerçek OCCT 3B pah oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Delik" Click="Hole_Click" x:Name="HoleButton" ToolTip="Düzlemsel yüz seçin; tıklanan konumda gerçek parametrik delik oluşturur."/>
@@ -303,6 +313,26 @@
                                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                     <Button Content="✓" Width="52" Height="34" Click="RevolveFeatureOk_Click"/>
                                     <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="RevolveFeatureCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="MultiSketchFeaturePanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock x:Name="MultiSketchFeatureTitle" Text="Süpürme / Loft" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <TextBlock Text="Profil 1"/>
+                                <ComboBox x:Name="MultiProfile1" SelectionChanged="MultiSketchFeatureParameterChanged" Margin="0,4,0,8"/>
+                                <StackPanel x:Name="MultiProfile2Panel" Visibility="Collapsed">
+                                    <TextBlock Text="Profil 2"/>
+                                    <ComboBox x:Name="MultiProfile2" SelectionChanged="MultiSketchFeatureParameterChanged" Margin="0,4,0,8"/>
+                                </StackPanel>
+                                <StackPanel x:Name="MultiPathPanel" Visibility="Collapsed">
+                                    <TextBlock Text="Yol Çizimi"/>
+                                    <ComboBox x:Name="MultiPath" SelectionChanged="MultiSketchFeatureParameterChanged" Margin="0,4,0,8"/>
+                                </StackPanel>
+                                <TextBlock x:Name="MultiSketchFeatureInfo" TextWrapping="Wrap" Foreground="#5F6B76" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="MultiSketchFeatureError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="MultiSketchFeatureOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="MultiSketchFeatureCancel_Click"/>
                                 </StackPanel>
                             </StackPanel>
 

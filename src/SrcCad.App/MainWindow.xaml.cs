@@ -2255,6 +2255,8 @@ public partial class MainWindow : Window
         HoleButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
         RevolveButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&(_sketch is not null||_partSession is not null);
         RevolveCutButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
+        SweepButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_partSession is not null;
+        LoftButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_partSession is not null;
         ShellButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
         DraftButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
         RibButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid&&_partSession is not null&&RibSketchCandidate() is not null;

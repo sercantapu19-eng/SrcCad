@@ -580,6 +580,168 @@ public partial class MainWindow
             .Select(value=>new FeatureReference(producerId,TopologyKind.Face,value))
             .ToArray();
 
+    private SketchModel GraphSketchModel(FeatureNode node)
+    {
+        if(node.Parameters is not SketchFeatureParameters source)throw new InvalidOperationException("Sketch feature required.");
+        var model=new SketchModel(source.Plane);model.RestoreSnapshot(source.Sketch);return model;
+    }
+
+    private static Guid? ComboFeatureId(ComboBox combo)
+        => (combo.SelectedItem as ComboBoxItem)?.Tag is Guid id?id:null;
+
+    private void FillSketchCombo(ComboBox combo,IEnumerable<FeatureNode> nodes,Guid? selected)
+    {
+        combo.Items.Clear();
+        foreach(var node in nodes)
+        {
+            var item=new ComboBoxItem{Content=node.Name,Tag=node.Id};
+            combo.Items.Add(item);
+            if(node.Id==selected)combo.SelectedItem=item;
+        }
+        if(combo.SelectedItem is null&&combo.Items.Count>0)combo.SelectedIndex=0;
+    }
+
+    private FeatureNode[] ClosedProfileSketches()
+        => _partSession?.Document.Features.Where(n=>n.Kind==FeatureKind.Sketch).Where(n=>
+        {
+            try
+            {
+                var model=GraphSketchModel(n);
+                return model.TryGetExtrusionProfile(out _,out _)||model.TryGetSingleCircle(out _);
+            }
+            catch{return false;}
+        }).ToArray()??Array.Empty<FeatureNode>();
+
+    private FeatureNode[] PathSketches()
+        => _partSession?.Document.Features.Where(n=>n.Kind==FeatureKind.Sketch&&
+            ((SketchFeatureParameters)n.Parameters).Sketch.Entities.OfType<SketchLine>().Any(l=>!l.Construction)).ToArray()
+            ??Array.Empty<FeatureNode>();
+
+    private void SweepBoss_Click(object sender,RoutedEventArgs e)=>StartSweepLoft(false,false);
+    private void SweepCut_Click(object sender,RoutedEventArgs e)=>StartSweepLoft(false,true);
+    private void LoftBoss_Click(object sender,RoutedEventArgs e)=>StartSweepLoft(true,false);
+    private void LoftCut_Click(object sender,RoutedEventArgs e)=>StartSweepLoft(true,true);
+
+    private void StartSweepLoft(bool loft,bool cut)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession()||_partSession is null)return;
+        var baseNode=CurrentSolidFeature();
+        if(cut&&baseNode is null){Status((loft?"Loft Kes":"Süpürerek Kes")+" için mevcut katı gerekiyor.");return;}
+        var profiles=ClosedProfileSketches();
+        if(profiles.Length==0){Status("Kapalı profil çizimi gerekiyor.");return;}
+
+        if(loft)
+        {
+            if(profiles.Length<2){Status("Loft için en az iki kapalı profil çizimi gerekiyor.");return;}
+            var ids=profiles.TakeLast(2).Select(n=>n.Id).ToArray();
+            FeatureNode node=cut
+                ?new(Guid.NewGuid(),NextGraphName("Loft Kes"),new LoftCutFeatureParameters(baseNode!.Id,ids))
+                :new(Guid.NewGuid(),NextGraphName("Loft"),new LoftFeatureParameters(ids,baseNode?.Id));
+            BeginMultiSketchFeature(node);
+            return;
+        }
+
+        var paths=PathSketches();
+        if(paths.Length==0){Status("Süpürme için çizgisel bir yol çizimi gerekiyor.");return;}
+        var profile=SelectedGraphNode is {Kind:FeatureKind.Sketch} selected&&profiles.Any(p=>p.Id==selected.Id)?selected:profiles[^1];
+        var path=paths.LastOrDefault(n=>n.Id!=profile.Id);
+        if(path is null){Status("Profil ve yol farklı çizimler olmalı.");return;}
+        FeatureNode sweep=cut
+            ?new(Guid.NewGuid(),NextGraphName("Süpürerek Kes"),new SweepCutFeatureParameters(baseNode!.Id,profile.Id,path.Id))
+            :new(Guid.NewGuid(),NextGraphName("Süpürme"),new SweepFeatureParameters(profile.Id,path.Id,baseNode?.Id));
+        BeginMultiSketchFeature(sweep);
+    }
+
+    private void BeginMultiSketchFeature(FeatureNode node)
+    {
+        _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;
+        var profiles=ClosedProfileSketches();
+        var paths=PathSketches();
+        Guid? p1=null,p2=null,path=null;
+        switch(node.Parameters)
+        {
+            case SweepFeatureParameters s:p1=s.ProfileSketchId;path=s.PathSketchId;break;
+            case SweepCutFeatureParameters s:p1=s.ProfileSketchId;path=s.PathSketchId;break;
+            case LoftFeatureParameters l:p1=l.ProfileSketchIds.ElementAtOrDefault(0);p2=l.ProfileSketchIds.ElementAtOrDefault(1);break;
+            case LoftCutFeatureParameters l:p1=l.ProfileSketchIds.ElementAtOrDefault(0);p2=l.ProfileSketchIds.ElementAtOrDefault(1);break;
+            default:throw new InvalidOperationException("Unsupported sweep/loft feature.");
+        }
+        MultiSketchFeatureTitle.Text=node.Kind switch
+        {
+            FeatureKind.Sweep=>"Süpürme",FeatureKind.SweptCut=>"Süpürerek Kes",
+            FeatureKind.Loft=>"Loft",FeatureKind.LoftedCut=>"Loft Kes",_=>"Süpürme / Loft"
+        };
+        MultiProfile2Panel.Visibility=node.Parameters is LoftFeatureParameters or LoftCutFeatureParameters?Visibility.Visible:Visibility.Collapsed;
+        MultiPathPanel.Visibility=node.Parameters is SweepFeatureParameters or SweepCutFeatureParameters?Visibility.Visible:Visibility.Collapsed;
+        FillSketchCombo(MultiProfile1,profiles,p1);
+        FillSketchCombo(MultiProfile2,profiles,p2);
+        FillSketchCombo(MultiPath,paths,path);
+        MultiSketchFeatureInfo.Text=node.Parameters is SweepFeatureParameters or SweepCutFeatureParameters
+            ?"Kapalı profil + tek, dallanmayan çizgisel yol. Profil delikleri bu ilk çekirdekte kabul edilmez."
+            :"En az iki kapalı profil. Profillerin sırası FeatureManager sırasına göre loft edilir.";
+        MultiSketchFeatureError.Text="";
+        MultiSketchFeaturePanel.Visibility=Visibility.Visible;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;
+        HoleFeaturePanel.Visibility=Visibility.Collapsed;RevolveFeaturePanel.Visibility=Visibility.Collapsed;
+        ShellFeaturePanel.Visibility=Visibility.Collapsed;DraftFeaturePanel.Visibility=Visibility.Collapsed;RibFeaturePanel.Visibility=Visibility.Collapsed;
+        ReferenceGeometryPanel.Visibility=Visibility.Collapsed;MirrorFeaturePanel.Visibility=Visibility.Collapsed;PatternFeaturePanel.Visibility=Visibility.Collapsed;
+        PropertyTitle.Text=node.Name;PropertyInfo.Text="Gerçek OCCT Süpürme/Loft • parametrik çizim bağımlılıkları • canlı B-Rep önizleme";
+        ManagerTabs.SelectedItem=PropertyManagerTab;_loadingGraphParameters=false;
+        UpdateMultiSketchFeaturePreview();RefreshCommandState();
+    }
+
+    private FeatureDocument? MultiSketchFeatureCandidate()
+    {
+        if(_partSession is null||_graphFeatureEdit is null)return null;
+        var first=ComboFeatureId(MultiProfile1);
+        if(first is null)return null;
+        FeatureParameters? parameters=_graphFeatureEdit.Parameters switch
+        {
+            SweepFeatureParameters s when ComboFeatureId(MultiPath) is Guid path&&path!=first
+                =>s with{ProfileSketchId=first.Value,PathSketchId=path},
+            SweepCutFeatureParameters s when ComboFeatureId(MultiPath) is Guid path&&path!=first
+                =>s with{ProfileSketchId=first.Value,PathSketchId=path},
+            LoftFeatureParameters l when ComboFeatureId(MultiProfile2) is Guid second&&second!=first
+                =>l with{ProfileSketchIds=new[]{first.Value,second}},
+            LoftCutFeatureParameters l when ComboFeatureId(MultiProfile2) is Guid second&&second!=first
+                =>l with{ProfileSketchIds=new[]{first.Value,second}},
+            _=>null
+        };
+        return parameters is null?null:ReplaceGraphNode(_graphFeatureEdit with{Parameters=parameters});
+    }
+
+    private void MultiSketchFeatureParameterChanged(object sender,SelectionChangedEventArgs e)
+    {
+        if(!_loadingGraphParameters)UpdateMultiSketchFeaturePreview();
+    }
+
+    private void UpdateMultiSketchFeaturePreview()
+    {
+        if(_partSession is null||_graphFeatureEdit is null)return;
+        var candidate=MultiSketchFeatureCandidate();
+        if(candidate is null)
+        {
+            _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();
+            MultiSketchFeatureError.Text="Farklı ve geçerli profil/yol çizimleri seçin.";return;
+        }
+        var preview=_partSession.Preview(candidate);
+        var body=preview.Success?LastBody(candidate,id=>preview.Outputs.GetValueOrDefault(id)):null;
+        if(body is not null&&_viewer.PreviewFeatureBody(body)){MultiSketchFeatureError.Text="";return;}
+        _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();
+        MultiSketchFeatureError.Text=preview.Report.Nodes.LastOrDefault(n=>n.State==RebuildState.Failed)?.Error??preview.Report.Error??"Süpürme/Loft önizlemesi oluşturulamadı.";
+    }
+
+    private void MultiSketchFeatureOk_Click(object sender,RoutedEventArgs e)
+    {
+        var candidate=MultiSketchFeatureCandidate();
+        if(candidate is null||_partSession is null){MultiSketchFeatureError.Text="Geçerli profil/yol seçimi gerekiyor.";return;}
+        if(!_partSession.TryCommit(candidate)){MultiSketchFeatureError.Text=GraphError();return;}
+        var id=_graphFeatureEdit!.Id;EndGraphFeature();RefreshPartTree(id);
+        Status("Parametrik "+candidate.Node(id).Name+" onaylandı.");
+    }
+
+    private void MultiSketchFeatureCancel_Click(object sender,RoutedEventArgs e)=>EndGraphFeature();
+
     private void Shell_Click(object sender,RoutedEventArgs e)
     {
         if(_inSketch||_extrudeCommandActive||!EnsurePartSession())return;
@@ -1248,6 +1410,7 @@ public partial class MainWindow
         if(node.Parameters is FilletFeatureParameters or ChamferFeatureParameters){BeginEdgeFeature(node);return;}
         if(node.Parameters is HoleFeatureParameters){BeginHoleFeature(node);return;}
         if(node.Parameters is RevolveFeatureParameters or RevolveCutFeatureParameters){BeginRevolveFeature(node);return;}
+        if(node.Parameters is SweepFeatureParameters or SweepCutFeatureParameters or LoftFeatureParameters or LoftCutFeatureParameters){BeginMultiSketchFeature(node);return;}
         if(node.Parameters is ShellFeatureParameters){BeginShellFeature(node);return;}
         if(node.Parameters is DraftFeatureParameters){BeginDraftFeature(node);return;}
         if(node.Parameters is RibFeatureParameters){BeginRibFeature(node);return;}
@@ -1298,7 +1461,7 @@ public partial class MainWindow
     {
         _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.0);
         _graphFeatureEdit=null;_extrudeCommandActive=false;
-        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;RevolveFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;DraftFeaturePanel.Visibility=Visibility.Collapsed;RibFeaturePanel.Visibility=Visibility.Collapsed;ReferenceGeometryPanel.Visibility=Visibility.Collapsed;MirrorFeaturePanel.Visibility=Visibility.Collapsed;PatternFeaturePanel.Visibility=Visibility.Collapsed;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;RevolveFeaturePanel.Visibility=Visibility.Collapsed;MultiSketchFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;DraftFeaturePanel.Visibility=Visibility.Collapsed;RibFeaturePanel.Visibility=Visibility.Collapsed;ReferenceGeometryPanel.Visibility=Visibility.Collapsed;MirrorFeaturePanel.Visibility=Visibility.Collapsed;PatternFeaturePanel.Visibility=Visibility.Collapsed;
         _viewer.ClearSelection();_viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Face);
         ManagerTabs.SelectedItem=FeatureManagerTab;RefreshCommandState();
     }
@@ -1320,6 +1483,7 @@ public partial class MainWindow
         EdgeFeaturePanel.Visibility=Visibility.Collapsed;
         HoleFeaturePanel.Visibility=Visibility.Collapsed;
         RevolveFeaturePanel.Visibility=Visibility.Collapsed;
+        MultiSketchFeaturePanel.Visibility=Visibility.Collapsed;
         ShellFeaturePanel.Visibility=Visibility.Collapsed;
         DraftFeaturePanel.Visibility=Visibility.Collapsed;
         RibFeaturePanel.Visibility=Visibility.Collapsed;
