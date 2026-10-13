@@ -19,9 +19,10 @@ internal static class PartFileTests
             var arcCenter=s.CreatePointExact(new(50,30));
             var arcStart=s.CreatePointExact(new(60,30));
             var arcEnd=s.CreatePointExact(new(50,40));
-            var arc=s.AddArc(arcCenter,arcStart,arcEnd,false);
+            // Persistence-only reference geometry must not contaminate the extrusion profile.
+            var arc=s.AddArc(arcCenter,arcStart,arcEnd,false,true);
             var ellipseCenter=s.CreatePointExact(new(50,15));
-            var ellipse=s.AddEllipse(ellipseCenter,12,6,Math.PI/6);
+            var ellipse=s.AddEllipse(ellipseCenter,12,6,Math.PI/6,true);
             var origin=s.ReferenceForPoint(0);var center=s.ReferenceForPoint(c.CenterPointId);
             s.ApplyReferenceRelation(SketchRelationType.Horizontal,new[]{center,s.ReferenceForPoint(c2.CenterPointId)});
             var d=s.AddInferredDimension(s.InferDimension(new[]{origin,center},new(-20,15))!);
@@ -33,12 +34,12 @@ internal static class PartFileTests
             Check(loaded.Point(independentPoint).Position==new Point2d(17,47),
                 "independent sketch point survives save/open round-trip");
             var loadedArc=loaded.Entity(arc.Id) as SketchArc;
-            Check(loadedArc is not null&&loadedArc.CenterPointId==arcCenter&&loadedArc.StartPointId==arcStart&&loadedArc.EndPointId==arcEnd,
-                "sketch arc survives save/open round-trip");
+            Check(loadedArc is not null&&loadedArc.CenterPointId==arcCenter&&loadedArc.StartPointId==arcStart&&loadedArc.EndPointId==arcEnd&&loadedArc.Construction,
+                "construction sketch arc survives save/open round-trip");
             var loadedEllipse=loaded.Entity(ellipse.Id) as SketchEllipse;
             Check(loadedEllipse is not null&&Math.Abs(loadedEllipse.RadiusX-12)<1e-9&&
-                  Math.Abs(loadedEllipse.RadiusY-6)<1e-9&&Math.Abs(loadedEllipse.RotationRadians-Math.PI/6)<1e-9,
-                "sketch ellipse survives save/open round-trip");
+                  Math.Abs(loadedEllipse.RadiusY-6)<1e-9&&Math.Abs(loadedEllipse.RotationRadians-Math.PI/6)<1e-9&&loadedEllipse.Construction,
+                "construction sketch ellipse survives save/open round-trip");
             Check(loaded.SetDimensionValue(d.Id,35)&&Math.Abs(loaded.Point(c2.CenterPointId).Position.Y-35)<1e-6,"reopened dimensions drive geometry and preserve relation");
             Check(loaded.TryGetExtrusionProfile(out _,out _,out var holes)&&holes.Count==2&&reopened.Depth==20,"reopened extrusion inputs");
             var before=loaded.CaptureSnapshot();loaded.DeleteEntity(c.Id);
