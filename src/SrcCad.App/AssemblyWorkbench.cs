@@ -40,6 +40,32 @@ public partial class MainWindow
         _assemblyUndo.Clear();_assemblyRedo.Clear();
     }
 
+    private static double AssemblyTransformDelta(RigidTransform a,RigidTransform b)
+        => (a.Translation-b.Translation).Length+(a.RotationDegrees-b.RotationDegrees).Length;
+
+    private void RebuildAssemblyMates(bool reportErrors=true)
+    {
+        if(_assemblyDocument is null||_assemblyDocument.Mates.All(m=>m.Suppressed))return;
+        var current=_assemblyDocument;
+        var errors=new List<string>();
+        const int maxPasses=8;
+        for(var pass=0;pass<maxPasses;pass++)
+        {
+            var before=current.Components.ToDictionary(c=>c.Id,c=>c.Transform);
+            errors.Clear();
+            foreach(var mate in current.Mates.Where(m=>!m.Suppressed))
+            {
+                try{current=SolveAssemblyMate(current,mate);}
+                catch(Exception ex){errors.Add(mate.Name+": "+ex.Message);}
+            }
+            var delta=current.Components.Sum(c=>before.TryGetValue(c.Id,out var old)?AssemblyTransformDelta(old,c.Transform):0);
+            if(delta<1e-7)break;
+        }
+        SetAssemblyDocument(current,false);
+        if(reportErrors&&errors.Count>0)
+            Status("Montaj rebuild uyarısı: "+string.Join(" | ",errors.Take(3)));
+    }
+
     private void RestoreAssemblyDocument(AssemblyDocument document)
     {
         _assemblyDocument=AssemblyDocumentFile.Clone(document);
@@ -49,6 +75,7 @@ public partial class MainWindow
             try{_assemblyBodies[component.Id]=RebuildAssemblyComponent(component.SourcePath);}
             catch(Exception ex){Status(component.Name+" geri yüklenemedi: "+ex.Message);}
         }
+        RebuildAssemblyMates(false);
         RefreshAssemblyTree();RenderAssembly();
     }
 
@@ -292,6 +319,7 @@ public partial class MainWindow
             _assemblyBodies.Clear();
             foreach(var component in _assemblyDocument.Components.Where(c=>!c.Suppressed))
                 _assemblyBodies[component.Id]=RebuildAssemblyComponent(component.SourcePath);
+            RebuildAssemblyMates(false);
             RefreshAssemblyTree();
             RenderAssembly();
             Status("Montaj açıldı: "+Path.GetFileName(dialog.FileName));
@@ -342,6 +370,7 @@ public partial class MainWindow
         var component=_assemblyDocument.Component(id);
         var updated=component with{Transform=new RigidTransform(new Vector3d(x,y,z),new Vector3d(rx,ry,rz)).Validate()};
         SetAssemblyDocument(_assemblyDocument with{Components=_assemblyDocument.Components.Select(c=>c.Id==id?updated:c).ToArray()});
+        RebuildAssemblyMates();
         AssemblyMovePanel.Visibility=Visibility.Collapsed;
         RefreshAssemblyTree(id);RenderAssembly(false);Status(component.Name+" konumu güncellendi.");
     }
@@ -380,7 +409,8 @@ public partial class MainWindow
         {
             Mates=_assemblyDocument.Mates.Select(m=>m.Id==id?m with{Suppressed=!m.Suppressed}:m).ToArray()
         });
-        RefreshAssemblyTree();
+        RebuildAssemblyMates();
+        RefreshAssemblyTree();RenderAssembly(false);
         Status(mate.Suppressed?mate.Name+" yeniden etkinleştirildi.":mate.Name+" baskılandı.");
     }
 
