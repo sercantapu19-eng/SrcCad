@@ -66,6 +66,17 @@ public sealed class PartFeatureEvaluator(IPartGeometryKernel kernel) : IFeatureE
                 throw new InvalidOperationException("Feature requires persistent edge references.");
             return references.Select(r=>r.SemanticName).ToArray();
         }
+        string Flatten(SheetMetalFlattenFeatureParameters flatten)
+        {
+            var body=Base(flatten.BaseFeatureId);
+            var steps=flatten.Refold?flatten.Steps:flatten.Steps.Reverse().ToArray();
+            foreach(var step in steps)
+            {
+                var angle=flatten.Refold?step.AngleDegrees:-step.AngleDegrees;
+                body=kernel.Bend(body,Sketch(step.SketchId),angle,step.Reverse);
+            }
+            return body;
+        }
         return node.Parameters switch
         {
             SketchFeatureParameters s => new(PartFile.Serialize(new(s.Plane,s.Sketch,null)),null),
@@ -124,6 +135,7 @@ public sealed class PartFeatureEvaluator(IPartGeometryKernel kernel) : IFeatureE
             SheetMetalRipFeatureParameters s => new(null,kernel.Rip(Base(s.BaseFeatureId),EdgeReferences(s.BaseFeatureId),s.Gap)),
             SheetMetalCornerReliefFeatureParameters s => new(null,kernel.CornerRelief(Base(s.BaseFeatureId),EdgeReferences(s.BaseFeatureId),s.Radius)),
             SheetMetalBendFeatureParameters s => new(null,kernel.Bend(Base(s.BaseFeatureId),Sketch(s.SketchId),s.AngleDegrees,s.Reverse)),
+            SheetMetalFlattenFeatureParameters s => new(null,Flatten(s)),
             StructuralMemberFeatureParameters s => new(null,IsSpatial(s.PathSketchId)
                 ?kernel.SweepSpatial(null,Sketch(s.ProfileSketchId),SpatialPath(s.PathSketchId))
                 :kernel.Sweep(null,Sketch(s.ProfileSketchId),Sketch(s.PathSketchId))),
