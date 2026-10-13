@@ -1482,6 +1482,8 @@ public partial class MainWindow : Window
 
     private string RelationText(SketchRelation relation)
     {
+        if (relation.Type==SketchRelationType.Symmetric && relation.ReferenceA is not null && relation.ReferenceB is not null && relation.ReferenceC is not null)
+            return $"Simetrik • {relation.ReferenceA.Kind}:{relation.ReferenceA.Id} ↔ {relation.ReferenceB.Kind}:{relation.ReferenceB.Id} • eksen {relation.ReferenceC.Kind}:{relation.ReferenceC.Id}";
         if (relation.ReferenceA is not null)
             return $"{relation.Type} • {relation.ReferenceA.Kind}:{relation.ReferenceA.Id} ↔ {relation.ReferenceB!.Kind}:{relation.ReferenceB.Id}";
         return relation.Type switch
@@ -1566,6 +1568,9 @@ public partial class MainWindow : Window
     private void MidpointRelation_Click(object sender, RoutedEventArgs e)
         => ApplySketchRelation(SketchRelationType.Midpoint);
 
+    private void SymmetricRelation_Click(object sender, RoutedEventArgs e)
+        => ApplySketchRelation(SketchRelationType.Symmetric);
+
     private void FixRelation_Click(object sender, RoutedEventArgs e)
         => ApplySketchRelation(SketchRelationType.Fixed);
 
@@ -1595,6 +1600,8 @@ public partial class MainWindow : Window
                     "Bu ilişki için iki çizgi seçin (Ctrl ile çoklu seçim).",
                 SketchRelationType.Concentric =>
                     "Eşmerkezli için iki daire seçin (Ctrl ile çoklu seçim).",
+                SketchRelationType.Symmetric =>
+                    "Simetrik için iki nokta ve bir Merkez Çizgisi seçin (Ctrl ile çoklu seçim).",
                 SketchRelationType.Fixed =>
                     "Sabitlemek için en az bir nokta seçin.",
                 _ => "Seçim bu ilişkiye uygun değil."
