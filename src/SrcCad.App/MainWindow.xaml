@@ -386,6 +386,30 @@
                                 </StackPanel>
                             </StackPanel>
 
+                            <StackPanel x:Name="SplitBodyPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Gövdeyi Böl" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <TextBlock Text="Bölme Düzlemi" FontWeight="Bold"/>
+                                <TextBlock x:Name="SplitBodyPlaneText" TextWrapping="Wrap" Margin="0,4,0,8"/>
+                                <TextBlock Text="Her iki taraf ayrı katı olarak tek multibody B-Rep içinde korunur." Foreground="#5F6B76" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="SplitBodyError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="✓" Width="52" Height="34" Click="SplitBodyOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="AdvancedBodyCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="SketchPatternPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Çizim Güdümlü Dizilim" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <TextBlock Text="Nokta Çizimi" FontWeight="Bold"/>
+                                <ComboBox x:Name="SketchPatternSketch" SelectionChanged="SketchPatternParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock Text="Origin dışındaki sketch noktaları gövde kopyalarının gerçek 3B ofsetleridir." Foreground="#5F6B76" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="SketchPatternError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="✓" Width="52" Height="34" Click="SketchPatternOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="AdvancedBodyCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
                             <StackPanel x:Name="BodyBooleanPanel" Visibility="Collapsed" Margin="0,16,0,0">
                                 <TextBlock Text="Gövde Boolean" FontWeight="Bold" Margin="0,0,0,8"/>
                                 <TextBlock Text="Gövde A"/><ComboBox x:Name="BooleanBodyA" SelectionChanged="BodyBooleanParameterChanged" Margin="0,4,0,8"/>
