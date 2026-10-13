@@ -1760,6 +1760,11 @@ public partial class MainWindow : Window
         button.ContextMenu.IsOpen = true;
     }
 
+    private void Point_Click(object sender,RoutedEventArgs e)
+    {
+        if(_sketch is not null)ActivateSketchCommand(new PointSketchCommand(_sketch));
+    }
+
     private void Line_Click(object sender, RoutedEventArgs e)
     {
         if (_sketch is not null) ActivateSketchCommand(new LineSketchCommand(_sketch));
