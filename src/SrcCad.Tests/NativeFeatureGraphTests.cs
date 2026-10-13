@@ -40,6 +40,27 @@ internal static class NativeFeatureGraphTests
             Check(sheetCutInspect[0]<sheetInspect[0]&&sheetCutInspect[1]==1,
                 "sheet metal cut removes real material through thickness");
 
+            string? flangeEdge=null;string? flangeBody=null;
+            foreach(var edgeRef in OcctFeatureKernel.EdgeReferences(sheetSession.Output(sheetNode.Id)!.BRep!))
+            {
+                try
+                {
+                    var candidate=OcctFeatureKernel.EdgeFlange(sheetSession.Output(sheetNode.Id)!.BRep!,new[]{edgeRef},12,90,2,0,false);
+                    var info=OcctFeatureKernel.Inspect(candidate);
+                    if(info[0]>sheetInspect[0]&&info[1]==1){flangeEdge=edgeRef;flangeBody=candidate;break;}
+                }
+                catch(InvalidOperationException){}
+            }
+            Check(flangeEdge is not null&&flangeBody is not null,"native edge flange resolves a straight sheet edge and adds joined material");
+            var edgeFlangeNode=new FeatureNode(Guid.NewGuid(),"Kenar Flanşı1",
+                new SheetMetalEdgeFlangeFeatureParameters(sheetNode.Id,12,90,2,0),
+                References:new[]{new FeatureReference(sheetNode.Id,TopologyKind.Edge,flangeEdge!)});
+            var edgeFlangeDoc=new FeatureDocument(Guid.NewGuid(),new[]{doc.Features[0],sheetNode,edgeFlangeNode});
+            var edgeFlangeSession=new FeatureSession<PartFeatureOutput>(edgeFlangeDoc,evaluator);
+            var edgeFlangeInspect=OcctFeatureKernel.Inspect(edgeFlangeSession.Output(edgeFlangeNode.Id)!.BRep!);
+            Check(edgeFlangeInspect[0]>sheetInspect[0]&&edgeFlangeInspect[1]==1,
+                "sheet metal edge flange rebuilds through feature graph");
+
             var bossBody=session.Output(boss.Id)!.BRep!;
             var bossEdges=OcctFeatureKernel.EdgeReferences(bossBody);
             Check(bossEdges.Length>=4,"extruded body exposes semantic edge references");

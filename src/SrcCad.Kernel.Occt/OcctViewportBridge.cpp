@@ -77,6 +77,7 @@
 #include <BRepBndLib.hxx>
 #include <Bnd_Box.hxx>
 #include <TopExp.hxx>
+#include <TopExp_Explorer.hxx>
 #include <TopTools_IndexedMapOfShape.hxx>
 #include <sstream>
 #include <iomanip>
@@ -271,6 +272,26 @@ namespace SrcCad::Kernel::Occt
                std::isfinite(signature.Area)&&signature.Area>1e-12&&
                std::isfinite(signature.X)&&std::isfinite(signature.Y)&&std::isfinite(signature.Z)&&
                std::isfinite(signature.NX)&&std::isfinite(signature.NY)&&std::isfinite(signature.NZ);
+    }
+
+    static bool supportFaceForEdge(const TopoDS_Shape& shape,const TopoDS_Edge& target,
+                                   TopoDS_Face& support,gp_Dir& normal,gp_Pnt& center)
+    {
+        bool found=false;double bestArea=-1.0;
+        for(TopExp_Explorer fx(shape,TopAbs_FACE);fx.More();fx.Next())
+        {
+            TopoDS_Face face=TopoDS::Face(fx.Current());
+            bool contains=false;
+            for(TopExp_Explorer ex(face,TopAbs_EDGE);ex.More();ex.Next())
+                if(ex.Current().IsSame(target)){contains=true;break;}
+            if(!contains)continue;
+            gp_Pnt origin;gp_Dir u,v,n;
+            if(!planarFaceFrame(face,origin,u,v,n))continue;
+            GProp_GProps props;BRepGProp::SurfaceProperties(face,props);
+            if(props.Mass()<=bestArea)continue;
+            bestArea=props.Mass();support=face;normal=n;center=props.CentreOfMass();found=true;
+        }
+        return found;
     }
 
     static TopoDS_Face resolveFaceReference(const TopoDS_Shape& shape,String^ managed)
@@ -1564,6 +1585,102 @@ namespace SrcCad::Kernel::Occt
                 if(!fuse.IsDone())throw gcnew InvalidOperationException("OCCT circular pattern fuse failed.");
                 result=fuse.Shape();
             }
+            return encodeFeature(result);
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
+    String^ OcctFeatureKernel::EdgeFlange(String^ baseBody,array<String^>^ edgeReferences,
+        double length,double angleDegrees,double thickness,double bendRadius,bool reverse)
+    {
+        if(!std::isfinite(length)||length<=1e-9||
+           !std::isfinite(angleDegrees)||angleDegrees<=1e-6||angleDegrees>=179.999||
+           !std::isfinite(thickness)||thickness<=1e-9||
+           !std::isfinite(bendRadius)||bendRadius<0)
+            throw gcnew ArgumentException("Invalid edge flange parameters.");
+        try
+        {
+            TopoDS_Shape result=decodeFeature(baseBody);
+            const double initialVolume=featureVolume(result);
+            auto edges=resolveEdgeReferences(result,edgeReferences);
+            for(const auto& selected:edges)
+            {
+                TopoDS_Vertex va,vb;TopExp::Vertices(selected,va,vb);
+                if(va.IsNull()||vb.IsNull())throw gcnew InvalidOperationException("Edge flange requires bounded linear edges.");
+                gp_Pnt a=BRep_Tool::Pnt(va),b=BRep_Tool::Pnt(vb);
+                gp_Vec tangent(a,b);const double edgeLength=tangent.Magnitude();
+                if(edgeLength<=1e-9)throw gcnew InvalidOperationException("Edge flange edge has zero length.");
+                GProp_GProps edgeProps;BRepGProp::LinearProperties(selected,edgeProps);
+                if(std::abs(edgeProps.Mass()-edgeLength)>std::max(1e-6,edgeLength*1e-5))
+                    throw gcnew InvalidOperationException("Edge flange currently requires a straight edge.");
+                gp_Dir t(tangent);
+
+                TopoDS_Face support;gp_Dir n;gp_Pnt faceCenter;
+                if(!supportFaceForEdge(result,selected,support,n,faceCenter))
+                    throw gcnew InvalidOperationException("Edge flange requires an adjacent planar sheet face.");
+
+                gp_Pnt mid((a.X()+b.X())*0.5,(a.Y()+b.Y())*0.5,(a.Z()+b.Z())*0.5);
+                gp_Vec inward(mid,faceCenter);
+                inward-=gp_Vec(n.X(),n.Y(),n.Z())*inward.Dot(gp_Vec(n.X(),n.Y(),n.Z()));
+                gp_Vec side=t.Crossed(gp_Vec(n.X(),n.Y(),n.Z()));
+                if(inward.Magnitude()>1e-9&&side.Dot(inward)>0)side.Reverse();
+                side.Normalize();
+
+                const double radians=angleDegrees*3.14159265358979323846/180.0;
+                gp_Vec lift=side*std::cos(radians)+gp_Vec(n.X(),n.Y(),n.Z())*((reverse?-1.0:1.0)*std::sin(radians));
+                if(lift.Magnitude()<=1e-9)throw gcnew InvalidOperationException("Invalid flange direction.");
+                lift.Normalize();
+                gp_Vec width=t.Crossed(lift);
+                if(width.Magnitude()<=1e-9)throw gcnew InvalidOperationException("Invalid flange thickness direction.");
+                width.Normalize();
+
+                const double overlap=std::max(1e-5,std::min(thickness*0.05,0.05));
+                gp_Pnt p0=a.Translated(width.Multiplied(-thickness*0.5)).Translated(lift.Multiplied(-overlap));
+                gp_Pnt p1=b.Translated(width.Multiplied(-thickness*0.5)).Translated(lift.Multiplied(-overlap));
+                gp_Pnt p2=p1.Translated(lift.Multiplied(length+overlap));
+                gp_Pnt p3=p0.Translated(lift.Multiplied(length+overlap));
+                BRepBuilderAPI_MakePolygon polygon;
+                polygon.Add(p0);polygon.Add(p1);polygon.Add(p2);polygon.Add(p3);polygon.Close();
+                if(!polygon.IsDone())throw gcnew InvalidOperationException("Edge flange profile failed.");
+                BRepBuilderAPI_MakeFace face(polygon.Wire(),true);
+                if(!face.IsDone())throw gcnew InvalidOperationException("Edge flange face failed.");
+                BRepPrimAPI_MakePrism prism(face.Face(),width.Multiplied(thickness),true,true);
+                TopoDS_Shape flange=prism.Shape();
+                featureVolume(flange);
+                BRepAlgoAPI_Fuse fuse(result,flange);fuse.Build();
+                if(!fuse.IsDone())throw gcnew InvalidOperationException("OCCT edge flange fuse failed.");
+                TopoDS_Shape fused=fuse.Shape();
+                const double fusedVolume=featureVolume(fused);
+                if(fusedVolume-featureVolume(result)<=std::max(1e-8,initialVolume*1e-10))
+                    throw gcnew InvalidOperationException("Edge flange does not join the sheet body.");
+
+                if(bendRadius>1e-9)
+                {
+                    TopTools_IndexedMapOfShape resultEdges;TopExp::MapShapes(fused,TopAbs_EDGE,resultEdges);
+                    int best=0;double bestDistance=std::numeric_limits<double>::infinity();
+                    for(int i=1;i<=resultEdges.Extent();++i)
+                    {
+                        TopoDS_Edge candidate=TopoDS::Edge(resultEdges(i));
+                        TopoDS_Vertex ca,cb;TopExp::Vertices(candidate,ca,cb);
+                        if(ca.IsNull()||cb.IsNull())continue;
+                        gp_Pnt pa=BRep_Tool::Pnt(ca),pb=BRep_Tool::Pnt(cb);
+                        gp_Vec cv(pa,pb);const double clen=cv.Magnitude();
+                        if(clen<=1e-9||std::abs(clen-edgeLength)>std::max(1e-4,edgeLength*0.05))continue;
+                        gp_Dir cd(cv);if(std::abs(cd.Dot(t))<0.999)continue;
+                        gp_Pnt cm((pa.X()+pb.X())*0.5,(pa.Y()+pb.Y())*0.5,(pa.Z()+pb.Z())*0.5);
+                        const double d=cm.Distance(mid);
+                        if(d<bestDistance){bestDistance=d;best=i;}
+                    }
+                    if(best==0)throw gcnew InvalidOperationException("Bend edge could not be resolved for flange radius.");
+                    BRepFilletAPI_MakeFillet bend(fused);
+                    bend.Add(bendRadius,TopoDS::Edge(resultEdges(best)));bend.Build();
+                    if(!bend.IsDone())throw gcnew InvalidOperationException("OCCT edge flange bend radius failed.");
+                    fused=bend.Shape();featureVolume(fused);
+                }
+                result=fused;
+            }
+            if(featureVolume(result)<=initialVolume+std::max(1e-8,initialVolume*1e-10))
+                throw gcnew InvalidOperationException("Edge flange added no material.");
             return encodeFeature(result);
         }
         catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
