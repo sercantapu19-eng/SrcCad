@@ -751,6 +751,12 @@ namespace SrcCad::Kernel::Occt
                 gp_Pnt p=BRep_Tool::Pnt(TopoDS::Vertex(selected));
                 return gcnew array<double>{1.0,0.0,p.X(),p.Y(),p.Z()};
             }
+            if(selected.ShapeType()==TopAbs_SOLID||selected.ShapeType()==TopAbs_COMPSOLID||selected.ShapeType()==TopAbs_COMPOUND)
+            {
+                BRepGProp::VolumeProperties(selected,props);
+                if(props.Mass()>1e-12)
+                    return gcnew array<double>{6.0,props.Mass(),props.CentreOfMass().X(),props.CentreOfMass().Y(),props.CentreOfMass().Z()};
+            }
             return gcnew array<double>(0);
         }
         catch(const Standard_Failure&){return gcnew array<double>(0);}
