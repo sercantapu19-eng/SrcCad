@@ -24,6 +24,7 @@ internal static class FeatureGraphTests
                 RevolveFeatureParameters p=>p.AngleDegrees,
                 RevolveCutFeatureParameters p=>p.AngleDegrees,
                 ShellFeatureParameters p=>p.Thickness,
+                DraftFeatureParameters p=>p.AngleDegrees,
                 MirrorFeatureParameters=>1,
                 LinearPatternFeatureParameters p=>p.Count,
                 CircularPatternFeatureParameters p=>p.Count,
@@ -126,6 +127,15 @@ internal static class FeatureGraphTests
         Check(shellClone.Node(shellNode.Id).Kind==FeatureKind.Shell&&
               ((ShellFeatureParameters)shellClone.Node(shellNode.Id).Parameters).Thickness==2,
             "shell thickness and persistent opening-face references roundtrip");
+        var draftNode=new FeatureNode(Guid.NewGuid(),"Draft1",
+            new DraftFeatureParameters(boss.Id,StandardPlanes.Front,3),
+            References:new[]{new FeatureReference(boss.Id,TopologyKind.Face,"F;1200;20;15;20;0;0;1")});
+        var draftDoc=initial with{Features=initial.Features.Append(draftNode).ToArray()};
+        var draftClone=FeatureDocumentFile.Clone(draftDoc);
+        Check(draftClone.Node(draftNode.Id).Kind==FeatureKind.Draft&&
+              ((DraftFeatureParameters)draftClone.Node(draftNode.Id).Parameters).AngleDegrees==3,
+            "draft neutral plane angle and face reference roundtrip");
+
         var mirrorNode=new FeatureNode(Guid.NewGuid(),"Aynala1",new MirrorFeatureParameters(boss.Id,StandardPlanes.Front));
         var mirrorDoc=initial with{Features=initial.Features.Append(mirrorNode).ToArray()};
         var mirrorClone=FeatureDocumentFile.Clone(mirrorDoc);
