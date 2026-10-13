@@ -59,6 +59,50 @@ internal static class DrawingDocumentTests
         }
         catch(InvalidDataException){_checks++;}
 
+        var secondSheet=new DrawingSheet(Guid.NewGuid(),"A4",297,210,DrawingProjectionStandard.FirstAngle);
+        try
+        {
+            DrawingDocumentFile.Serialize(new DrawingDocument(
+                Guid.NewGuid(),
+                new[]{sheet,secondSheet},
+                new[]
+                {
+                    front,
+                    top with{SheetId=secondSheet.Id,ParentViewId=front.Id}
+                },
+                Array.Empty<DrawingAnnotation>()));
+            throw new InvalidOperationException("drawing accepted cross-sheet parent view");
+        }
+        catch(InvalidDataException){_checks++;}
+
+        try
+        {
+            DrawingDocumentFile.Serialize(new DrawingDocument(
+                Guid.NewGuid(),
+                new[]{sheet,secondSheet},
+                new[]{front},
+                new[]
+                {
+                    note with{SheetId=secondSheet.Id,ViewId=front.Id}
+                }));
+            throw new InvalidOperationException("drawing accepted cross-sheet annotation reference");
+        }
+        catch(InvalidDataException){_checks++;}
+
+        var cycleA=new DrawingView(Guid.NewGuid(),"A","C:\\Models\\Body.scpart",DrawingViewType.Projected,sheet.Id,new Point2d(10,10),1.0);
+        var cycleB=new DrawingView(Guid.NewGuid(),"B","C:\\Models\\Body.scpart",DrawingViewType.Projected,sheet.Id,new Point2d(20,20),1.0,cycleA.Id);
+        cycleA=cycleA with{ParentViewId=cycleB.Id};
+        try
+        {
+            DrawingDocumentFile.Serialize(new DrawingDocument(
+                Guid.NewGuid(),
+                new[]{sheet},
+                new[]{cycleA,cycleB},
+                Array.Empty<DrawingAnnotation>()));
+            throw new InvalidOperationException("drawing accepted cyclic view dependency");
+        }
+        catch(InvalidDataException){_checks++;}
+
         Console.WriteLine($"Drawing Document Tests: {_checks} PASS");
     }
 }
