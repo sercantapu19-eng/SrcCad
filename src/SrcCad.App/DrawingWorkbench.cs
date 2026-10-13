@@ -872,6 +872,69 @@ public partial class MainWindow
         catch(Exception ex){Status("Ölçü oluşturulamadı: "+ex.Message);}
     }
 
+    private void DrawingRadiusDimension_Click(object sender,RoutedEventArgs e)
+    {
+        if(_drawingDocument is null)return;
+        var view=SelectedDrawingView();
+        if(view is null){Status("Yarıçap ölçüsü için FeatureManager'dan görünüş seçin.");return;}
+        try
+        {
+            Point2d pointer=view.Position;
+            if(_viewer.ScreenToPlane(_lastMouseX,_lastMouseY,0,0,0,0,0,1,out var world))
+                pointer=new Point2d(world.X,world.Y);
+            var circles=DrawingProjectedCircles(view);
+            if(circles.Length==0)throw new InvalidOperationException("Görünüşte dairesel geometri yok.");
+            var choice=circles.Select(circle=>
+            {
+                var center=DrawingToSheet(view,circle.X,circle.Y);
+                var distance=Math.Abs(Point2d.Distance(pointer,center)-circle.Radius*view.Scale);
+                return (Circle:circle,Center:center,Distance:distance);
+            }).OrderBy(x=>x.Distance).First();
+            var position=new Point2d(choice.Center.X+choice.Circle.Radius*view.Scale+18,choice.Center.Y+14);
+            var note=new DrawingAnnotation(Guid.NewGuid(),view.SheetId,view.Id,position,
+                $"R{choice.Circle.Radius:0.###}",DrawingAnnotationKind.RadiusDimension,
+                EncodeRadiusDimension(choice.Circle));
+            SetDrawingDocument(_drawingDocument with{Annotations=_drawingDocument.Annotations.Append(note).ToArray()});
+            RefreshDrawingTree(note.Id);RenderDrawing();Status("İlişkili yarıçap ölçüsü eklendi.");
+        }
+        catch(Exception ex){Status("Yarıçap ölçüsü oluşturulamadı: "+ex.Message);}
+    }
+
+    private void DrawingAngularDimension_Click(object sender,RoutedEventArgs e)
+    {
+        if(_drawingDocument is null)return;
+        var view=SelectedDrawingView();
+        if(view is null){Status("Açı ölçüsü için FeatureManager'dan görünüş seçin.");return;}
+        try
+        {
+            Point2d pointer=view.Position;
+            if(_viewer.ScreenToPlane(_lastMouseX,_lastMouseY,0,0,0,0,0,1,out var world))
+                pointer=new Point2d(world.X,world.Y);
+            var segments=DrawingProjectedSegments(view);
+            if(segments.Length<2)throw new InvalidOperationException("Açı için en az iki izdüşüm kenarı gerekiyor.");
+            var ranked=segments.Select(segment=>
+            {
+                var a=DrawingToSheet(view,segment.X1,segment.Y1);
+                var b=DrawingToSheet(view,segment.X2,segment.Y2);
+                return (Segment:segment,Distance:PointSegmentDistance(pointer,a,b));
+            }).OrderBy(x=>x.Distance).ToArray();
+            var first=ranked[0].Segment;
+            var second=ranked.Skip(1).Select(x=>x.Segment)
+                .FirstOrDefault(candidate=>AngularDegrees(first,candidate)>1e-3&&AngularDegrees(first,candidate)<179.999);
+            if(second is null)throw new InvalidOperationException("Yakında açılı iki farklı kenar bulunamadı.");
+            var firstMid=DrawingToSheet(view,first.Mid.X,first.Mid.Y);
+            var secondMid=DrawingToSheet(view,second.Mid.X,second.Mid.Y);
+            var position=new Point2d((firstMid.X+secondMid.X)*0.5+16,(firstMid.Y+secondMid.Y)*0.5+16);
+            var angle=AngularDegrees(first,second);
+            var note=new DrawingAnnotation(Guid.NewGuid(),view.SheetId,view.Id,position,
+                $"{angle:0.###}°",DrawingAnnotationKind.AngularDimension,
+                EncodeAngularDimension(first,second));
+            SetDrawingDocument(_drawingDocument with{Annotations=_drawingDocument.Annotations.Append(note).ToArray()});
+            RefreshDrawingTree(note.Id);RenderDrawing();Status("İlişkili açı ölçüsü eklendi.");
+        }
+        catch(Exception ex){Status("Açı ölçüsü oluşturulamadı: "+ex.Message);}
+    }
+
     private void DrawingAddNote_Click(object sender,RoutedEventArgs e)
     {
         if(_drawingDocument is null)return;
