@@ -241,6 +241,12 @@ public partial class MainWindow : Window
             return true;
         }
 
+        if(key==Key.Delete&&!_inSketch&&!_extrudeCommandActive&&FeatureTree.IsKeyboardFocusWithin)
+        {
+            if(InDrawingMode&&DeleteSelectedDrawingTreeItem())return true;
+            if(InAssemblyMode&&DeleteSelectedAssemblyTreeItem())return true;
+        }
+
         if(key==Key.Delete&&!_inSketch&&!_extrudeCommandActive&&_partSession is not null&&FeatureTree.IsKeyboardFocusWithin&&SelectedGraphId is Guid graphId)
         {DeleteGraphFeature(graphId);return true;}
         if (key == Key.Delete && !_inSketch && !_extrudeCommandActive &&
