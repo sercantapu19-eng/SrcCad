@@ -206,9 +206,9 @@
                     <Button Style="{StaticResource CadCommandButton}" Content="Kütle Özellikleri" Click="InspectMassProperties_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Kesit Görünümü" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Geometri Kontrolü" Click="InspectGeometry_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Draft Analizi" Click="CadCommandPlaceholder_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Çakışma" Click="CadCommandPlaceholder_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Karşılaştır" Click="CadCommandPlaceholder_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Draft Analizi" Click="InspectDraftAnalysis_Click" ToolTip="Seçili yüzlerin aktif çekme yönüne göre gerçek draft açısını hesaplar."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Çakışma" Click="InspectInterference_Click" ToolTip="İki .scpart B-Rep arasındaki gerçek ortak hacmi OCCT ile hesaplar."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Karşılaştır" Click="InspectCompare_Click" ToolTip="İki modelin hacim ve topoloji özetini karşılaştırır."/>
                 </WrapPanel>
             </TabItem>
         </TabControl>
