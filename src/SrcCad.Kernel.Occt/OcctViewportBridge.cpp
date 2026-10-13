@@ -1765,6 +1765,9 @@ namespace SrcCad::Kernel::Occt
         catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
     }
 
+    static void projectionBasis(array<double>^ direction,array<double>^ up,gp_Vec& d,gp_Vec& u,gp_Vec& right);
+    static array<double>^ projectShapeEdges(const TopoDS_Shape& shape,array<double>^ direction,array<double>^ up);
+
     array<double>^ OcctFeatureKernel::ProjectEdges(String^ body,array<double>^ direction,array<double>^ up)
     {
         try{return projectShapeEdges(decodeFeature(body),direction,up);}
