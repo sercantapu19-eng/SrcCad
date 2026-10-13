@@ -1204,7 +1204,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (dimension.Type == SketchDimensionType.CircleDiameter &&
+        if (dimension.Type is SketchDimensionType.CircleDiameter or SketchDimensionType.CircleRadius &&
             _sketch.Entity(dimension.EntityA) is SketchCircle circle)
         {
             var center = _sketch.Point(circle.CenterPointId).Position;
@@ -1352,7 +1352,7 @@ public partial class MainWindow : Window
             return new Point2d((a.X + b.X) / 2.0, (a.Y + b.Y) / 2.0);
         }
 
-        if (dimension.Type == SketchDimensionType.CircleDiameter &&
+        if (dimension.Type is SketchDimensionType.CircleDiameter or SketchDimensionType.CircleRadius &&
             _sketch.Entity(dimension.EntityA) is SketchCircle circle)
             return _sketch.Point(circle.CenterPointId).Position;
 
@@ -1386,7 +1386,12 @@ public partial class MainWindow : Window
     {
         if (_sketch is null) return string.Empty;
         var value = _sketch.Measure(dimension);
-        var prefix = dimension.Type == SketchDimensionType.CircleDiameter ? "Ø" : "";
+        var prefix = dimension.Type switch
+        {
+            SketchDimensionType.CircleDiameter => "Ø",
+            SketchDimensionType.CircleRadius => "R",
+            _ => ""
+        };
         var suffix = dimension.Type == SketchDimensionType.Angle ? "°" : "";
         var driven = dimension.Driving ? "" : " (Ref)";
         return $"{prefix}{value:0.###}{suffix}{driven}";
@@ -1503,6 +1508,30 @@ public partial class MainWindow : Window
 
     private void SmartDimension_Click(object sender, RoutedEventArgs e)
         => StartSmartDimensionMode();
+
+    private void RadiusSketchDimension_Click(object sender,RoutedEventArgs e)
+    {
+        if(_sketch is null||!_inSketch)return;
+        var refs=CurrentSketchReferences();
+        if(refs.Length!=1||refs[0].Kind!=GeometryReferenceKind.Circle||
+           _sketch.Entity(refs[0].Id) is not SketchCircle circle)
+        {
+            Status("Yarıçap ölçüsü için tek bir daire seçin.");
+            return;
+        }
+        var before=_sketch.CaptureSnapshot();
+        var center=_sketch.Point(circle.CenterPointId).Position;
+        var label=new Point2d(center.X+circle.Radius*1.5,center.Y+circle.Radius*0.75);
+        var dimension=_sketch.AddDimension(SketchDimensionType.CircleRadius,label,entityA:circle.Id);
+        RenderSketch();
+        if(EditDimension(dimension.Id,removeOnCancel:true))
+        {
+            _sketchUndo.Push(before);_sketchRedo.Clear();
+            Status($"R{_sketch.Measure(_sketch.Dimension(dimension.Id)!):0.###} sürücü yarıçap ölçüsü oluşturuldu.");
+        }
+        else _sketch.RestoreSnapshot(before);
+        RenderSketch();UpdateSketchPropertyPanel();
+    }
 
     private void StartSmartDimensionMode()
     {
