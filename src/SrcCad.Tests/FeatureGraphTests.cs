@@ -18,6 +18,8 @@ internal static class FeatureGraphTests
             var own=node.Parameters switch
             {
                 ExtrudeFeatureParameters p=>p.Depth,
+                BoundaryFeatureParameters p=>p.ProfileSketchIds.Length,
+                BoundaryCutFeatureParameters p=>p.ProfileSketchIds.Length,
                 FilletFeatureParameters p=>p.Radius,
                 ChamferFeatureParameters p=>p.Distance,
                 HoleFeatureParameters p=>p.Depth,
@@ -33,6 +35,12 @@ internal static class FeatureGraphTests
                 MirrorFeatureParameters=>1,
                 LinearPatternFeatureParameters p=>p.Count,
                 CircularPatternFeatureParameters p=>p.Count,
+                SketchPatternFeatureParameters=>1,
+                BodyBooleanFeatureParameters=>1,
+                MoveCopyBodyFeatureParameters=>1,
+                SplitBodyFeatureParameters=>1,
+                DomeFeatureParameters p=>p.Height,
+                HoleWizardFeatureParameters p=>p.Depth,
                 ReferencePlaneFeatureParameters=>1,
                 ReferenceAxisFeatureParameters=>1,
                 ReferencePointFeatureParameters=>1,
@@ -198,6 +206,32 @@ internal static class FeatureGraphTests
         var patternClone=FeatureDocumentFile.Clone(patternDoc);
         Check(patternClone.Node(linearNode.Id).Kind==FeatureKind.LinearPattern&&patternClone.Node(circularNode.Id).Kind==FeatureKind.CircularPattern,
             "linear/circular pattern parameters roundtrip");
+
+        var boundaryNode=new FeatureNode(Guid.NewGuid(),"Sınır1",new BoundaryFeatureParameters(new[]{source.Id,loft2.Id}));
+        var boundaryCutNode=new FeatureNode(Guid.NewGuid(),"Sınır Kes1",new BoundaryCutFeatureParameters(boss.Id,new[]{source.Id,loft2.Id}));
+        var boundaryDoc=initial with{Features=initial.Features.Concat(new[]{loft2,boundaryNode,boundaryCutNode}).ToArray()};
+        var boundaryClone=FeatureDocumentFile.Clone(boundaryDoc);
+        Check(boundaryClone.Node(boundaryNode.Id).Kind==FeatureKind.Boundary&&boundaryClone.Node(boundaryCutNode.Id).Kind==FeatureKind.BoundaryCut,
+            "boundary boss/cut profile dependencies roundtrip");
+
+        var pointPatternSketch=new SketchModel(StandardPlanes.Front);
+        pointPatternSketch.CreatePointExact(new(50,0));pointPatternSketch.CreatePointExact(new(100,25));
+        var pointPatternSketchNode=new FeatureNode(Guid.NewGuid(),"Dizilim Noktaları",new SketchFeatureParameters(pointPatternSketch.Plane,pointPatternSketch.CaptureSnapshot()));
+        var sketchPatternNode=new FeatureNode(Guid.NewGuid(),"Çizim Dizilimi1",new SketchPatternFeatureParameters(boss.Id,pointPatternSketchNode.Id));
+        var moveNode=new FeatureNode(Guid.NewGuid(),"Gövde Taşı1",new MoveCopyBodyFeatureParameters(boss.Id,new Vector3d(20,0,0),new Vector3d(0,0,30),true));
+        var splitNode=new FeatureNode(Guid.NewGuid(),"Böl1",new SplitBodyFeatureParameters(boss.Id,StandardPlanes.Right));
+        var boolNode=new FeatureNode(Guid.NewGuid(),"Boolean1",new BodyBooleanFeatureParameters(boss.Id,moveNode.Id,BodyBooleanOperation.Add));
+        var domeNode=new FeatureNode(Guid.NewGuid(),"Kubbe1",new DomeFeatureParameters(boss.Id,5),
+            References:new[]{new FeatureReference(boss.Id,TopologyKind.Face,"F;1200;20;15;20;0;0;1")});
+        var wizardNode=new FeatureNode(Guid.NewGuid(),"Delik Sihirbazı1",
+            new HoleWizardFeatureParameters(boss.Id,new Vector3d(20,15,20),8,12,HoleWizardType.Counterbore,14,4,true),
+            References:new[]{new FeatureReference(boss.Id,TopologyKind.Face,"F;1200;20;15;20;0;0;1")});
+        var advancedDoc=initial with{Features=initial.Features.Concat(new[]{pointPatternSketchNode,sketchPatternNode,moveNode,splitNode,boolNode,domeNode,wizardNode}).ToArray()};
+        var advancedClone=FeatureDocumentFile.Clone(advancedDoc);
+        Check(advancedClone.Node(sketchPatternNode.Id).Kind==FeatureKind.SketchPattern&&advancedClone.Node(moveNode.Id).Kind==FeatureKind.MoveCopyBody&&
+              advancedClone.Node(splitNode.Id).Kind==FeatureKind.SplitBody&&advancedClone.Node(boolNode.Id).Kind==FeatureKind.BodyBoolean&&
+              advancedClone.Node(domeNode.Id).Kind==FeatureKind.Dome&&advancedClone.Node(wizardNode.Id).Kind==FeatureKind.HoleWizard,
+            "advanced multibody dome hole-wizard parameters roundtrip");
 
         var refPlaneNode=new FeatureNode(Guid.NewGuid(),"Düzlem1",new ReferencePlaneFeatureParameters(StandardPlanes.Front,25));
         var refAxisNode=new FeatureNode(Guid.NewGuid(),"Eksen1",new ReferenceAxisFeatureParameters(Vector3d.Zero,Vector3d.UnitZ));
