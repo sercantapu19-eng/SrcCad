@@ -603,6 +603,9 @@
                                 <TextBlock x:Name="GraphDirection2Label" Text="İkinci Yön Derinliği (mm)"/>
                                 <TextBox x:Name="GraphDirection2Depth" TextChanged="GraphParameterChanged" Margin="0,4,0,8"/>
                                 <CheckBox x:Name="GraphMergeResult" Content="Sonucu Birleştir" IsChecked="True" Checked="GraphParameterChanged" Unchecked="GraphParameterChanged" Margin="0,0,0,8"/>
+                                <CheckBox x:Name="GraphUpToFace" Content="Yüzeye Kadar" Checked="GraphParameterChanged" Unchecked="GraphParameterChanged" Margin="0,0,0,4"/>
+                                <Button x:Name="GraphCaptureUpToFace" Content="Seçili Yüzü Hedef Yap" Click="GraphCaptureUpToFace_Click" Margin="0,0,0,4"/>
+                                <TextBlock x:Name="GraphUpToFaceTarget" Text="Hedef yüz seçilmedi" TextWrapping="Wrap" Foreground="#5F6B76" Margin="0,0,0,8"/>
                                 <TextBlock x:Name="GraphFeatureError" Foreground="#AA2020" TextWrapping="Wrap"/>
                                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                     <Button Content="✓" Width="52" Height="34" Click="GraphFeatureOk_Click" x:Name="GraphAcceptButton"/>
