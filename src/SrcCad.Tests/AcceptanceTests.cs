@@ -73,6 +73,8 @@ internal static class AcceptanceTests
         Test("Origin silinemez",()=>{var s=New();s.DeletePoint(0);Require(s.Point(0).Fixed);});
         Test("Ölçü etiketini taşımak geometriyi korur",()=>{var s=New();var l=Line(s);var d=s.AddDimension(SketchDimensionType.LineLength,new(1,1),entityA:l.Id);var p=s.Point(l.EndPointId).Position;s.SetDimensionLabel(d.Id,new(300,400));Require(s.Point(l.EndPointId).Position==p&&Near(s.Dimension(d.Id)!.Value,50));});
         Test("Tek dikdörtgen konturu",()=>Require(Plate().TryGetExtrusionProfile(out _,out _,out _)));
+        Test("Elips kapalı ekstrüzyon profili",()=>{var s=New();s.AddEllipse(0,30,15,Math.PI/8);Require(s.TryGetExtrusionProfile(out var outer,out var holes,out var circles)&&outer.Count>=48&&holes.Count==0&&circles.Count==0);});
+        Test("Slot çizgi-yay ekstrüzyon profili",()=>{var s=New();var cmd=new StraightSlotSketchCommand(s);cmd.Pick(new(new(-30,0),-1,.001,1));cmd.Pick(new(new(30,0),-1,.001,1));cmd.Pick(new(new(30,10),-1,.001,1));Require(s.Arcs(false).Count()==2&&s.TryGetExtrusionProfile(out _,out _,out _));});
         Test("Üç dairesel delik",()=>{var s=Plate();foreach(var x in new[]{-60.0,0,60})s.AddCircle(s.CreatePointExact(new(x,0)),7.5);Require(s.TryGetExtrusionProfile(out _,out _,out var h)&&h.Count==3);});
         Test("Poligon delik",()=>{var s=Plate();s.AddCornerRectangle(new(-20,-20),new(20,20),0.001);Require(s.TryGetExtrusionProfile(out _,out var h,out _)&&h.Count==1);});
         Test("Kendini kesen kontur reddi",()=>{var s=New();Polygon(s,new(0,0),new(100,100),new(0,100),new(100,0));Require(!s.TryGetExtrusionProfile(out _,out _,out _));});
