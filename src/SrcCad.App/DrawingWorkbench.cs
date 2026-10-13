@@ -17,6 +17,7 @@ public partial class MainWindow
     private readonly Stack<DrawingDocument> _drawingUndo=new();
     private readonly Stack<DrawingDocument> _drawingRedo=new();
     private Guid? _drawingEditingViewId;
+    private Guid? _drawingEditingAnnotationId;
 
     private bool InDrawingMode=>_drawingDocument is not null;
 
@@ -66,6 +67,7 @@ public partial class MainWindow
         _drawingRoot=null;_drawingDocument=null;_drawingPath=null;_drawingBodies.Clear();ResetDrawingHistory();
         PartNode.Visibility=Visibility.Visible;
         DrawingViewPanel.Visibility=Visibility.Collapsed;_drawingEditingViewId=null;
+        DrawingAnnotationPanel.Visibility=Visibility.Collapsed;_drawingEditingAnnotationId=null;
     }
 
     private static (Vector3d Direction,Vector3d Up) DrawingOrientation(DrawingViewType type)
@@ -131,6 +133,7 @@ public partial class MainWindow
             {
                 var item=new TreeViewItem{Header="Not: "+note.Text,Tag=note.Id};
                 var menu=new ContextMenu();
+                var edit=new MenuItem{Header="Notu / Ölçüyü Düzenle"};edit.Click+=(_,_)=>BeginDrawingAnnotationEdit(note.Id);menu.Items.Add(edit);
                 var del=new MenuItem{Header="Notu Sil"};del.Click+=(_,_)=>DeleteDrawingAnnotation(note.Id);menu.Items.Add(del);
                 item.ContextMenu=menu;
                 sheetNode.Items.Add(item);
@@ -193,6 +196,46 @@ public partial class MainWindow
         var removed=before-_drawingDocument.Views.Length;
         RefreshDrawingTree();RenderDrawing();
         Status(removed==1?"Görünüş silindi.":$"{removed} bağlı görünüş silindi.");
+    }
+
+    private void BeginDrawingAnnotationEdit(Guid id)
+    {
+        if(_drawingDocument is null)return;
+        var note=_drawingDocument.Annotations.FirstOrDefault(a=>a.Id==id);
+        if(note is null){Status("Düzenlenecek teknik resim notu bulunamadı.");return;}
+        _drawingEditingAnnotationId=id;
+        DrawingAnnotationText.Text=note.Text;
+        DrawingAnnotationX.Text=note.Position.X.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        DrawingAnnotationY.Text=note.Position.Y.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        DrawingAnnotationError.Text="";
+        DrawingAnnotationPanel.Visibility=Visibility.Visible;
+        PropertyTitle.Text="Not / Ölçü Düzenle";
+        PropertyInfo.Text="Metin ve sayfa konumu .scdrw içinde kalıcıdır ve Undo/Redo ile geri alınabilir.";
+        ManagerTabs.SelectedItem=PropertyManagerTab;
+    }
+
+    private void DrawingAnnotationOk_Click(object sender,RoutedEventArgs e)
+    {
+        if(_drawingDocument is null||_drawingEditingAnnotationId is not Guid id)return;
+        if(string.IsNullOrWhiteSpace(DrawingAnnotationText.Text)||
+           !TryDrawingNumber(DrawingAnnotationX.Text,out var x)||!TryDrawingNumber(DrawingAnnotationY.Text,out var y))
+        {
+            DrawingAnnotationError.Text="Metin boş olamaz; X/Y sonlu olmalı.";return;
+        }
+        var note=_drawingDocument.Annotations.FirstOrDefault(a=>a.Id==id);
+        if(note is null){DrawingAnnotationError.Text="Not bulunamadı.";return;}
+        var updated=note with{Text=DrawingAnnotationText.Text.Trim(),Position=new Point2d(x,y)};
+        SetDrawingDocument(_drawingDocument with
+        {
+            Annotations=_drawingDocument.Annotations.Select(a=>a.Id==id?updated:a).ToArray()
+        });
+        DrawingAnnotationPanel.Visibility=Visibility.Collapsed;_drawingEditingAnnotationId=null;
+        RefreshDrawingTree(id);RenderDrawing();Status("Teknik resim notu/ölçüsü güncellendi.");
+    }
+
+    private void DrawingAnnotationCancel_Click(object sender,RoutedEventArgs e)
+    {
+        DrawingAnnotationPanel.Visibility=Visibility.Collapsed;_drawingEditingAnnotationId=null;ManagerTabs.SelectedItem=FeatureManagerTab;
     }
 
     private void DeleteDrawingAnnotation(Guid id)
