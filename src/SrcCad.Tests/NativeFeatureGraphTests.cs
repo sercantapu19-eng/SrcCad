@@ -315,6 +315,19 @@ internal static class NativeFeatureGraphTests
             var sweepInspect=OcctFeatureKernel.Inspect(sweepSession.Output(sweepNode.Id)!.BRep!);
             Check(Math.Abs(sweepInspect[0]-Math.PI*9*20)<1e-2&&sweepInspect[1]==1,"straight-path circular sweep creates valid solid");
 
+            var hollowProfile=new SketchModel(plane);
+            hollowProfile.AddCornerRectangle(new(-10,-8),new(10,8),.001);
+            hollowProfile.AddCircle(hollowProfile.CreatePointExact(new(0,0)),3);
+            var hollowProfileNode=new FeatureNode(Guid.NewGuid(),"KutuProfil",new SketchFeatureParameters(plane,hollowProfile.CaptureSnapshot()));
+            var hollowSweepNode=new FeatureNode(Guid.NewGuid(),"DelikliSüpürme",
+                new SweepFeatureParameters(hollowProfileNode.Id,sweepPathNode.Id));
+            var hollowSweepDoc=new FeatureDocument(Guid.NewGuid(),new[]{hollowProfileNode,sweepPathNode,hollowSweepNode});
+            var hollowSweepSession=new FeatureSession<PartFeatureOutput>(hollowSweepDoc,evaluator);
+            var hollowSweepInspect=OcctFeatureKernel.Inspect(hollowSweepSession.Output(hollowSweepNode.Id)!.BRep!);
+            var hollowSweepExpected=(20*16-Math.PI*9)*20;
+            Check(Math.Abs(hollowSweepInspect[0]-hollowSweepExpected)<1e-1&&hollowSweepInspect[1]==1,
+                "sweep preserves circular inner loop as hollow profile");
+
             var loftPlane2=plane with{Origin=plane.Origin+plane.Normal*20,Name="Loft2"};
             var loft1=new SketchModel(plane);loft1.AddCircle(loft1.CreatePointExact(new(0,0)),5);
             var loft2=new SketchModel(loftPlane2);loft2.AddCircle(loft2.CreatePointExact(new(0,0)),10);
