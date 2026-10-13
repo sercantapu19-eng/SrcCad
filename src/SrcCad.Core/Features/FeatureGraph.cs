@@ -73,7 +73,8 @@ public sealed record ExtrudeFeatureParameters(
     bool MidPlane = false,
     double Direction2Depth = 0,
     Guid? BaseFeatureId = null,
-    bool MergeResult = true) : FeatureParameters;
+    bool MergeResult = true,
+    bool UpToFace = false) : FeatureParameters;
 public sealed record BoundaryFeatureParameters(Guid[] ProfileSketchIds,Guid? BaseFeatureId=null) : FeatureParameters;
 public sealed record BoundaryCutFeatureParameters(Guid BaseFeatureId,Guid[] ProfileSketchIds) : FeatureParameters;
 public sealed record CutFeatureParameters(Guid BaseFeatureId, Guid SketchId, double Depth,
@@ -365,6 +366,9 @@ public static class FeatureDocumentFile
                     if(!double.IsFinite(e.Depth)||Math.Abs(e.Depth)<1e-9||
                        !double.IsFinite(e.Direction2Depth)||e.Direction2Depth<0||
                        (e.MidPlane&&e.Direction2Depth>1e-9)||
+                       (e.UpToFace&&(e.MidPlane||e.Direction2Depth>1e-9||e.BaseFeatureId is null||
+                           !FeatureReferenceCatalog.ArePersistentFaces(node.References,e.BaseFeatureId.Value,1,1)))||
+                       (!e.UpToFace&&node.References is {Length:>0})||
                        document.Node(e.SketchId).Kind!=FeatureKind.Sketch||
                        (e.BaseFeatureId is Guid baseId&&(baseId==e.SketchId||document.Node(baseId).Kind==FeatureKind.Sketch)))
                         throw new InvalidDataException("Invalid extrusion.");
