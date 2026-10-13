@@ -752,31 +752,38 @@ namespace SrcCad::Kernel::Occt
         if (!IsInitialized()) return;
         myState->SelectionMode = mode;
 
-        auto activateModes=[&](const Handle(AIS_InteractiveObject)& object)
+        int selectionMode=0;
+        switch(mode)
         {
-            if(object.IsNull())return;
-            myState->Context->Deactivate(object);
+            case CadSelectionMode::Vertex: selectionMode=AIS_Shape::SelectionMode(TopAbs_VERTEX); break;
+            case CadSelectionMode::Edge: selectionMode=AIS_Shape::SelectionMode(TopAbs_EDGE); break;
+            case CadSelectionMode::Face: selectionMode=AIS_Shape::SelectionMode(TopAbs_FACE); break;
+            default: selectionMode=0; break;
+        }
+
+        if(!myState->SolidPresentation.IsNull())
+        {
+            myState->Context->Deactivate(myState->SolidPresentation);
             if(mode==CadSelectionMode::AnyTopology)
             {
-                myState->Context->Activate(object,AIS_Shape::SelectionMode(TopAbs_VERTEX),true);
-                myState->Context->Activate(object,AIS_Shape::SelectionMode(TopAbs_EDGE),true);
-                myState->Context->Activate(object,AIS_Shape::SelectionMode(TopAbs_FACE),true);
-                return;
+                myState->Context->Activate(myState->SolidPresentation,AIS_Shape::SelectionMode(TopAbs_VERTEX),true);
+                myState->Context->Activate(myState->SolidPresentation,AIS_Shape::SelectionMode(TopAbs_EDGE),true);
+                myState->Context->Activate(myState->SolidPresentation,AIS_Shape::SelectionMode(TopAbs_FACE),true);
             }
-
-            int selectionMode=0;
-            switch(mode)
+            else myState->Context->Activate(myState->SolidPresentation,selectionMode,true);
+        }
+        for(const auto& assemblyObject:myState->AssemblyObjects)
+        {
+            if(assemblyObject.IsNull())continue;
+            myState->Context->Deactivate(assemblyObject);
+            if(mode==CadSelectionMode::AnyTopology)
             {
-                case CadSelectionMode::Vertex: selectionMode=AIS_Shape::SelectionMode(TopAbs_VERTEX); break;
-                case CadSelectionMode::Edge: selectionMode=AIS_Shape::SelectionMode(TopAbs_EDGE); break;
-                case CadSelectionMode::Face: selectionMode=AIS_Shape::SelectionMode(TopAbs_FACE); break;
-                default: selectionMode=0; break;
+                myState->Context->Activate(assemblyObject,AIS_Shape::SelectionMode(TopAbs_VERTEX),true);
+                myState->Context->Activate(assemblyObject,AIS_Shape::SelectionMode(TopAbs_EDGE),true);
+                myState->Context->Activate(assemblyObject,AIS_Shape::SelectionMode(TopAbs_FACE),true);
             }
-            myState->Context->Activate(object,selectionMode,true);
-        };
-
-        activateModes(myState->SolidPresentation);
-        for(const auto& assemblyObject:myState->AssemblyObjects)activateModes(assemblyObject);
+            else myState->Context->Activate(assemblyObject,selectionMode,true);
+        }
         myState->Context->UpdateCurrentViewer();
     }
 
