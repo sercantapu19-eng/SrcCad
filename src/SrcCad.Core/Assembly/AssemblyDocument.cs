@@ -109,21 +109,31 @@ public static class AssemblyReferenceCatalog
     public static bool IsCylindricalFace(AssemblyReference reference)
         => reference.Kind==TopologyKind.Face&&reference.SemanticName.StartsWith("C;",StringComparison.Ordinal);
 
+    public static bool IsStandardAxis(AssemblyReference reference)
+        => reference.Kind==TopologyKind.Edge&&
+           reference.SemanticName is XAxis or YAxis or ZAxis;
+
     public static bool SuppliesDirection(AssemblyReference reference)
         => TryDirection(reference,out _)||
            reference.Kind==TopologyKind.Face&&
            (reference.SemanticName.StartsWith("F;",StringComparison.Ordinal)||
             reference.SemanticName.StartsWith("C;",StringComparison.Ordinal));
 
+    public static bool SuppliesAxis(AssemblyReference reference)
+        => IsStandardAxis(reference)||IsCylindricalFace(reference);
+
     public static bool IsMateCompatible(AssemblyMate mate)
     {
         if(!IsWellFormed(mate.A)||!IsWellFormed(mate.B))return false;
+        if(mate.Type==MateType.Angle&&
+           (!double.IsFinite(mate.Value)||Math.Abs(mate.Value)<=1e-9||Math.Abs(mate.Value)>=180.0))
+            return false;
         return mate.Type switch
         {
             MateType.Parallel or MateType.Perpendicular or MateType.Angle
                 => SuppliesDirection(mate.A)&&SuppliesDirection(mate.B),
             MateType.Concentric
-                => SuppliesDirection(mate.A)&&SuppliesDirection(mate.B),
+                => SuppliesAxis(mate.A)&&SuppliesAxis(mate.B),
             MateType.Tangent
                 => mate.A.Kind==TopologyKind.Face&&mate.B.Kind==TopologyKind.Face&&
                    (IsCylindricalFace(mate.A)||IsCylindricalFace(mate.B)),
