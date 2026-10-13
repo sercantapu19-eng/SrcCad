@@ -221,6 +221,19 @@ internal static class FeatureGraphTests
               ((SheetMetalEdgeFlangeFeatureParameters)edgeFlangeClone.Node(edgeFlangeNode.Id).Parameters).AngleDegrees==90,
             "sheet metal edge flange metadata and persistent edge reference roundtrip");
 
+        var memberProfile=new SketchModel(StandardPlanes.Front);memberProfile.AddCornerRectangle(new(-5,-5),new(5,5),.001);
+        var memberPath=new SketchModel(StandardPlanes.Top);
+        var mp0=memberPath.CreatePointExact(new(0,0));var mp1=memberPath.CreatePointExact(new(100,0));memberPath.AddLine(mp0,mp1);
+        var profileNode=new FeatureNode(Guid.NewGuid(),"Profil1",new SketchFeatureParameters(memberProfile.Plane,memberProfile.CaptureSnapshot()));
+        var pathNode=new FeatureNode(Guid.NewGuid(),"Yol1",new SketchFeatureParameters(memberPath.Plane,memberPath.CaptureSnapshot()));
+        var memberNode=new FeatureNode(Guid.NewGuid(),"Yapısal Eleman1",new StructuralMemberFeatureParameters(profileNode.Id,pathNode.Id));
+        var memberDoc=new FeatureDocument(Guid.NewGuid(),new[]{profileNode,pathNode,memberNode});
+        var memberClone=FeatureDocumentFile.Clone(memberDoc);
+        Check(memberClone.Node(memberNode.Id).Kind==FeatureKind.StructuralMember,
+            "structural member profile/path dependency roundtrip");
+        Check(memberClone.Descendants(profileNode.Id).Contains(memberNode.Id)&&memberClone.Descendants(pathNode.Id).Contains(memberNode.Id),
+            "structural member depends on profile and path sketches");
+
         var external=session.Document;((IDictionary<int,SketchPoint>)((SketchFeatureParameters)external.Node(source.Id).Parameters).Sketch.Points).Clear();
         Check(((SketchFeatureParameters)session.Document.Node(source.Id).Parameters).Sketch.Points.Count>0,"external snapshot cannot mutate committed document");
         var unchangedRevision=session.Revision;var unchangedHistory=session.UndoCount;
