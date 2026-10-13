@@ -116,6 +116,12 @@ public static class DrawingDocumentFile
             var b=Math.Sqrt(Math.Pow(v[6]-v[4],2)+Math.Pow(v[7]-v[5],2));
             return a>1e-9&&b>1e-9;
         }
+        if(annotation.Kind is DrawingAnnotationKind.HoleCallout)
+        {
+            if(annotation.ViewId is null)return false;
+            if(TryAnnotationData(annotation.Data,'D',3,out var v))return v[2]>1e-9;
+            return int.TryParse(annotation.Data,out var legacyIndex)&&legacyIndex>=0;
+        }
         return true;
     }
 
