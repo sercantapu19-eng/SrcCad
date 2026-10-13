@@ -43,6 +43,37 @@ public sealed record DrawingDocument(
 {
     public DrawingSheet Sheet(Guid id)=>Sheets.Single(s=>s.Id==id);
     public DrawingView View(Guid id)=>Views.Single(v=>v.Id==id);
+
+    public DrawingDocument RemoveView(Guid id,bool cascade=true)
+    {
+        _=View(id);
+        var remove=new HashSet<Guid>{id};
+        if(cascade)
+        {
+            bool changed;
+            do
+            {
+                changed=false;
+                foreach(var view in Views)
+                    if(view.ParentViewId is Guid parent&&remove.Contains(parent)&&remove.Add(view.Id))
+                        changed=true;
+            }while(changed);
+        }
+        else if(Views.Any(v=>v.ParentViewId==id))
+            throw new InvalidOperationException("Dependent projected/detail/section views must be removed explicitly.");
+
+        return this with
+        {
+            Views=Views.Where(v=>!remove.Contains(v.Id)).ToArray(),
+            Annotations=Annotations.Where(a=>a.ViewId is not Guid viewId||!remove.Contains(viewId)).ToArray()
+        };
+    }
+
+    public DrawingDocument RemoveAnnotation(Guid id)
+    {
+        if(!Annotations.Any(a=>a.Id==id))throw new InvalidOperationException("Drawing annotation not found.");
+        return this with{Annotations=Annotations.Where(a=>a.Id!=id).ToArray()};
+    }
 }
 
 public static class DrawingDocumentFile
