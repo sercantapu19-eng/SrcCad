@@ -70,3 +70,146 @@ public sealed class PolygonSketchCommand : SketchCommandBase
 
     public override void CancelStep()=>center=null;
 }
+
+
+public sealed class CenterArcSketchCommand : SketchCommandBase
+{
+    private Point2d? center;
+    private Point2d? start;
+
+    public CenterArcSketchCommand(SketchModel sketch):base(sketch){}
+    public override string Id=>"sketch.arc.center";
+    public override string Title=>"Merkez-Yay";
+    public override bool HasPendingStep=>center.HasValue;
+
+    public override void Begin(CommandContext context)
+    {
+        base.Begin(context);
+        Context.SetStatus?.Invoke("Yay: merkez noktasını seçin.");
+    }
+
+    public override void Pick(SketchPick pick)
+    {
+        if(!center.HasValue)
+        {
+            center=pick.Point;Context.SetStatus?.Invoke("Yay merkezi seçildi; başlangıç noktasını seçin.");return;
+        }
+        if(!start.HasValue)
+        {
+            if(Point2d.Distance(center.Value,pick.Point)<=1e-9){Context.SetStatus?.Invoke("Yay yarıçapı sıfır olamaz.");return;}
+            start=pick.Point;Context.SetStatus?.Invoke("Yay başlangıcı seçildi; bitiş yönünü seçin.");return;
+        }
+
+        var radius=Point2d.Distance(center.Value,start.Value);
+        var dx=pick.Point.X-center.Value.X;var dy=pick.Point.Y-center.Value.Y;
+        var length=Math.Sqrt(dx*dx+dy*dy);
+        if(length<=1e-9){Context.SetStatus?.Invoke("Yay bitiş yönü geçersiz.");return;}
+        var end=new Point2d(center.Value.X+dx/length*radius,center.Value.Y+dy/length*radius);
+        var cId=Sketch.CreateOrSnapPoint(center.Value,pick.SnapTolerance);
+        var sId=Sketch.CreateOrSnapPoint(start.Value,pick.SnapTolerance);
+        var eId=Sketch.CreateOrSnapPoint(end,pick.SnapTolerance);
+        if(sId==eId){Context.SetStatus?.Invoke("Tam daire için Daire komutunu kullanın.");return;}
+        Sketch.AddArc(cId,sId,eId,false);
+        center=null;start=null;Changed("Parametrik merkez-yay oluşturuldu.");
+    }
+
+    public override IReadOnlyList<SketchPreviewPrimitive> Preview(Point2d cursor)
+    {
+        if(!center.HasValue)return Array.Empty<SketchPreviewPrimitive>();
+        if(!start.HasValue)return new SketchPreviewPrimitive[]{new SketchPreviewLine(center.Value,cursor)};
+        var radius=Point2d.Distance(center.Value,start.Value);
+        var dx=cursor.X-center.Value.X;var dy=cursor.Y-center.Value.Y;var length=Math.Sqrt(dx*dx+dy*dy);
+        if(length<=1e-9)return Array.Empty<SketchPreviewPrimitive>();
+        var end=new Point2d(center.Value.X+dx/length*radius,center.Value.Y+dy/length*radius);
+        var a0=Math.Atan2(start.Value.Y-center.Value.Y,start.Value.X-center.Value.X);
+        var a1=Math.Atan2(end.Y-center.Value.Y,end.X-center.Value.X);
+        while(a1<a0)a1+=Math.PI*2;
+        const int n=24;
+        var points=Enumerable.Range(0,n+1).Select(i=>new Point2d(
+            center.Value.X+Math.Cos(a0+(a1-a0)*i/n)*radius,
+            center.Value.Y+Math.Sin(a0+(a1-a0)*i/n)*radius)).ToArray();
+        return Enumerable.Range(0,n).Select(i=>(SketchPreviewPrimitive)new SketchPreviewLine(points[i],points[i+1])).ToArray();
+    }
+
+    public override void CancelStep(){center=null;start=null;}
+}
+
+public sealed class StraightSlotSketchCommand : SketchCommandBase
+{
+    private Point2d? a;
+    private Point2d? b;
+
+    public StraightSlotSketchCommand(SketchModel sketch):base(sketch){}
+    public override string Id=>"sketch.slot.straight";
+    public override string Title=>"Düz Slot";
+    public override bool HasPendingStep=>a.HasValue;
+
+    public override void Begin(CommandContext context)
+    {
+        base.Begin(context);Context.SetStatus?.Invoke("Slot: merkez çizgisinin ilk noktasını seçin.");
+    }
+
+    private static bool Geometry(Point2d a,Point2d b,Point2d widthPoint,out Point2d aL,out Point2d bL,out Point2d bR,out Point2d aR,out double radius)
+    {
+        aL=bL=bR=aR=default;radius=0;
+        var dx=b.X-a.X;var dy=b.Y-a.Y;var length=Math.Sqrt(dx*dx+dy*dy);
+        if(length<=1e-9)return false;
+        var nx=-dy/length;var ny=dx/length;
+        var signed=(widthPoint.X-a.X)*nx+(widthPoint.Y-a.Y)*ny;
+        radius=Math.Abs(signed);
+        if(radius<=1e-9)return false;
+        var sign=signed>=0?1.0:-1.0;nx*=sign;ny*=sign;
+        aL=new Point2d(a.X+nx*radius,a.Y+ny*radius);
+        bL=new Point2d(b.X+nx*radius,b.Y+ny*radius);
+        bR=new Point2d(b.X-nx*radius,b.Y-ny*radius);
+        aR=new Point2d(a.X-nx*radius,a.Y-ny*radius);
+        return true;
+    }
+
+    public override void Pick(SketchPick pick)
+    {
+        if(!a.HasValue){a=pick.Point;Context.SetStatus?.Invoke("Slot: merkez çizgisinin ikinci noktasını seçin.");return;}
+        if(!b.HasValue)
+        {
+            if(Point2d.Distance(a.Value,pick.Point)<=1e-9){Context.SetStatus?.Invoke("Slot uzunluğu sıfır olamaz.");return;}
+            b=pick.Point;Context.SetStatus?.Invoke("Slot genişliğini belirlemek için üçüncü noktayı seçin.");return;
+        }
+        if(!Geometry(a.Value,b.Value,pick.Point,out var aL,out var bL,out var bR,out var aR,out _))
+        {Context.SetStatus?.Invoke("Slot genişliği sıfır olamaz.");return;}
+
+        var ca=Sketch.CreateOrSnapPoint(a.Value,pick.SnapTolerance);
+        var cb=Sketch.CreateOrSnapPoint(b.Value,pick.SnapTolerance);
+        var pAL=Sketch.CreateOrSnapPoint(aL,pick.SnapTolerance);
+        var pBL=Sketch.CreateOrSnapPoint(bL,pick.SnapTolerance);
+        var pBR=Sketch.CreateOrSnapPoint(bR,pick.SnapTolerance);
+        var pAR=Sketch.CreateOrSnapPoint(aR,pick.SnapTolerance);
+        Sketch.AddLine(pAL,pBL);
+        Sketch.AddArc(cb,pBL,pBR,true);
+        Sketch.AddLine(pBR,pAR);
+        Sketch.AddArc(ca,pAR,pAL,true);
+        a=null;b=null;Changed("Kapalı parametrik düz slot oluşturuldu.");
+    }
+
+    public override IReadOnlyList<SketchPreviewPrimitive> Preview(Point2d cursor)
+    {
+        if(!a.HasValue)return Array.Empty<SketchPreviewPrimitive>();
+        if(!b.HasValue)return new SketchPreviewPrimitive[]{new SketchPreviewLine(a.Value,cursor)};
+        if(!Geometry(a.Value,b.Value,cursor,out var aL,out var bL,out var bR,out var aR,out var r))
+            return Array.Empty<SketchPreviewPrimitive>();
+        var list=new List<SketchPreviewPrimitive>{new SketchPreviewLine(aL,bL),new SketchPreviewLine(bR,aR)};
+        void Arc(Point2d c,Point2d p0,Point2d p1,bool clockwise)
+        {
+            var s=Math.Atan2(p0.Y-c.Y,p0.X-c.X);var e=Math.Atan2(p1.Y-c.Y,p1.X-c.X);
+            double span;
+            if(clockwise){while(e>s)e-=Math.PI*2;span=e-s;}
+            else{while(e<s)e+=Math.PI*2;span=e-s;}
+            Point2d Prev(double t)=>new(c.X+Math.Cos(t)*r,c.Y+Math.Sin(t)*r);
+            var prev=Prev(s);
+            for(var i=1;i<=16;i++){var cur=Prev(s+span*i/16);list.Add(new SketchPreviewLine(prev,cur));prev=cur;}
+        }
+        Arc(b.Value,bL,bR,true);Arc(a.Value,aR,aL,true);
+        return list;
+    }
+
+    public override void CancelStep(){a=null;b=null;}
+}
