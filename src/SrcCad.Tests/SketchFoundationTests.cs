@@ -123,6 +123,40 @@ internal static class SketchFoundationTests
 
         {
             var s=new SketchModel(StandardPlanes.Front);
+            var c=s.CreatePointExact(new(0,0));var ellipse=s.AddEllipse(c,30,15,Math.PI/6);
+            Check(s.FindEntityNear(s.SampleEllipse(ellipse,64)[5],0.02)==ellipse.Id,"ellipse hit testing");
+            Check(s.TryGetExtrusionProfile(out var ellipseLoop,out _,out _)&&ellipseLoop.Count==72,
+                "ellipse is accepted as closed extrusion profile");
+            var axisA=s.CreatePointExact(new(0,-50));var axisB=s.CreatePointExact(new(0,50));var axis=s.AddLine(axisA,axisB,true);
+            var mirrored=s.MirrorEntities(new[]{ellipse.Id},axis.Id);
+            Check(mirrored.Count==1&&s.Entity(mirrored[0]) is SketchEllipse,"ellipse mirror creates ellipse entity");
+        }
+
+        {
+            var s=new SketchModel(StandardPlanes.Front);
+            var corner=s.CreatePointExact(new(0,0));var px=s.CreatePointExact(new(40,0));var py=s.CreatePointExact(new(0,40));
+            var first=s.AddLine(corner,px);var second=s.AddLine(corner,py);
+            var arcId=s.AddSketchFillet(first.Id,second.Id,10);
+            Check(s.Entity(arcId) is SketchArc&&s.Lines(false).Count()==2,"sketch fillet trims two lines and creates true arc");
+            var arc=(SketchArc)s.Entity(arcId)!;
+            Check(Near(Point2d.Distance(s.Point(arc.CenterPointId).Position,s.Point(arc.StartPointId).Position),10),
+                "sketch fillet radius is exact");
+        }
+
+        {
+            var s=new SketchModel(StandardPlanes.Front);
+            var corner=s.CreatePointExact(new(0,0));var px=s.CreatePointExact(new(40,0));var py=s.CreatePointExact(new(0,40));
+            var first=s.AddLine(corner,px);var second=s.AddLine(corner,py);
+            var chamferId=s.AddSketchChamfer(first.Id,second.Id,8);
+            Check(s.Entity(chamferId) is SketchLine&&s.Lines(false).Count()==3,"sketch chamfer trims two lines and adds connector");
+            var chamfer=(SketchLine)s.Entity(chamferId)!;
+            Check(Near(Point2d.Distance(s.Point(chamfer.StartPointId).Position,new Point2d(0,0)),8)&&
+                  Near(Point2d.Distance(s.Point(chamfer.EndPointId).Position,new Point2d(0,0)),8),
+                "sketch chamfer equal distances are exact");
+        }
+
+        {
+            var s=new SketchModel(StandardPlanes.Front);
             var a=s.CreatePointExact(new(0,0));var b=s.CreatePointExact(new(10,0));var target=s.AddLine(a,b);
             var c=s.CreatePointExact(new(20,-10));var d=s.CreatePointExact(new(20,10));s.AddLine(c,d);
             Check(s.ExtendLinesToNearest(new[]{target.Id})==1&&Near(s.Point(b).Position.X,20),"extend line to nearest boundary");
