@@ -142,6 +142,10 @@ namespace SrcCad::Kernel::Occt
                                   double depth);
         bool PreviewFeatureBody(System::String^ body);
         bool PublishFeatureBody(System::String^ body);
+        void ClearAssemblyBodies();
+        bool AddAssemblyBody(System::String^ body,
+                             double tx, double ty, double tz,
+                             double rxDegrees, double ryDegrees, double rzDegrees);
         bool CommitExtrusion();
         void HideCommittedSolid();
         void ShowCommittedSolid();
