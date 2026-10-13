@@ -81,6 +81,12 @@
                             <MenuItem Header="Loft Kes" Click="LoftCut_Click"/>
                         </ContextMenu></Button.ContextMenu>
                     </Button>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Sınır ▾" Click="CommandFamily_Click">
+                        <Button.ContextMenu><ContextMenu>
+                            <MenuItem Header="Sınır (Boss)" Click="BoundaryBoss_Click"/>
+                            <MenuItem Header="Sınır Kes" Click="BoundaryCut_Click"/>
+                        </ContextMenu></Button.ContextMenu>
+                    </Button>
                     <Button Style="{StaticResource CadCommandButton}" Content="Radyus" Click="Fillet_Click" x:Name="FilletButton" ToolTip="Kenarları seçin; gerçek OCCT 3B radyus oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Pah" Click="Chamfer_Click" x:Name="ChamferButton" ToolTip="Kenarları seçin; gerçek OCCT 3B pah oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Delik" Click="Hole_Click" x:Name="HoleButton" ToolTip="Düzlemsel yüz seçin; tıklanan konumda gerçek parametrik delik oluşturur."/>
