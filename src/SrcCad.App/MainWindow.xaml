@@ -128,8 +128,8 @@
                     <Button Style="{StaticResource CadCommandButton}" Content="Slot" Click="Slot_Click" ToolTip="İki merkez noktası ve genişlikle gerçek çizgi+yay kapalı slot oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Çokgen" Click="Polygon_Click" ToolTip="Kenar sayısını girin; merkez ve çevre noktasıyla düzenli çokgen oluşturun."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Elips" Click="Ellipse_Click" ToolTip="Merkez, ana eksen ve ikinci eksen ile gerçek parametrik elips oluşturur."/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Çizim Radyusu" Click="CadCommandPlaceholder_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Çizim Pahı" Click="CadCommandPlaceholder_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Çizim Radyusu" Click="SketchFillet_Click" ToolTip="Ortak köşeli iki çizgiyi seçin; gerçek teğet yay radyusu oluşturur."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Çizim Pahı" Click="SketchChamfer_Click" ToolTip="Ortak köşeli iki çizgiyi seçin; iki çizgiyi kırpıp gerçek pah çizgisi oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Çizgi Kırp" Tag="{StaticResource CadTrimIcon}" Click="Trim_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Uzat" Click="ExtendSketch_Click" ToolTip="Seçili çizgileri en yakın çizgi/daire sınırına kadar uzatır."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Ofset" Click="OffsetSketch_Click" ToolTip="Seçili çizgi/daireleri girilen mesafede gerçek geometri olarak ofsetler."/>
