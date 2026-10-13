@@ -2461,6 +2461,75 @@ namespace SrcCad::Kernel::Occt
         catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
     }
 
+    String^ OcctFeatureKernel::ImportStep(String^ path)
+    {
+        if(String::IsNullOrWhiteSpace(path))throw gcnew ArgumentException("STEP path is required.");
+        try
+        {
+            STEPControl_Reader reader;
+            auto native=msclr::interop::marshal_as<std::string>(path);
+            if(reader.ReadFile(native.c_str())!=IFSelect_RetDone)
+                throw gcnew InvalidOperationException("STEP file could not be read.");
+            if(reader.TransferRoots()<=0)
+                throw gcnew InvalidOperationException("STEP file contains no transferable roots.");
+            TopoDS_Shape shape=reader.OneShape();
+            if(shape.IsNull())throw gcnew InvalidOperationException("STEP import produced no shape.");
+            return encodeFeature(shape);
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
+    String^ OcctFeatureKernel::ImportIges(String^ path)
+    {
+        if(String::IsNullOrWhiteSpace(path))throw gcnew ArgumentException("IGES path is required.");
+        try
+        {
+            IGESControl_Reader reader;
+            auto native=msclr::interop::marshal_as<std::string>(path);
+            if(reader.ReadFile(native.c_str())!=IFSelect_RetDone)
+                throw gcnew InvalidOperationException("IGES file could not be read.");
+            if(reader.TransferRoots()<=0)
+                throw gcnew InvalidOperationException("IGES file contains no transferable roots.");
+            TopoDS_Shape shape=reader.OneShape();
+            if(shape.IsNull())throw gcnew InvalidOperationException("IGES import produced no shape.");
+            return encodeFeature(shape);
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
+    void OcctFeatureKernel::ExportStep(String^ body,String^ path)
+    {
+        if(String::IsNullOrWhiteSpace(path))throw gcnew ArgumentException("STEP path is required.");
+        try
+        {
+            TopoDS_Shape shape=decodeFeature(body);
+            STEPControl_Writer writer;
+            if(writer.Transfer(shape,STEPControl_AsIs)!=IFSelect_RetDone)
+                throw gcnew InvalidOperationException("STEP transfer failed.");
+            auto native=msclr::interop::marshal_as<std::string>(path);
+            if(writer.Write(native.c_str())!=IFSelect_RetDone)
+                throw gcnew InvalidOperationException("STEP file could not be written.");
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
+    void OcctFeatureKernel::ExportIges(String^ body,String^ path)
+    {
+        if(String::IsNullOrWhiteSpace(path))throw gcnew ArgumentException("IGES path is required.");
+        try
+        {
+            TopoDS_Shape shape=decodeFeature(body);
+            IGESControl_Writer writer("MM",0);
+            if(!writer.AddShape(shape))
+                throw gcnew InvalidOperationException("IGES transfer failed.");
+            writer.ComputeModel();
+            auto native=msclr::interop::marshal_as<std::string>(path);
+            if(!writer.Write(native.c_str()))
+                throw gcnew InvalidOperationException("IGES file could not be written.");
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
     double OcctFeatureKernel::CommonVolume(String^ bodyA,array<double>^ transformA,String^ bodyB,array<double>^ transformB)
     {
         try
