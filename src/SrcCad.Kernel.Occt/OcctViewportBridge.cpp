@@ -99,6 +99,7 @@ namespace SrcCad::Kernel::Occt
         Handle(WNT_Window) Window;
         std::vector<Handle(AIS_Shape)> SketchObjects;
         std::vector<Handle(AIS_Shape)> PreviewObjects;
+        std::vector<Handle(AIS_Shape)> AssemblyObjects;
         std::vector<Handle(AIS_InteractiveObject)> SketchTextObjects;
         Handle(AIS_Shape) PreviewSolid;
         Handle(AIS_Shape) SolidPresentation;
@@ -1982,6 +1983,46 @@ namespace SrcCad::Kernel::Occt
         }
     }
 
+    void OcctViewportBridge::ClearAssemblyBodies()
+    {
+        if(!IsInitialized())return;
+        eraseList(myState,myState->AssemblyObjects);
+        myState->Context->ClearSelected(false);
+        myState->Context->UpdateCurrentViewer();
+    }
+
+    bool OcctViewportBridge::AddAssemblyBody(String^ body,
+                                              double tx,double ty,double tz,
+                                              double rxDegrees,double ryDegrees,double rzDegrees)
+    {
+        if(!IsInitialized()||String::IsNullOrWhiteSpace(body))return false;
+        try
+        {
+            TopoDS_Shape shape=decodeFeature(body);
+            auto rotate=[&](const gp_Ax1& axis,double degrees)
+            {
+                if(std::abs(degrees)<=1e-12)return;
+                gp_Trsf tr;tr.SetRotation(axis,degrees*3.14159265358979323846/180.0);
+                shape=BRepBuilderAPI_Transform(shape,tr,true).Shape();
+            };
+            rotate(gp_Ax1(gp_Pnt(0,0,0),gp_Dir(1,0,0)),rxDegrees);
+            rotate(gp_Ax1(gp_Pnt(0,0,0),gp_Dir(0,1,0)),ryDegrees);
+            rotate(gp_Ax1(gp_Pnt(0,0,0),gp_Dir(0,0,1)),rzDegrees);
+            if(std::abs(tx)>1e-12||std::abs(ty)>1e-12||std::abs(tz)>1e-12)
+            {
+                gp_Trsf tr;tr.SetTranslation(gp_Vec(tx,ty,tz));
+                shape=BRepBuilderAPI_Transform(shape,tr,true).Shape();
+            }
+            if(shape.IsNull()||!BRepCheck_Analyzer(shape).IsValid())return false;
+            auto ais=displayShape(myState,shape,rgb(0.60,0.66,0.72),AIS_Shaded,true);
+            myState->AssemblyObjects.push_back(ais);
+            myState->Context->UpdateCurrentViewer();
+            return true;
+        }
+        catch(const Standard_Failure&){return false;}
+        catch(System::Exception^){return false;}
+    }
+
     bool OcctViewportBridge::CommitExtrusion()
     {
         if (!IsInitialized() || myState->PreviewSolidShape.IsNull()) return false;
@@ -2062,6 +2103,7 @@ namespace SrcCad::Kernel::Occt
         myState->SolidShape.Nullify();
         ClearSketch();
         ClearPreview();
+        eraseList(myState,myState->AssemblyObjects);
         myState->Context->ClearSelected(false);
         myState->Context->UpdateCurrentViewer();
     }
