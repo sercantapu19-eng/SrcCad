@@ -356,6 +356,10 @@ public partial class MainWindow
             return note.Kind switch
             {
                 DrawingAnnotationKind.OverallSize when view is not null=>ResolveOverallSize(view),
+                DrawingAnnotationKind.LinearDimension when view is not null=>
+                    ResolveLinearDimension(view,note.Data) is ProjectedSegment segment?$"{segment.Length:0.###} mm":"?",
+                DrawingAnnotationKind.DiameterDimension when view is not null=>
+                    ResolveDiameterDimension(view,note.Data) is ProjectedCircle circle?$"Ø{circle.Radius*2:0.###}":"Ø?",
                 DrawingAnnotationKind.HoleCallout when view is not null=>ResolveHoleCallout(view,note.Data),
                 DrawingAnnotationKind.BillOfMaterials when view is not null=>ResolveBom(view),
                 DrawingAnnotationKind.Balloon=>note.Data is string number&&number.Length>0?"BALON "+number:note.Text,
@@ -700,22 +704,56 @@ public partial class MainWindow
     {
         if(_drawingDocument is null)return;
         var view=SelectedDrawingView();
-        if(view is null){Status("Ölçü için görünüş seçin.");return;}
+        if(view is null){Status("Ölçü için FeatureManager'dan görünüş seçin.");return;}
         try
         {
             var data=DrawingProjectionData(view);
-            var xs=new List<double>();var ys=new List<double>();
-            for(var i=0;i+3<data.Segments.Length;i+=4)
+            Point2d pointer=view.Position;
+            if(_viewer.ScreenToPlane(_lastMouseX,_lastMouseY,0,0,0,0,0,1,out var world))
+                pointer=new Point2d(world.X,world.Y);
+
+            var segments=DrawingProjectedSegments(view);
+            var circles=DrawingProjectedCircles(view);
+            var segmentChoice=segments.Select(segment=>
             {
-                xs.Add(data.Segments[i]);xs.Add(data.Segments[i+2]);
-                ys.Add(data.Segments[i+1]);ys.Add(data.Segments[i+3]);
+                var a=DrawingToSheet(view,segment.X1,segment.Y1);
+                var b=DrawingToSheet(view,segment.X2,segment.Y2);
+                return (Segment:segment,Distance:PointSegmentDistance(pointer,a,b),A:a,B:b);
+            }).OrderBy(x=>x.Distance).FirstOrDefault();
+
+            var circleChoice=circles.Select(circle=>
+            {
+                var center=DrawingToSheet(view,circle.X,circle.Y);
+                var displayedRadius=circle.Radius*view.Scale;
+                var distance=Math.Abs(Point2d.Distance(pointer,center)-displayedRadius);
+                return (Circle:circle,Distance:distance,Center:center);
+            }).OrderBy(x=>x.Distance).FirstOrDefault();
+
+            DrawingAnnotation note;
+            if(circles.Length>0&&circleChoice.Distance<=segmentChoice.Distance)
+            {
+                var position=new Point2d(circleChoice.Center.X+circleChoice.Circle.Radius*view.Scale+15,circleChoice.Center.Y+12);
+                note=new DrawingAnnotation(Guid.NewGuid(),view.SheetId,view.Id,position,
+                    $"Ø{circleChoice.Circle.Radius*2:0.###}",DrawingAnnotationKind.DiameterDimension,
+                    EncodeDiameterDimension(circleChoice.Circle));
             }
-            var width=(xs.Max()-xs.Min());var height=(ys.Max()-ys.Min());
-            var note=new DrawingAnnotation(Guid.NewGuid(),view.SheetId,view.Id,
-                new Point2d(view.Position.X,view.Position.Y+65),$"GENEL: {width:0.###} × {height:0.###} mm",
-                DrawingAnnotationKind.OverallSize);
+            else if(segments.Length>0)
+            {
+                var mid=new Point2d((segmentChoice.A.X+segmentChoice.B.X)*0.5,(segmentChoice.A.Y+segmentChoice.B.Y)*0.5);
+                var dx=segmentChoice.B.X-segmentChoice.A.X;var dy=segmentChoice.B.Y-segmentChoice.A.Y;
+                var len=Math.Sqrt(dx*dx+dy*dy);var nx=len>1e-9?-dy/len:0;var ny=len>1e-9?dx/len:1;
+                var position=new Point2d(mid.X+nx*14,mid.Y+ny*14);
+                note=new DrawingAnnotation(Guid.NewGuid(),view.SheetId,view.Id,position,
+                    $"{segmentChoice.Segment.Length:0.###} mm",DrawingAnnotationKind.LinearDimension,
+                    EncodeLinearDimension(segmentChoice.Segment));
+            }
+            else throw new InvalidOperationException("Görünüşte ölçülendirilebilir geometri bulunamadı.");
+
             SetDrawingDocument(_drawingDocument with{Annotations=_drawingDocument.Annotations.Append(note).ToArray()});
-            RefreshDrawingTree(note.Id);RenderDrawing();Status("Model izdüşümünden genel ölçüler eklendi.");
+            RefreshDrawingTree(note.Id);RenderDrawing();
+            Status(note.Kind==DrawingAnnotationKind.DiameterDimension
+                ?"Dairesel geometriye ilişkili çap ölçüsü eklendi."
+                :"Projeksiyon kenarına ilişkili doğrusal ölçü eklendi.");
         }
         catch(Exception ex){Status("Ölçü oluşturulamadı: "+ex.Message);}
     }
