@@ -66,6 +66,15 @@ internal static class DrawingDocumentTests
         catch(InvalidDataException){_checks++;}
 
         var secondSheet=new DrawingSheet(Guid.NewGuid(),"A4",297,210,DrawingProjectionStandard.FirstAngle);
+        var secondFront=new DrawingView(Guid.NewGuid(),"Ön-2","C:\\Models\\Body.scpart",
+            DrawingViewType.Front,secondSheet.Id,new Point2d(100,100),0.5);
+        var secondNote=new DrawingAnnotation(Guid.NewGuid(),secondSheet.Id,secondFront.Id,new Point2d(15,15),"PAFTA 2 NOTU");
+        var multiSheet=DrawingDocumentFile.Clone(new DrawingDocument(
+            Guid.NewGuid(),new[]{sheet,secondSheet},new[]{front,secondFront},new[]{note,secondNote}));
+        Check(multiSheet.Sheets.Length==2&&multiSheet.Views.Count(v=>v.SheetId==secondSheet.Id)==1&&
+              multiSheet.Annotations.Count(a=>a.SheetId==secondSheet.Id)==1,
+            "multi-sheet drawing roundtrip preserves per-sheet views and annotations");
+
         try
         {
             DrawingDocumentFile.Serialize(new DrawingDocument(
