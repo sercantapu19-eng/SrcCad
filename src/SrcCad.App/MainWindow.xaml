@@ -163,7 +163,7 @@
                     <Button Style="{StaticResource CadCommandButton}" Content="Köşebent" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Uç Kapağı" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Kaynak Dikişi" Click="CadCommandPlaceholder_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Kesim Listesi" Click="CadCommandPlaceholder_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Kesim Listesi" Click="StructuralCutList_Click" ToolTip="Yapısal Eleman feature'larından gerçek boy/kesit alanı/hacim listesi üretir."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Profil Kütüphanesi" Click="CadCommandPlaceholder_Click"/>
                 </WrapPanel>
             </TabItem>
