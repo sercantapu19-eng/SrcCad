@@ -340,6 +340,23 @@ internal static class NativeFeatureGraphTests
             var loftExpected=Math.PI*20.0/3.0*(25+50+100);
             Check(Math.Abs(loftInspect[0]-loftExpected)<1e-1&&loftInspect[1]==1,"two-circle loft creates frustum solid");
 
+            var hollowLoft1=new SketchModel(plane);
+            hollowLoft1.AddCornerRectangle(new(-10,-8),new(10,8),.001);
+            hollowLoft1.AddCircle(hollowLoft1.CreatePointExact(new(0,0)),3);
+            var hollowLoft2=new SketchModel(loftPlane2);
+            hollowLoft2.AddCornerRectangle(new(-10,-8),new(10,8),.001);
+            hollowLoft2.AddCircle(hollowLoft2.CreatePointExact(new(0,0)),3);
+            var hollowLoftNode1=new FeatureNode(Guid.NewGuid(),"HollowLoft1",new SketchFeatureParameters(plane,hollowLoft1.CaptureSnapshot()));
+            var hollowLoftNode2=new FeatureNode(Guid.NewGuid(),"HollowLoft2",new SketchFeatureParameters(loftPlane2,hollowLoft2.CaptureSnapshot()));
+            var hollowLoftFeature=new FeatureNode(Guid.NewGuid(),"DelikliLoft",
+                new LoftFeatureParameters(new[]{hollowLoftNode1.Id,hollowLoftNode2.Id}));
+            var hollowLoftDoc=new FeatureDocument(Guid.NewGuid(),new[]{hollowLoftNode1,hollowLoftNode2,hollowLoftFeature});
+            var hollowLoftSession=new FeatureSession<PartFeatureOutput>(hollowLoftDoc,evaluator);
+            var hollowLoftInspect=OcctFeatureKernel.Inspect(hollowLoftSession.Output(hollowLoftFeature.Id)!.BRep!);
+            var hollowLoftExpected=(20*16-Math.PI*9)*20;
+            Check(Math.Abs(hollowLoftInspect[0]-hollowLoftExpected)<1e-1&&hollowLoftInspect[1]==1,
+                "loft preserves matching circular inner loops");
+
             var revolveSketch=new SketchModel(plane);
             var ra=revolveSketch.CreatePointExact(new(0,-10));
             var rb=revolveSketch.CreatePointExact(new(0,30));
