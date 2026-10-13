@@ -37,6 +37,208 @@ public sealed record AssemblyMate(
     double Value=0,
     bool Suppressed=false);
 
+
+public static class AssemblyReferenceCatalog
+{
+    public const string Origin="ORIGIN";
+    public const string FrontPlane="PLANE:FRONT";
+    public const string TopPlane="PLANE:TOP";
+    public const string RightPlane="PLANE:RIGHT";
+    public const string XAxis="AXIS:X";
+    public const string YAxis="AXIS:Y";
+    public const string ZAxis="AXIS:Z";
+
+    public static readonly (string Name,TopologyKind Kind,string Semantic)[] Standard =
+    {
+        ("Orijin",TopologyKind.Vertex,Origin),
+        ("Ön Düzlem",TopologyKind.Face,FrontPlane),
+        ("Üst Düzlem",TopologyKind.Face,TopPlane),
+        ("Sağ Düzlem",TopologyKind.Face,RightPlane),
+        ("X Ekseni",TopologyKind.Edge,XAxis),
+        ("Y Ekseni",TopologyKind.Edge,YAxis),
+        ("Z Ekseni",TopologyKind.Edge,ZAxis)
+    };
+
+    public static bool TryDirection(AssemblyReference reference,out Vector3d direction)
+    {
+        direction=reference.SemanticName switch
+        {
+            FrontPlane or YAxis=>Vector3d.UnitY,
+            TopPlane or ZAxis=>Vector3d.UnitZ,
+            RightPlane or XAxis=>Vector3d.UnitX,
+            _=>Vector3d.Zero
+        };
+        return direction.Length>1e-12;
+    }
+}
+
+public static class AssemblyMateSolver
+{
+    private static double Rad(double degrees)=>degrees*Math.PI/180.0;
+    private static double Deg(double radians)=>radians*180.0/Math.PI;
+
+    private static double[,] Multiply(double[,] a,double[,] b)
+    {
+        var r=new double[3,3];
+        for(var i=0;i<3;i++)for(var j=0;j<3;j++)
+            r[i,j]=a[i,0]*b[0,j]+a[i,1]*b[1,j]+a[i,2]*b[2,j];
+        return r;
+    }
+
+    private static Vector3d Multiply(double[,] m,Vector3d v)
+        => new(
+            m[0,0]*v.X+m[0,1]*v.Y+m[0,2]*v.Z,
+            m[1,0]*v.X+m[1,1]*v.Y+m[1,2]*v.Z,
+            m[2,0]*v.X+m[2,1]*v.Y+m[2,2]*v.Z);
+
+    // Matches the OCCT application order: X, then Y, then Z.
+    private static double[,] RotationMatrix(Vector3d degrees)
+    {
+        var x=Rad(degrees.X);var y=Rad(degrees.Y);var z=Rad(degrees.Z);
+        var cx=Math.Cos(x);var sx=Math.Sin(x);
+        var cy=Math.Cos(y);var sy=Math.Sin(y);
+        var cz=Math.Cos(z);var sz=Math.Sin(z);
+        var rx=new[,]{{1d,0,0},{0,cx,-sx},{0,sx,cx}};
+        var ry=new[,]{{cy,0,sy},{0,1d,0},{-sy,0,cy}};
+        var rz=new[,]{{cz,-sz,0},{sz,cz,0},{0,0,1d}};
+        return Multiply(rz,Multiply(ry,rx));
+    }
+
+    private static Vector3d EulerDegrees(double[,] r)
+    {
+        var sy=Math.Clamp(-r[2,0],-1.0,1.0);
+        var y=Math.Asin(sy);
+        double x,z;
+        if(Math.Abs(Math.Cos(y))>1e-9)
+        {
+            x=Math.Atan2(r[2,1],r[2,2]);
+            z=Math.Atan2(r[1,0],r[0,0]);
+        }
+        else
+        {
+            x=Math.Atan2(-r[1,2],r[1,1]);
+            z=0;
+        }
+        return new Vector3d(Deg(x),Deg(y),Deg(z));
+    }
+
+    private static double[,] Align(Vector3d from,Vector3d to)
+    {
+        var a=from.Normalized();var b=to.Normalized();
+        var v=Vector3d.Cross(a,b);var c=Math.Clamp(Vector3d.Dot(a,b),-1.0,1.0);
+        var s=v.Length;
+        if(s<1e-10)
+        {
+            if(c>0)return new[,]{{1d,0,0},{0,1d,0},{0,0,1d}};
+            var helper=Math.Abs(a.X)<0.8?Vector3d.UnitX:Vector3d.UnitY;
+            var axis=Vector3d.Cross(a,helper).Normalized();
+            var x=axis.X;var y=axis.Y;var z=axis.Z;
+            return new[,]
+            {
+                {2*x*x-1,2*x*y,2*x*z},
+                {2*x*y,2*y*y-1,2*y*z},
+                {2*x*z,2*y*z,2*z*z-1}
+            };
+        }
+        var k=new[,]{{0d,-v.Z,v.Y},{v.Z,0d,-v.X},{-v.Y,v.X,0d}};
+        var k2=Multiply(k,k);var f=(1-c)/(s*s);
+        var r=new double[3,3];
+        for(var i=0;i<3;i++)for(var j=0;j<3;j++)
+            r[i,j]=(i==j?1d:0d)+k[i,j]+k2[i,j]*f;
+        return r;
+    }
+
+    private static Vector3d WorldDirection(AssemblyComponent component,AssemblyReference reference)
+        => AssemblyReferenceCatalog.TryDirection(reference,out var local)
+            ?Multiply(RotationMatrix(component.Transform.RotationDegrees),local).Normalized()
+            :Vector3d.Zero;
+
+    private static Vector3d PerpendicularTarget(Vector3d a,Vector3d current)
+    {
+        var projected=current-a*Vector3d.Dot(current,a);
+        if(projected.Length>1e-9)return projected.Normalized();
+        var helper=Math.Abs(a.X)<0.8?Vector3d.UnitX:Vector3d.UnitY;
+        return Vector3d.Cross(a,helper).Normalized();
+    }
+
+    private static Vector3d RotateAround(Vector3d vector,Vector3d axis,double angleDegrees)
+    {
+        var a=axis.Normalized();var t=Rad(angleDegrees);
+        var c=Math.Cos(t);var s=Math.Sin(t);
+        return vector*c+Vector3d.Cross(a,vector)*s+a*(Vector3d.Dot(a,vector)*(1-c));
+    }
+
+    public static AssemblyDocument Apply(AssemblyDocument document,AssemblyMate mate)
+    {
+        AssemblyDocumentFile.Validate(document);
+        if(mate.Suppressed)return document;
+        var a=document.Component(mate.A.ComponentId);
+        var b=document.Component(mate.B.ComponentId);
+        if(b.Fixed)throw new InvalidOperationException("Sabit bileşen montaj ilişkisiyle taşınamaz.");
+
+        var transform=b.Transform;
+        var aHasDirection=AssemblyReferenceCatalog.TryDirection(mate.A,out _);
+        var bHasDirection=AssemblyReferenceCatalog.TryDirection(mate.B,out _);
+
+        if(aHasDirection&&bHasDirection)
+        {
+            var aDir=WorldDirection(a,mate.A);
+            var bDir=WorldDirection(b,mate.B);
+            Vector3d desired=bDir;
+            switch(mate.Type)
+            {
+                case MateType.Coincident:
+                case MateType.Parallel:
+                case MateType.Concentric:
+                case MateType.Distance:
+                    desired=aDir;
+                    break;
+                case MateType.Perpendicular:
+                    desired=PerpendicularTarget(aDir,bDir);
+                    break;
+                case MateType.Angle:
+                {
+                    var axis=Vector3d.Cross(aDir,bDir);
+                    if(axis.Length<1e-9)
+                    {
+                        var helper=Math.Abs(aDir.X)<0.8?Vector3d.UnitX:Vector3d.UnitY;
+                        axis=Vector3d.Cross(aDir,helper);
+                    }
+                    desired=RotateAround(aDir,axis,mate.Value);
+                    break;
+                }
+            }
+            var delta=Align(bDir,desired);
+            transform=transform with{RotationDegrees=EulerDegrees(Multiply(delta,RotationMatrix(transform.RotationDegrees)))};
+        }
+
+        var aOrigin=a.Transform.Translation;
+        var bOrigin=transform.Translation;
+        switch(mate.Type)
+        {
+            case MateType.Coincident:
+                transform=transform with{Translation=aOrigin};
+                break;
+            case MateType.Distance:
+            {
+                var normal=aHasDirection?WorldDirection(a,mate.A):Vector3d.UnitX;
+                transform=transform with{Translation=aOrigin+normal*mate.Value};
+                break;
+            }
+            case MateType.Concentric when aHasDirection:
+            {
+                var axis=WorldDirection(a,mate.A);
+                var along=Vector3d.Dot(bOrigin-aOrigin,axis);
+                transform=transform with{Translation=aOrigin+axis*along};
+                break;
+            }
+        }
+
+        var updated=b with{Transform=transform.Validate()};
+        return document with{Components=document.Components.Select(c=>c.Id==b.Id?updated:c).ToArray()};
+    }
+}
+
 public sealed record AssemblyDocument(Guid Id,AssemblyComponent[] Components,AssemblyMate[] Mates)
 {
     public AssemblyComponent Component(Guid id)=>Components.Single(c=>c.Id==id);
