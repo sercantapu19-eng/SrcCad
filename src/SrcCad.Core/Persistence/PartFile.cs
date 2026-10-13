@@ -87,7 +87,7 @@ public sealed record PartFile(int SchemaVersion, string Units, ExtrusionState Mo
         }
         try
         {
-            foreach(var r in s.Relations) {if(!Enum.IsDefined(r.Type))throw new InvalidDataException("Geçersiz ilişki türü.");Ref(r.ReferenceA);Ref(r.ReferenceB);}
+            foreach(var r in s.Relations) {if(!Enum.IsDefined(r.Type))throw new InvalidDataException("Geçersiz ilişki türü.");Ref(r.ReferenceA);Ref(r.ReferenceB);Ref(r.ReferenceC);}
             foreach(var d in s.Dimensions)
             {
                 if(!Enum.IsDefined(d.Type)||!double.IsFinite(d.Value)||d.Value<0||!double.IsFinite(d.LabelPosition.X)||!double.IsFinite(d.LabelPosition.Y)||d.Sense is not 1 and not -1)
