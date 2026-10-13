@@ -529,7 +529,11 @@ public partial class MainWindow : Window
         }
 
         if (!_inSketch)
+        {
             _viewer.MoveTo(e.X, e.Y); // OCCT dynamic pre-highlight.
+            if(_inspectMeasureMode)
+                UpdateInspectMeasureFromSelection(hoverPreview:true);
+        }
     }
 
     private void Window_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
