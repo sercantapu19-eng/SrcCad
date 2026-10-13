@@ -1393,6 +1393,97 @@ public partial class MainWindow
 
     private void PatternFeatureCancel_Click(object sender,RoutedEventArgs e)=>EndGraphFeature();
 
+    private FeatureNode? BaseFlangeSketchCandidate()
+    {
+        if(_partSession is null)return null;
+        bool Closed(FeatureNode n)
+        {
+            if(n.Parameters is not SketchFeatureParameters)return false;
+            try
+            {
+                var model=GraphSketchModel(n);
+                return model.TryGetExtrusionProfile(out _,out _)||model.TryGetSingleCircle(out _);
+            }
+            catch{return false;}
+        }
+        if(SelectedGraphNode is {Kind:FeatureKind.Sketch} selected&&Closed(selected))return selected;
+        return _partSession.Document.Features.LastOrDefault(n=>n.Kind==FeatureKind.Sketch&&Closed(n));
+    }
+
+    private void BaseFlange_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession()||_partSession is null)return;
+        if(_hasSolid){Status("Taban Flanş yeni sac parçanın ilk katı özelliğidir.");return;}
+        var sketch=BaseFlangeSketchCandidate();
+        if(sketch is null){Status("Taban Flanş için kapalı bir Çizim seçin.");return;}
+        BeginSheetMetalBaseFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Taban Flanş"),
+            new SheetMetalBaseFeatureParameters(sketch.Id,2,2,0.5,false)));
+    }
+
+    private void BeginSheetMetalBaseFeature(FeatureNode node)
+    {
+        if(node.Parameters is not SheetMetalBaseFeatureParameters sheet)throw new InvalidOperationException("Unsupported sheet metal base.");
+        _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;
+        SheetThickness.Text=sheet.Thickness.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        SheetBendRadius.Text=sheet.BendRadius.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        SheetKFactor.Text=sheet.KFactor.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        SheetReverse.IsChecked=sheet.Reverse;
+        SheetMetalBaseInfo.Text=$"Kaynak çizim: {_partSession?.Document.Node(sheet.SketchId).Name} • sac parametreleri feature geçmişinde saklanır.";
+        SheetMetalBaseError.Text="";
+        SheetMetalBasePanel.Visibility=Visibility.Visible;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;
+        RevolveFeaturePanel.Visibility=Visibility.Collapsed;MultiSketchFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;
+        DraftFeaturePanel.Visibility=Visibility.Collapsed;RibFeaturePanel.Visibility=Visibility.Collapsed;ReferenceGeometryPanel.Visibility=Visibility.Collapsed;
+        MirrorFeaturePanel.Visibility=Visibility.Collapsed;PatternFeaturePanel.Visibility=Visibility.Collapsed;
+        PropertyTitle.Text=node.Name;PropertyInfo.Text="Gerçek OCCT sac taban gövdesi • kalınlık/büküm yarıçapı/K-faktörü parametrik";
+        ManagerTabs.SelectedItem=PropertyManagerTab;_loadingGraphParameters=false;
+        UpdateSheetMetalBasePreview();RefreshCommandState();
+    }
+
+    private FeatureDocument? SheetMetalBaseCandidate()
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not SheetMetalBaseFeatureParameters sheet||
+           !DimensionNumbers.TryParse(SheetThickness.Text,SketchDimensionType.LineLength,out var thickness,out _)||
+           !DimensionNumbers.TryParseScalar(SheetBendRadius.Text,out var radius)||
+           !DimensionNumbers.TryParseScalar(SheetKFactor.Text,out var k)||
+           thickness<=1e-9||radius<0||k<0||k>1)return null;
+        return ReplaceGraphNode(_graphFeatureEdit with
+        {
+            Parameters=sheet with{Thickness=thickness,BendRadius=radius,KFactor=k,Reverse=SheetReverse.IsChecked==true}
+        });
+    }
+
+    private void SheetMetalBaseParameterChanged(object sender,RoutedEventArgs e)
+    {
+        if(!_loadingGraphParameters)UpdateSheetMetalBasePreview();
+    }
+
+    private void UpdateSheetMetalBasePreview()
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not SheetMetalBaseFeatureParameters)return;
+        var candidate=SheetMetalBaseCandidate();
+        if(candidate is null)
+        {
+            _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();
+            SheetMetalBaseError.Text="Kalınlık > 0, büküm yarıçapı ≥ 0 ve K-faktörü 0–1 olmalı.";return;
+        }
+        var preview=_partSession.Preview(candidate);
+        var body=preview.Success?LastBody(candidate,id=>preview.Outputs.GetValueOrDefault(id)):null;
+        if(body is not null&&_viewer.PreviewFeatureBody(body)){SheetMetalBaseError.Text="";return;}
+        _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();
+        SheetMetalBaseError.Text=preview.Report.Nodes.LastOrDefault(n=>n.State==RebuildState.Failed)?.Error??preview.Report.Error??"Taban Flanş önizlemesi oluşturulamadı.";
+    }
+
+    private void SheetMetalBaseOk_Click(object sender,RoutedEventArgs e)
+    {
+        var candidate=SheetMetalBaseCandidate();
+        if(candidate is null||_partSession is null){SheetMetalBaseError.Text="Geçerli sac parametreleri gerekiyor.";return;}
+        if(!_partSession.TryCommit(candidate)){SheetMetalBaseError.Text=GraphError();return;}
+        var id=_graphFeatureEdit!.Id;EndGraphFeature();RefreshPartTree(id);Status("Parametrik Taban Flanş onaylandı.");
+    }
+
+    private void SheetMetalBaseCancel_Click(object sender,RoutedEventArgs e)=>EndGraphFeature();
+
     private void BeginGraphExtrude()
     {
         if(_inSketch||_extrudeCommandActive||_partSession is null||SelectedGraphId is not Guid id||_partSession.Document.Node(id).Kind!=FeatureKind.Sketch)return;
@@ -1417,6 +1508,7 @@ public partial class MainWindow
         if(node.Parameters is MirrorFeatureParameters){BeginMirrorFeature(node);return;}
         if(node.Parameters is LinearPatternFeatureParameters or CircularPatternFeatureParameters){BeginPatternFeature(node);return;}
         if(node.Parameters is ReferencePlaneFeatureParameters or ReferenceAxisFeatureParameters or ReferencePointFeatureParameters){BeginReferenceGeometryFeature(node);return;}
+        if(node.Parameters is SheetMetalBaseFeatureParameters){BeginSheetMetalBaseFeature(node);return;}
         _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;_depthWheel.Reset();
         var cut=node.Parameters as CutFeatureParameters;
         var depth=cut?.Depth??Math.Abs(((ExtrudeFeatureParameters)node.Parameters).Depth);
@@ -1461,7 +1553,7 @@ public partial class MainWindow
     {
         _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.0);
         _graphFeatureEdit=null;_extrudeCommandActive=false;
-        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;RevolveFeaturePanel.Visibility=Visibility.Collapsed;MultiSketchFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;DraftFeaturePanel.Visibility=Visibility.Collapsed;RibFeaturePanel.Visibility=Visibility.Collapsed;ReferenceGeometryPanel.Visibility=Visibility.Collapsed;MirrorFeaturePanel.Visibility=Visibility.Collapsed;PatternFeaturePanel.Visibility=Visibility.Collapsed;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;RevolveFeaturePanel.Visibility=Visibility.Collapsed;MultiSketchFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;DraftFeaturePanel.Visibility=Visibility.Collapsed;RibFeaturePanel.Visibility=Visibility.Collapsed;ReferenceGeometryPanel.Visibility=Visibility.Collapsed;MirrorFeaturePanel.Visibility=Visibility.Collapsed;PatternFeaturePanel.Visibility=Visibility.Collapsed;SheetMetalBasePanel.Visibility=Visibility.Collapsed;
         _viewer.ClearSelection();_viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Face);
         ManagerTabs.SelectedItem=FeatureManagerTab;RefreshCommandState();
     }
@@ -1490,5 +1582,6 @@ public partial class MainWindow
         ReferenceGeometryPanel.Visibility=Visibility.Collapsed;
         MirrorFeaturePanel.Visibility=Visibility.Collapsed;
         PatternFeaturePanel.Visibility=Visibility.Collapsed;
+        SheetMetalBasePanel.Visibility=Visibility.Collapsed;
     }
 }

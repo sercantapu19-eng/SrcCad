@@ -36,6 +36,7 @@ internal static class FeatureGraphTests
                 ReferencePlaneFeatureParameters=>1,
                 ReferenceAxisFeatureParameters=>1,
                 ReferencePointFeatureParameters=>1,
+                SheetMetalBaseFeatureParameters p=>p.Thickness,
                 _=>1
             };
             return new(own+dependencies.Values.Sum(x=>x.Value));
@@ -195,6 +196,13 @@ internal static class FeatureGraphTests
             "reference plane axis point persist through parametric document");
         Check(((ReferencePlaneFeatureParameters)referenceGeometryClone.Node(refPlaneNode.Id).Parameters).Offset==25,
             "reference plane offset roundtrip");
+
+        var sheetBaseNode=new FeatureNode(Guid.NewGuid(),"Taban Flanş1",new SheetMetalBaseFeatureParameters(source.Id,2,2,0.5));
+        var sheetDoc=new FeatureDocument(Guid.NewGuid(),new[]{source,sheetBaseNode});
+        var sheetClone=FeatureDocumentFile.Clone(sheetDoc);
+        Check(sheetClone.Node(sheetBaseNode.Id).Kind==FeatureKind.SheetMetalBase&&
+              ((SheetMetalBaseFeatureParameters)sheetClone.Node(sheetBaseNode.Id).Parameters).KFactor==0.5,
+            "sheet metal base thickness bend radius k-factor roundtrip");
 
         var external=session.Document;((IDictionary<int,SketchPoint>)((SketchFeatureParameters)external.Node(source.Id).Parameters).Sketch.Points).Clear();
         Check(((SketchFeatureParameters)session.Document.Node(source.Id).Parameters).Sketch.Points.Count>0,"external snapshot cannot mutate committed document");

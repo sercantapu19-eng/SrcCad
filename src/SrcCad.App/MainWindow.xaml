@@ -137,7 +137,7 @@
             </TabItem>
             <TabItem Header="SAC LEVHA">
                 <WrapPanel Margin="8">
-                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadExtrudeIcon}" Content="Taban Flanş" Click="CadCommandPlaceholder_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadExtrudeIcon}" Content="Taban Flanş" Click="BaseFlange_Click" x:Name="BaseFlangeButton" ToolTip="Kapalı çizimden gerçek sac gövdesi oluşturur; kalınlık, büküm yarıçapı ve K-faktörü parametriktir."/>
                     <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadExtrudeIcon}" Content="Kenar Flanşı" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Gönye Flanşı" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadCutIcon}" Content="Sac Kes" Click="CadCommandPlaceholder_Click"/>
@@ -442,6 +442,23 @@
                                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                     <Button Content="✓" Width="52" Height="34" Click="PatternFeatureOk_Click"/>
                                     <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="PatternFeatureCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="SheetMetalBasePanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Taban Flanş" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <TextBlock Text="Sac Kalınlığı (mm)"/>
+                                <TextBox x:Name="SheetThickness" TextChanged="SheetMetalBaseParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock Text="Varsayılan Büküm Yarıçapı (mm)"/>
+                                <TextBox x:Name="SheetBendRadius" TextChanged="SheetMetalBaseParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock Text="K-Faktörü (0–1)"/>
+                                <TextBox x:Name="SheetKFactor" TextChanged="SheetMetalBaseParameterChanged" Margin="0,4,0,8"/>
+                                <CheckBox x:Name="SheetReverse" Content="Kalınlık Yönünü Ters Çevir" Checked="SheetMetalBaseParameterChanged" Unchecked="SheetMetalBaseParameterChanged" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="SheetMetalBaseInfo" TextWrapping="Wrap" Foreground="#5F6B76" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="SheetMetalBaseError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="SheetMetalBaseOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="SheetMetalBaseCancel_Click"/>
                                 </StackPanel>
                             </StackPanel>
 

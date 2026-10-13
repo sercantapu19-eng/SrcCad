@@ -22,6 +22,14 @@ internal static class NativeFeatureGraphTests
             var evaluator=new PartFeatureEvaluator(new OcctPartGeometryKernel());
             var session=new FeatureSession<PartFeatureOutput>(doc,evaluator);
 
+            var sheetNode=new FeatureNode(Guid.NewGuid(),"Taban Flanş1",
+                new SheetMetalBaseFeatureParameters(doc.Features[0].Id,2,2,0.5));
+            var sheetDoc=new FeatureDocument(Guid.NewGuid(),new[]{doc.Features[0],sheetNode});
+            var sheetSession=new FeatureSession<PartFeatureOutput>(sheetDoc,evaluator);
+            var sheetInspect=OcctFeatureKernel.Inspect(sheetSession.Output(sheetNode.Id)!.BRep!);
+            Check(Math.Abs(sheetInspect[0]-40*30*2)<1e-4&&sheetInspect[1]==1,
+                "sheet metal base flange builds real thickness B-Rep");
+
             var bossBody=session.Output(boss.Id)!.BRep!;
             var bossEdges=OcctFeatureKernel.EdgeReferences(bossBody);
             Check(bossEdges.Length>=4,"extruded body exposes semantic edge references");
