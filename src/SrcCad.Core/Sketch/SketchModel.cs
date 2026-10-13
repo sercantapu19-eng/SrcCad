@@ -87,6 +87,12 @@ public sealed record SketchDefinitionInfo(
     string Text,
     int RedundantEquationCount = 0);
 
+public sealed record SketchExtrusionRegion(
+    IReadOnlyList<Point2d>? OuterPolygon,
+    SketchCircle? OuterCircle,
+    IReadOnlyList<IReadOnlyList<Point2d>> PolygonHoles,
+    IReadOnlyList<SketchCircle> CircularHoles);
+
 public sealed record SketchSnapshot(
     int NextPointId,
     int NextEntityId,
@@ -1425,6 +1431,135 @@ public sealed partial class SketchModel
         out List<Point2d> outerLoop,
         out List<SketchCircle> circularHoles)
         => TryGetExtrusionProfile(out outerLoop, out _, out circularHoles);
+
+    public bool TryGetExtrusionRegions(out List<SketchExtrusionRegion> regions)
+    {
+        regions=new List<SketchExtrusionRegion>();
+
+        var boundaries=new List<(IReadOnlyList<Point2d> Polygon,SketchCircle? Circle)>();
+        if(TryGetClosedLineLoops(out var loops))
+            boundaries.AddRange(loops.Select(loop=>((IReadOnlyList<Point2d>)loop,(SketchCircle?)null)));
+
+        foreach(var ellipse in Ellipses(false))
+            boundaries.Add((SampleEllipse(ellipse,96),null));
+
+        foreach(var circle in Circles(false))
+        {
+            if(!double.IsFinite(circle.Radius)||circle.Radius<=1e-9)return false;
+            var sampled=Enumerable.Range(0,96).Select(i=>
+            {
+                var center=Point(circle.CenterPointId).Position;
+                var a=2*Math.PI*i/96.0;
+                return new Point2d(center.X+Math.Cos(a)*circle.Radius,center.Y+Math.Sin(a)*circle.Radius);
+            }).ToArray();
+            boundaries.Add((sampled,circle));
+        }
+
+        if(boundaries.Count==0)return false;
+
+        bool Contains((IReadOnlyList<Point2d> Polygon,SketchCircle? Circle) outer,
+                      (IReadOnlyList<Point2d> Polygon,SketchCircle? Circle) inner)
+        {
+            const double eps=1e-9;
+            if(outer.Circle is SketchCircle oc)
+            {
+                var center=Point(oc.CenterPointId).Position;
+                if(inner.Circle is SketchCircle ic)
+                {
+                    var innerCenter=Point(ic.CenterPointId).Position;
+                    return Point2d.Distance(center,innerCenter)+ic.Radius<oc.Radius-eps;
+                }
+                return inner.Polygon.All(p=>Point2d.Distance(center,p)<oc.Radius-eps);
+            }
+
+            if(inner.Circle is SketchCircle circle)
+            {
+                var center=Point(circle.CenterPointId).Position;
+                return CircleInsidePolygon(center,circle.Radius,outer.Polygon);
+            }
+
+            return PointInPolygon(inner.Polygon[0],outer.Polygon)&&!LoopsTouch(inner.Polygon,outer.Polygon);
+        }
+
+        bool InvalidIntersection((IReadOnlyList<Point2d> Polygon,SketchCircle? Circle) a,
+                                 (IReadOnlyList<Point2d> Polygon,SketchCircle? Circle) b)
+        {
+            const double eps=1e-9;
+            if(Contains(a,b)||Contains(b,a))return false;
+
+            if(a.Circle is SketchCircle ac&&b.Circle is SketchCircle bc)
+            {
+                var ca=Point(ac.CenterPointId).Position;var cb=Point(bc.CenterPointId).Position;
+                return Point2d.Distance(ca,cb)<=ac.Radius+bc.Radius+eps;
+            }
+
+            if(a.Circle is SketchCircle circleA)
+            {
+                var center=Point(circleA.CenterPointId).Position;
+                if(PointInPolygon(center,b.Polygon))return true;
+                return b.Polygon.Any((p)=>false)||
+                       Enumerable.Range(0,b.Polygon.Count).Any(i=>
+                           DistancePointToSegment(center,b.Polygon[i],b.Polygon[(i+1)%b.Polygon.Count])<=circleA.Radius+eps);
+            }
+
+            if(b.Circle is SketchCircle circleB)
+            {
+                var center=Point(circleB.CenterPointId).Position;
+                if(PointInPolygon(center,a.Polygon))return true;
+                return Enumerable.Range(0,a.Polygon.Count).Any(i=>
+                    DistancePointToSegment(center,a.Polygon[i],a.Polygon[(i+1)%a.Polygon.Count])<=circleB.Radius+eps);
+            }
+
+            return LoopsTouch(a.Polygon,b.Polygon);
+        }
+
+        for(var i=0;i<boundaries.Count;i++)
+            for(var j=i+1;j<boundaries.Count;j++)
+                if(InvalidIntersection(boundaries[i],boundaries[j]))return false;
+
+        var parent=new int[boundaries.Count];
+        Array.Fill(parent,-1);
+        for(var i=0;i<boundaries.Count;i++)
+        {
+            var candidates=Enumerable.Range(0,boundaries.Count)
+                .Where(j=>j!=i&&Contains(boundaries[j],boundaries[i]))
+                .OrderBy(j=>Math.Abs(SignedArea(boundaries[j].Polygon)))
+                .ToArray();
+            if(candidates.Length>0)parent[i]=candidates[0];
+        }
+
+        int Depth(int index)
+        {
+            var depth=0;var seen=new HashSet<int>{index};var p=parent[index];
+            while(p>=0)
+            {
+                if(!seen.Add(p))return int.MaxValue;
+                depth++;p=parent[p];
+            }
+            return depth;
+        }
+
+        var depths=Enumerable.Range(0,boundaries.Count).Select(Depth).ToArray();
+        if(depths.Any(d=>d==int.MaxValue))return false;
+
+        for(var i=0;i<boundaries.Count;i++)
+        {
+            if(depths[i]%2!=0)continue;
+            var holeIndexes=Enumerable.Range(0,boundaries.Count)
+                .Where(j=>parent[j]==i&&depths[j]==depths[i]+1).ToArray();
+            var polygonHoles=holeIndexes.Where(j=>boundaries[j].Circle is null)
+                .Select(j=>boundaries[j].Polygon).ToArray();
+            var circularHoles=holeIndexes.Where(j=>boundaries[j].Circle is not null)
+                .Select(j=>boundaries[j].Circle!).ToArray();
+            regions.Add(new SketchExtrusionRegion(
+                boundaries[i].Circle is null?boundaries[i].Polygon:null,
+                boundaries[i].Circle,
+                polygonHoles,
+                circularHoles));
+        }
+
+        return regions.Count>0;
+    }
 
     private static bool SegmentsTouch(Point2d a, Point2d b, Point2d c, Point2d d)
     {
