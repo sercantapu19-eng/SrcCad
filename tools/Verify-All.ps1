@@ -102,7 +102,7 @@ try {
         }
         finally { Pop-Location }
 
-        Log "$config: BUILD + MANAGED + NATIVE PASS"
+        Log "${config}: BUILD + MANAGED + NATIVE PASS"
     }
 
     if ($RunInteraction) {
