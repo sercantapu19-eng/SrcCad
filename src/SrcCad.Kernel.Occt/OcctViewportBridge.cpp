@@ -685,29 +685,56 @@ namespace SrcCad::Kernel::Occt
         const double current=myState->View->Scale();
         try
         {
-            double beforeX=0,beforeY=0,beforeZ=0;
+            Handle(Graphic3d_Camera) camera=myState->View->Camera();
             const bool useCursor=x>=0&&y>=0;
-            if(useCursor)myState->View->Convert(x,y,beforeX,beforeY,beforeZ);
-
-            myState->View->SetScale(std::max(1e-8,current*factor));
-
-            if(useCursor)
+            gp_Pnt before;
+            bool haveBefore=false;
+            if(useCursor&&!camera.IsNull())
             {
-                double afterX=0,afterY=0,afterZ=0;
-                myState->View->Convert(x,y,afterX,afterY,afterZ);
-                gp_Vec shift(gp_Pnt(afterX,afterY,afterZ),gp_Pnt(beforeX,beforeY,beforeZ));
-                if(shift.SquareMagnitude()>1e-24)
+                double px=0,py=0,pz=0,vx=0,vy=0,vz=0;
+                myState->View->ConvertWithProj(x,y,px,py,pz,vx,vy,vz);
+                gp_Vec ray(vx,vy,vz), normal(camera->Eye(),camera->Center());
+                if(ray.SquareMagnitude()>1e-24&&normal.SquareMagnitude()>1e-24)
                 {
-                    Handle(Graphic3d_Camera) camera=myState->View->Camera();
-                    camera->SetEye(camera->Eye().Translated(shift));
-                    camera->SetCenter(camera->Center().Translated(shift));
+                    normal.Normalize();
+                    const double denom=ray.Dot(normal);
+                    if(std::abs(denom)>1e-14)
+                    {
+                        gp_Vec toPlane(gp_Pnt(px,py,pz),camera->Center());
+                        const double t=toPlane.Dot(normal)/denom;
+                        before=gp_Pnt(px+t*vx,py+t*vy,pz+t*vz);
+                        haveBefore=true;
+                    }
+                }
+            }
+            myState->View->SetScale(std::max(1e-8,current*factor));
+            if(haveBefore&&!camera.IsNull())
+            {
+                double px=0,py=0,pz=0,vx=0,vy=0,vz=0;
+                myState->View->ConvertWithProj(x,y,px,py,pz,vx,vy,vz);
+                gp_Vec ray(vx,vy,vz), normal(camera->Eye(),camera->Center());
+                if(ray.SquareMagnitude()>1e-24&&normal.SquareMagnitude()>1e-24)
+                {
+                    normal.Normalize();
+                    const double denom=ray.Dot(normal);
+                    if(std::abs(denom)>1e-14)
+                    {
+                        gp_Vec toPlane(gp_Pnt(px,py,pz),camera->Center());
+                        const double t=toPlane.Dot(normal)/denom;
+                        gp_Pnt after(px+t*vx,py+t*vy,pz+t*vz);
+                        gp_Vec shift(after,before);
+                        if(shift.SquareMagnitude()>1e-24)
+                        {
+                            camera->SetEye(camera->Eye().Translated(shift));
+                            camera->SetCenter(camera->Center().Translated(shift));
+                        }
+                    }
                 }
             }
             myState->View->Redraw();
         }
         catch(const Standard_Failure&)
         {
-            // Preserve a usable single-step centered zoom if cursor conversion is unavailable.
             myState->View->SetScale(std::max(1e-8,current*factor));
             myState->View->Redraw();
         }
