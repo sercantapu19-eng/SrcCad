@@ -140,6 +140,7 @@ public static class DrawingDocumentFile
         if(document.Views.Select(v=>v.Id).Distinct().Count()!=document.Views.Length)
             throw new InvalidDataException("Duplicate drawing view id.");
         var viewIds=document.Views.Select(v=>v.Id).ToHashSet();
+        var viewsById=document.Views.ToDictionary(v=>v.Id);
         foreach(var view in document.Views)
         {
             if(view.Id==Guid.Empty||string.IsNullOrWhiteSpace(view.Name)||string.IsNullOrWhiteSpace(view.ModelPath)||
@@ -147,6 +148,8 @@ public static class DrawingDocumentFile
                !double.IsFinite(view.Scale)||view.Scale<=1e-9||
                (view.ParentViewId is Guid parent&&(!viewIds.Contains(parent)||parent==view.Id)))
                 throw new InvalidDataException("Invalid drawing view.");
+            if(view.ParentViewId is Guid parentId&&viewsById[parentId].SheetId!=view.SheetId)
+                throw new InvalidDataException("Dependent drawing views must stay on the same sheet.");
             if(view.Type==DrawingViewType.Section)
             {
                 if(view.SectionOrigin is not Vector3d origin||view.SectionNormal is not Vector3d normal||
@@ -162,6 +165,18 @@ public static class DrawingDocumentFile
             }
         }
 
+        foreach(var view in document.Views)
+        {
+            var seen=new HashSet<Guid>{view.Id};
+            var current=view;
+            while(current.ParentViewId is Guid parentId)
+            {
+                if(!seen.Add(parentId))
+                    throw new InvalidDataException("Drawing view dependency cycle detected.");
+                current=viewsById[parentId];
+            }
+        }
+
         if(document.Annotations.Select(a=>a.Id).Distinct().Count()!=document.Annotations.Length)
             throw new InvalidDataException("Duplicate drawing annotation id.");
         foreach(var annotation in document.Annotations)
@@ -171,6 +186,8 @@ public static class DrawingDocumentFile
                !double.IsFinite(annotation.Position.X)||!double.IsFinite(annotation.Position.Y)||
                string.IsNullOrWhiteSpace(annotation.Text)||!Enum.IsDefined(annotation.Kind))
                 throw new InvalidDataException("Invalid drawing annotation.");
+            if(annotation.ViewId is Guid attachedViewId&&viewsById[attachedViewId].SheetId!=annotation.SheetId)
+                throw new InvalidDataException("Drawing annotation and attached view must be on the same sheet.");
         }
     }
 }
