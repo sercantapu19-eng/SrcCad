@@ -44,6 +44,8 @@
 #include <Geom_Plane.hxx>
 #include <Geom_RectangularTrimmedSurface.hxx>
 #include <BRep_Tool.hxx>
+#include <BRepAdaptor_Curve.hxx>
+#include <GeomAbs_CurveType.hxx>
 #include <gp_Ax1.hxx>
 #include <gp_Ax2.hxx>
 #include <gp_Ax3.hxx>
@@ -1729,6 +1731,50 @@ namespace SrcCad::Kernel::Occt
             if(result.IsNull())return 0.0;
             GProp_GProps props;BRepGProp::VolumeProperties(result,props);
             return std::max(0.0,props.Mass());
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
+    array<double>^ OcctFeatureKernel::ProjectEdges(String^ body,array<double>^ direction,array<double>^ up)
+    {
+        if(direction==nullptr||direction->Length!=3||up==nullptr||up->Length!=3)
+            throw gcnew ArgumentException("Projection requires direction and up vectors.");
+        for each(double v in direction)if(!std::isfinite(v))throw gcnew ArgumentException("Invalid projection direction.");
+        for each(double v in up)if(!std::isfinite(v))throw gcnew ArgumentException("Invalid projection up vector.");
+        try
+        {
+            TopoDS_Shape shape=decodeFeature(body);
+            gp_Vec d(direction[0],direction[1],direction[2]);
+            gp_Vec u(up[0],up[1],up[2]);
+            if(d.Magnitude()<=1e-12||u.Magnitude()<=1e-12)throw gcnew ArgumentException("Projection vectors cannot be zero.");
+            d.Normalize();
+            u-=d*u.Dot(d);
+            if(u.Magnitude()<=1e-12)throw gcnew ArgumentException("Projection up vector cannot be parallel to direction.");
+            u.Normalize();
+            gp_Vec right=u.Crossed(d);
+            if(right.Magnitude()<=1e-12)throw gcnew ArgumentException("Projection basis is invalid.");
+            right.Normalize();
+
+            auto values=gcnew System::Collections::Generic::List<double>();
+            for(TopExp_Explorer ex(shape,TopAbs_EDGE);ex.More();ex.Next())
+            {
+                TopoDS_Edge edge=TopoDS::Edge(ex.Current());
+                BRepAdaptor_Curve curve(edge);
+                double first=curve.FirstParameter(),last=curve.LastParameter();
+                if(!std::isfinite(first)||!std::isfinite(last)||std::abs(last-first)<=1e-14)continue;
+                int segments=curve.GetType()==GeomAbs_Line?1:24;
+                gp_Pnt previous=curve.Value(first);
+                for(int i=1;i<=segments;i++)
+                {
+                    const double t=first+(last-first)*(double(i)/segments);
+                    gp_Pnt current=curve.Value(t);
+                    gp_Vec pa(gp_Pnt(0,0,0),previous),pb(gp_Pnt(0,0,0),current);
+                    values->Add(pa.Dot(right));values->Add(pa.Dot(u));
+                    values->Add(pb.Dot(right));values->Add(pb.Dot(u));
+                    previous=current;
+                }
+            }
+            return values->ToArray();
         }
         catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
     }
