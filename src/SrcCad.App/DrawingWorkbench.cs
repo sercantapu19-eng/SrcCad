@@ -101,13 +101,21 @@ public partial class MainWindow
         {
             try
             {
-                var (direction,up)=DrawingOrientation(view.Type==DrawingViewType.Projected
-                    ?(_drawingDocument.Views.FirstOrDefault(v=>v.Id==view.ParentViewId)?.Type??DrawingViewType.Front)
-                    :view.Type);
+                var parentType=_drawingDocument.Views.FirstOrDefault(v=>v.Id==view.ParentViewId)?.Type??DrawingViewType.Front;
+                var orientationType=view.Type is DrawingViewType.Projected or DrawingViewType.Section or DrawingViewType.Detail?parentType:view.Type;
+                var (direction,up)=DrawingOrientation(orientationType);
                 var allSegments=new List<double>();
                 foreach(var body in DrawingBodies(view.ModelPath))
-                    allSegments.AddRange(SrcCad.Kernel.Occt.OcctFeatureKernel.ProjectEdges(body,
-                        new[]{direction.X,direction.Y,direction.Z},new[]{up.X,up.Y,up.Z}));
+                {
+                    if(view.Type==DrawingViewType.Section&&view.SectionOrigin is Vector3d sectionOrigin&&view.SectionNormal is Vector3d sectionNormal)
+                        allSegments.AddRange(SrcCad.Kernel.Occt.OcctFeatureKernel.SectionEdges(body,
+                            new[]{sectionOrigin.X,sectionOrigin.Y,sectionOrigin.Z},
+                            new[]{sectionNormal.X,sectionNormal.Y,sectionNormal.Z},
+                            new[]{direction.X,direction.Y,direction.Z},new[]{up.X,up.Y,up.Z}));
+                    else
+                        allSegments.AddRange(SrcCad.Kernel.Occt.OcctFeatureKernel.ProjectEdges(body,
+                            new[]{direction.X,direction.Y,direction.Z},new[]{up.X,up.Y,up.Z}));
+                }
                 var segments=allSegments.ToArray();
                 if(segments.Length<4)continue;
                 var xs=new List<double>();var ys=new List<double>();
@@ -121,6 +129,8 @@ public partial class MainWindow
                     var y2=(segments[i+3]-cy)*view.Scale+view.Position.Y;
                     Line(x1,y1,x2,y2);
                 }
+                if(view.Type==DrawingViewType.Detail)
+                    _viewer.AddStyledSketchCircle(view.Position.X,view.Position.Y,0,0,0,1,1,0,0,45,1);
                 _viewer.AddSketchText(view.Position.X,view.Position.Y-12,0,view.Name,0);
             }
             catch(Exception ex){Status(view.Name+" görünümü oluşturulamadı: "+ex.Message);}
@@ -180,6 +190,126 @@ public partial class MainWindow
             parent.ModelPath,next,parent.SheetId,new Point2d(parent.Position.X+offset.X,parent.Position.Y+offset.Y),parent.Scale,parent.Id);
         _drawingDocument=_drawingDocument with{Views=_drawingDocument.Views.Append(view).ToArray()};
         RefreshDrawingTree(view.Id);RenderDrawing();Status(view.Name+" oluşturuldu.");
+    }
+
+    private (Vector3d Min,Vector3d Max) DrawingModelBounds(string modelPath)
+    {
+        var bounds=DrawingBodies(modelPath).Select(SrcCad.Kernel.Occt.OcctFeatureKernel.Bounds).Where(b=>b.Length==6).ToArray();
+        if(bounds.Length==0)throw new InvalidDataException("Model sınır kutusu bulunamadı.");
+        return (new Vector3d(bounds.Min(b=>b[0]),bounds.Min(b=>b[1]),bounds.Min(b=>b[2])),
+                new Vector3d(bounds.Max(b=>b[3]),bounds.Max(b=>b[4]),bounds.Max(b=>b[5])));
+    }
+
+    private void DrawingSectionView_Click(object sender,RoutedEventArgs e)
+    {
+        if(_drawingDocument is null){Status("Önce teknik resim oluşturun.");return;}
+        var parent=SelectedDrawingView();
+        if(parent is null){Status("Kesit için ana görünüşü FeatureManager'dan seçin.");return;}
+        try
+        {
+            var bounds=DrawingModelBounds(parent.ModelPath);
+            var center=new Vector3d((bounds.Min.X+bounds.Max.X)*0.5,(bounds.Min.Y+bounds.Max.Y)*0.5,(bounds.Min.Z+bounds.Max.Z)*0.5);
+            var (direction,up)=DrawingOrientation(parent.Type);
+            var right=Vector3d.Cross(up.Normalized(),direction.Normalized()).Normalized();
+            var section=new DrawingView(Guid.NewGuid(),"KESİT A-A",parent.ModelPath,DrawingViewType.Section,parent.SheetId,
+                new Point2d(parent.Position.X+125,parent.Position.Y),parent.Scale,parent.Id,null,center,right);
+            _drawingDocument=_drawingDocument with{Views=_drawingDocument.Views.Append(section).ToArray()};
+            RefreshDrawingTree(section.Id);RenderDrawing();Status("Gerçek OCCT kesit eğrileriyle KESİT A-A oluşturuldu.");
+        }
+        catch(Exception ex){Status("Kesit oluşturulamadı: "+ex.Message);}
+    }
+
+    private void DrawingDetailView_Click(object sender,RoutedEventArgs e)
+    {
+        if(_drawingDocument is null)return;
+        var parent=SelectedDrawingView();
+        if(parent is null){Status("Detay için ana görünüşü FeatureManager'dan seçin.");return;}
+        var detail=new DrawingView(Guid.NewGuid(),"DETAY A",parent.ModelPath,DrawingViewType.Detail,parent.SheetId,
+            new Point2d(parent.Position.X+125,parent.Position.Y-85),parent.Scale*2,parent.Id);
+        _drawingDocument=_drawingDocument with{Views=_drawingDocument.Views.Append(detail).ToArray()};
+        RefreshDrawingTree(detail.Id);RenderDrawing();Status("DETAY A görünüşü 2× ölçekle oluşturuldu.");
+    }
+
+    private (double Cx,double Cy,double[] Segments,Vector3d Direction,Vector3d Up) DrawingProjectionData(DrawingView view)
+    {
+        if(_drawingDocument is null)throw new InvalidOperationException("Drawing document missing.");
+        var parentType=_drawingDocument.Views.FirstOrDefault(v=>v.Id==view.ParentViewId)?.Type??DrawingViewType.Front;
+        var orientationType=view.Type is DrawingViewType.Projected or DrawingViewType.Section or DrawingViewType.Detail?parentType:view.Type;
+        var (direction,up)=DrawingOrientation(orientationType);
+        var segments=DrawingBodies(view.ModelPath).SelectMany(body=>
+            SrcCad.Kernel.Occt.OcctFeatureKernel.ProjectEdges(body,
+                new[]{direction.X,direction.Y,direction.Z},new[]{up.X,up.Y,up.Z})).ToArray();
+        if(segments.Length<4)throw new InvalidOperationException("Görünüş izdüşüm geometrisi boş.");
+        var xs=new List<double>();var ys=new List<double>();
+        for(var i=0;i+3<segments.Length;i+=4){xs.Add(segments[i]);xs.Add(segments[i+2]);ys.Add(segments[i+1]);ys.Add(segments[i+3]);}
+        return ((xs.Min()+xs.Max())*0.5,(ys.Min()+ys.Max())*0.5,segments,direction,up);
+    }
+
+    private void DrawingCenterMark_Click(object sender,RoutedEventArgs e)
+    {
+        if(_drawingDocument is null)return;
+        var view=SelectedDrawingView();
+        if(view is null){Status("Merkez işareti için görünüş seçin.");return;}
+        try
+        {
+            var data=DrawingProjectionData(view);
+            var circles=DrawingBodies(view.ModelPath).SelectMany(body=>
+                SrcCad.Kernel.Occt.OcctFeatureKernel.ProjectCircles(body,
+                    new[]{data.Direction.X,data.Direction.Y,data.Direction.Z},new[]{data.Up.X,data.Up.Y,data.Up.Z})).ToArray();
+            if(circles.Length<3){Status("Bu görünüşte eksene dik dairesel kenar bulunamadı.");return;}
+            var x=(circles[0]-data.Cx)*view.Scale+view.Position.X;
+            var y=(circles[1]-data.Cy)*view.Scale+view.Position.Y;
+            var r=Math.Max(4,circles[2]*view.Scale*0.35);
+            _viewer.AddStyledSketchLine(x-r,y,0,x+r,y,0,1);
+            _viewer.AddStyledSketchLine(x,y-r,0,x,y+r,0,1);
+            Status("İlk dairesel kenara gerçek merkez işareti eklendi.");
+        }
+        catch(Exception ex){Status("Merkez işareti oluşturulamadı: "+ex.Message);}
+    }
+
+    private void DrawingHoleCallout_Click(object sender,RoutedEventArgs e)
+    {
+        if(_drawingDocument is null)return;
+        var view=SelectedDrawingView();
+        if(view is null){Status("Delik çağrısı için görünüş seçin.");return;}
+        try
+        {
+            var data=DrawingProjectionData(view);
+            var circles=DrawingBodies(view.ModelPath).SelectMany(body=>
+                SrcCad.Kernel.Occt.OcctFeatureKernel.ProjectCircles(body,
+                    new[]{data.Direction.X,data.Direction.Y,data.Direction.Z},new[]{data.Up.X,data.Up.Y,data.Up.Z})).ToArray();
+            if(circles.Length<3){Status("Bu görünüşte dairesel delik/kenar bulunamadı.");return;}
+            var x=(circles[0]-data.Cx)*view.Scale+view.Position.X;
+            var y=(circles[1]-data.Cy)*view.Scale+view.Position.Y;
+            var text=$"Ø{circles[2]*2:0.###}";
+            var note=new DrawingAnnotation(Guid.NewGuid(),view.SheetId,view.Id,new Point2d(x+20,y+20),text);
+            _drawingDocument=_drawingDocument with{Annotations=_drawingDocument.Annotations.Append(note).ToArray()};
+            RefreshDrawingTree(note.Id);RenderDrawing();Status("Delik çağrısı eklendi: "+text);
+        }
+        catch(Exception ex){Status("Delik çağrısı oluşturulamadı: "+ex.Message);}
+    }
+
+    private void DrawingSmartDimension_Click(object sender,RoutedEventArgs e)
+    {
+        if(_drawingDocument is null)return;
+        var view=SelectedDrawingView();
+        if(view is null){Status("Ölçü için görünüş seçin.");return;}
+        try
+        {
+            var data=DrawingProjectionData(view);
+            var xs=new List<double>();var ys=new List<double>();
+            for(var i=0;i+3<data.Segments.Length;i+=4)
+            {
+                xs.Add(data.Segments[i]);xs.Add(data.Segments[i+2]);
+                ys.Add(data.Segments[i+1]);ys.Add(data.Segments[i+3]);
+            }
+            var width=(xs.Max()-xs.Min());var height=(ys.Max()-ys.Min());
+            var note=new DrawingAnnotation(Guid.NewGuid(),view.SheetId,view.Id,
+                new Point2d(view.Position.X,view.Position.Y+65),$"GENEL: {width:0.###} × {height:0.###} mm");
+            _drawingDocument=_drawingDocument with{Annotations=_drawingDocument.Annotations.Append(note).ToArray()};
+            RefreshDrawingTree(note.Id);RenderDrawing();Status("Model izdüşümünden genel ölçüler eklendi.");
+        }
+        catch(Exception ex){Status("Ölçü oluşturulamadı: "+ex.Message);}
     }
 
     private void DrawingAddNote_Click(object sender,RoutedEventArgs e)
