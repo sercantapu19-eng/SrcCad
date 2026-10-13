@@ -1,5 +1,6 @@
 param(
-    [ValidateSet('Release','Debug')][string]$Configuration = 'Release'
+    [ValidateSet('Release','Debug')][string]$Configuration = 'Release',
+    [switch]$SkipManagedTests
 )
 
 $ErrorActionPreference = 'Stop'
@@ -69,6 +70,15 @@ try {
     }
     finally {
         Pop-Location
+    }
+
+    if (!$SkipManagedTests) {
+        $testExe = Join-Path $repoRoot "src\SrcCad.Tests\bin\x64\$Configuration\net8.0\SrcCad.Tests.exe"
+        if (!(Test-Path -LiteralPath $testExe)) { throw "Managed test executable bulunamadi: $testExe" }
+        Write-RunLog "Managed regresyon testleri calisiyor: $testExe"
+        $testProcess = Start-Process -FilePath $testExe -WorkingDirectory (Split-Path $testExe -Parent) -Wait -PassThru -NoNewWindow
+        if ($testProcess.ExitCode -ne 0) { throw "Managed regresyon testleri basarisiz. ExitCode=$($testProcess.ExitCode)" }
+        Write-RunLog "Managed regresyon testleri PASS."
     }
 
     $appDir = Join-Path $repoRoot "src\SrcCad.App\bin\x64\$Configuration\net8.0-windows"
