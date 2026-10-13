@@ -575,7 +575,7 @@ public partial class MainWindow
         EdgeFeatureSelectionText.Text=(node.References?.Length??0)==0?"Kenar seçilmedi":$"{node.References!.Length} kenar seçili";
         EdgeFeatureError.Text=(node.References?.Length??0)==0?"Kenar seçin.":"";
         PropertyTitle.Text=node.Name;
-        PropertyInfo.Text="Gerçek OCCT B-Rep • Ctrl ile çoklu kenar • canlı önizleme • ✓ tek transaction";
+        PropertyInfo.Text="Gerçek OCCT B-Rep • kenarları tek tek tıklayarak çoklu seç • Ctrl gerekmez • canlı önizleme • ✓ tek transaction";
         ManagerTabs.SelectedItem=PropertyManagerTab;
         _loadingGraphParameters=false;
         if((node.References?.Length??0)>0)UpdateEdgeFeaturePreview();
