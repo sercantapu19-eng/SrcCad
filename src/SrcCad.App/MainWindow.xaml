@@ -41,8 +41,12 @@
         <Menu Grid.Row="1" Background="#FBFCFD" BorderBrush="#CDD5DC" BorderThickness="0,0,0,1">
             <MenuItem Header="Dosya">
                 <MenuItem Header="Yeni Parça" InputGestureText="Ctrl+N" Click="NewPart_Click"/>
-                <MenuItem Header="Aç…" InputGestureText="Ctrl+O" Click="OpenPart_Click"/>
-                <MenuItem Header="Farklı Kaydet…" InputGestureText="Ctrl+S" Click="SavePart_Click"/>
+                <MenuItem Header="Yeni Montaj" Click="NewAssembly_Click"/>
+                <Separator/>
+                <MenuItem Header="Parça Aç…" InputGestureText="Ctrl+O" Click="OpenPart_Click"/>
+                <MenuItem Header="Montaj Aç…" Click="OpenAssembly_Click"/>
+                <MenuItem Header="Parçayı Farklı Kaydet…" InputGestureText="Ctrl+S" Click="SavePart_Click"/>
+                <MenuItem Header="Montajı Kaydet…" Click="SaveAssembly_Click"/>
                 <Separator/>
                 <MenuItem Header="Çıkış" Click="Exit_Click"/>
             </MenuItem>
@@ -165,14 +169,16 @@
             </TabItem>
             <TabItem Header="MONTAJ">
                 <WrapPanel Margin="8">
-                    <Button Style="{StaticResource CadCommandButton}" Content="Bileşen Ekle" Click="CadCommandPlaceholder_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Montaj İlişkisi" Click="CadCommandPlaceholder_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Yeni Montaj" Click="NewAssembly_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Bileşen Ekle" Click="AddAssemblyComponent_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Montaj İlişkisi" Click="AssemblyMate_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Taşı / Döndür" Click="AssemblyMove_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Patlatılmış Görünüm" Click="AssemblyExplode_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Normal Görünüm" Click="AssemblyResetView_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Doğrusal Dizilim" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Dairesel Dizilim" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Bileşen Aynala" Click="CadCommandPlaceholder_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Patlatılmış Görünüm" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Çakışma Kontrolü" Click="CadCommandPlaceholder_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Hareket" Click="CadCommandPlaceholder_Click"/>
                 </WrapPanel>
             </TabItem>
             <TabItem Header="TEKNİK RESİM">
@@ -261,6 +267,40 @@
                                 <TextBlock Text="Ölçüler" FontWeight="Bold" Margin="0,10,0,4"/>
                                 <ListBox x:Name="SketchDimensionsList" Height="110" MouseDoubleClick="SketchDimensionsList_MouseDoubleClick"/>
                                 <Button Content="Seçili Ölçüyü Düzenle" Margin="0,4,0,0" Click="EditSelectedDimension_Click"/>
+                            </StackPanel>
+
+                            <StackPanel x:Name="AssemblyMovePanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Konum X / Y / Z (mm)" FontWeight="Bold"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,8">
+                                    <TextBox x:Name="AssemblyMoveX" Width="70"/>
+                                    <TextBox x:Name="AssemblyMoveY" Width="70" Margin="4,0,0,0"/>
+                                    <TextBox x:Name="AssemblyMoveZ" Width="70" Margin="4,0,0,0"/>
+                                </StackPanel>
+                                <TextBlock Text="Döndürme Rx / Ry / Rz (°)" FontWeight="Bold"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,8">
+                                    <TextBox x:Name="AssemblyRotateX" Width="70"/>
+                                    <TextBox x:Name="AssemblyRotateY" Width="70" Margin="4,0,0,0"/>
+                                    <TextBox x:Name="AssemblyRotateZ" Width="70" Margin="4,0,0,0"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="✓" Width="52" Height="34" Click="AssemblyMoveOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="AssemblyMoveCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="AssemblyMatePanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Bileşen A" FontWeight="Bold"/>
+                                <ComboBox x:Name="AssemblyMateA" Margin="0,4,0,8"/>
+                                <TextBlock Text="Bileşen B" FontWeight="Bold"/>
+                                <ComboBox x:Name="AssemblyMateB" Margin="0,4,0,8"/>
+                                <TextBlock Text="İlişki Tipi" FontWeight="Bold"/>
+                                <ComboBox x:Name="AssemblyMateType" Margin="0,4,0,8"/>
+                                <TextBlock Text="Mesafe / Açı Değeri" FontWeight="Bold"/>
+                                <TextBox x:Name="AssemblyMateValue" Margin="0,4,0,8"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="✓" Width="52" Height="34" Click="AssemblyMateOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="AssemblyMateCancel_Click"/>
+                                </StackPanel>
                             </StackPanel>
 
                             <StackPanel x:Name="GraphFeaturePanel" Visibility="Collapsed" Margin="0,16,0,0">
