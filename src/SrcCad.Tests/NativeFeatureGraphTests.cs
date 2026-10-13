@@ -169,6 +169,14 @@ internal static class NativeFeatureGraphTests
             Check(Math.Abs(islandInfo[0]-68000)<1e-4&&islandInfo[1]==2,
                 "nested sketch island restores material as a second solid region");
 
+            var multiCutSketch=new SketchModel(plane);
+            multiCutSketch.AddCircle(multiCutSketch.CreatePointExact(new(10,15)),3);
+            multiCutSketch.AddCircle(multiCutSketch.CreatePointExact(new(30,15)),3);
+            var multiCutBody=new OcctPartGeometryKernel().Cut(bossBody,multiCutSketch,20,ExtrusionTermination.ThroughAll);
+            var multiCutInfo=OcctFeatureKernel.Inspect(multiCutBody);
+            Check(Math.Abs(multiCutInfo[0]-(24000-2*Math.PI*9*20))<1e-3&&multiCutInfo[1]==1,
+                "two disjoint cut regions remove both real through-all volumes");
+
             var bossEdges=OcctFeatureKernel.EdgeReferences(bossBody);
             Check(bossEdges.Length>=4,"extruded body exposes semantic edge references");
 
