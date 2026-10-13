@@ -108,6 +108,19 @@ internal static class NativeFeatureGraphTests
             var draftInspect=OcctFeatureKernel.Inspect(draftPreview.Outputs[draftNode.Id].BRep!);
             Check(draftInspect[0]>0&&draftInspect[1]==1,"draft feature produces valid solid B-Rep");
 
+            var ribPlane=plane with{Origin=plane.Origin+plane.Normal*20,Name="RibFace"};
+            var ribSketch=new SketchModel(ribPlane);
+            var ribA=ribSketch.CreatePointExact(new(5,15));
+            var ribB=ribSketch.CreatePointExact(new(35,15));
+            ribSketch.AddLine(ribA,ribB);
+            var ribSketchNode=new FeatureNode(Guid.NewGuid(),"ÇizimN",new SketchFeatureParameters(ribPlane,ribSketch.CaptureSnapshot()));
+            var ribNode=new FeatureNode(Guid.NewGuid(),"Nervür1",new RibFeatureParameters(boss.Id,ribSketchNode.Id,3,10,false));
+            var ribDoc=initial with{Features=initial.Features.Concat(new[]{ribSketchNode,ribNode}).ToArray()};
+            var ribPreview=session.Preview(ribDoc);
+            Check(ribPreview.Success,"sketch-driven rib preview succeeds through feature graph");
+            var ribInspect=OcctFeatureKernel.Inspect(ribPreview.Outputs[ribNode.Id].BRep!);
+            Check(ribInspect[0]>24000&&ribInspect[1]==1,"native rib fuses real material to base solid");
+
             var mirrorPlane=new PlaneFrame("Ayna",plane.Origin,plane.U,plane.V,plane.Normal).Validate();
             var mirrorBody=OcctFeatureKernel.Mirror(bossBody,
                 new[]{mirrorPlane.Origin.X,mirrorPlane.Origin.Y,mirrorPlane.Origin.Z,

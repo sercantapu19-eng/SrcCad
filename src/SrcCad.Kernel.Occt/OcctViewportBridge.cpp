@@ -1305,6 +1305,72 @@ namespace SrcCad::Kernel::Occt
         catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
     }
 
+    String^ OcctFeatureKernel::Rib(String^ baseBody,array<double>^ lineUvPairs,
+        array<double>^ planeFrame,double thickness,double depth,bool reverse)
+    {
+        if(lineUvPairs==nullptr||lineUvPairs->Length<4||(lineUvPairs->Length%4)!=0)
+            throw gcnew ArgumentException("Rib requires sketch line endpoint pairs.");
+        if(planeFrame==nullptr||planeFrame->Length!=12)
+            throw gcnew ArgumentException("Rib plane frame requires 12 values.");
+        for each(double value in planeFrame)
+            if(!std::isfinite(value))throw gcnew ArgumentException("Invalid rib plane frame.");
+        if(!std::isfinite(thickness)||thickness<=1e-9||!std::isfinite(depth)||depth<=1e-9)
+            throw gcnew ArgumentException("Rib thickness/depth must be positive.");
+        try
+        {
+            gp_Vec u(planeFrame[3],planeFrame[4],planeFrame[5]);
+            gp_Vec v(planeFrame[6],planeFrame[7],planeFrame[8]);
+            gp_Vec n(planeFrame[9],planeFrame[10],planeFrame[11]);
+            if(std::abs(u.Magnitude()-1.0)>1e-8||std::abs(v.Magnitude()-1.0)>1e-8||std::abs(n.Magnitude()-1.0)>1e-8||
+               std::abs(u.Dot(v))>1e-8||(u.Crossed(v)-n).Magnitude()>1e-8)
+                throw gcnew ArgumentException("Invalid orthonormal rib frame.");
+
+            TopoDS_Shape baseShape=decodeFeature(baseBody);
+            const double before=featureVolume(baseShape);
+            TopoDS_Shape result=baseShape;
+            const double sign=reverse?-1.0:1.0;
+            const double epsilon=std::max(1e-4,depth*1e-6);
+            const double ox=planeFrame[0]-planeFrame[9]*sign*epsilon;
+            const double oy=planeFrame[1]-planeFrame[10]*sign*epsilon;
+            const double oz=planeFrame[2]-planeFrame[11]*sign*epsilon;
+            const double half=thickness*0.5;
+
+            for(int i=0;i<lineUvPairs->Length;i+=4)
+            {
+                const double ax=lineUvPairs[i],ay=lineUvPairs[i+1];
+                const double bx=lineUvPairs[i+2],by=lineUvPairs[i+3];
+                const double dx=bx-ax,dy=by-ay;
+                const double length=std::hypot(dx,dy);
+                if(length<=1e-9)continue;
+                const double px=-dy/length*half;
+                const double py= dx/length*half;
+                auto profile=gcnew array<double>
+                {
+                    ax+px,ay+py,
+                    bx+px,by+py,
+                    bx-px,by-py,
+                    ax-px,ay-py
+                };
+                TopoDS_Shape rib=makePrismFromPolyline(profile,
+                    ox,oy,oz,
+                    planeFrame[3],planeFrame[4],planeFrame[5],
+                    planeFrame[6],planeFrame[7],planeFrame[8],
+                    planeFrame[9],planeFrame[10],planeFrame[11],
+                    sign*(depth+epsilon));
+                if(rib.IsNull())throw gcnew InvalidOperationException("OCCT rib prism failed.");
+                BRepAlgoAPI_Fuse fuse(result,rib);fuse.Build();
+                if(!fuse.IsDone())throw gcnew InvalidOperationException("OCCT rib fuse failed.");
+                result=fuse.Shape();
+            }
+
+            const double after=featureVolume(result);
+            if(after-before<=std::max(1e-8,before*1e-10))
+                throw gcnew InvalidOperationException("Rib adds no material; sketch must touch the base body.");
+            return encodeFeature(result);
+        }
+        catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
+    }
+
     String^ OcctFeatureKernel::Mirror(String^ baseBody,array<double>^ planeFrame,bool keepOriginal)
     {
         if(planeFrame==nullptr||planeFrame->Length!=9)throw gcnew ArgumentException("Mirror plane requires origin, U and normal.");

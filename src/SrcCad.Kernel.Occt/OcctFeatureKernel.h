@@ -24,6 +24,8 @@ namespace SrcCad::Kernel::Occt
             double thickness, bool outward);
         static System::String^ Draft(System::String^ baseBody, array<System::String^>^ faceReferences,
             array<double>^ neutralPlane, double angleDegrees, bool reverse);
+        static System::String^ Rib(System::String^ baseBody, array<double>^ lineUvPairs,
+            array<double>^ planeFrame, double thickness, double depth, bool reverse);
         static System::String^ Mirror(System::String^ baseBody, array<double>^ planeFrame, bool keepOriginal);
         static System::String^ LinearPattern(System::String^ baseBody, array<double>^ direction, double spacing, int count);
         static System::String^ CircularPattern(System::String^ baseBody, array<double>^ axis, double angleDegrees, int count);
