@@ -1,3 +1,4 @@
+using System.Text.Json;
 using SrcCad.Core.Sketch;
 using SrcCad.Core.Geometry;
 using SrcCad.Core.Persistence;
@@ -13,7 +14,9 @@ public interface IPartGeometryKernel
     string Revolve(string? baseBody,SketchModel source,int axisEntityId,double angleDegrees,bool reverse);
     string RevolveCut(string baseBody,SketchModel source,int axisEntityId,double angleDegrees,bool reverse);
     string Sweep(string? baseBody,SketchModel profile,SketchModel path);
+    string SweepSpatial(string? baseBody,SketchModel profile,IReadOnlyList<Vector3d> path);
     string SweepCut(string baseBody,SketchModel profile,SketchModel path);
+    string SweepCutSpatial(string baseBody,SketchModel profile,IReadOnlyList<Vector3d> path);
     string Loft(string? baseBody,IReadOnlyList<SketchModel> profiles);
     string LoftCut(string baseBody,IReadOnlyList<SketchModel> profiles);
     string Shell(string baseBody,IReadOnlyList<string> faceReferences,double thickness,bool outward);
@@ -31,7 +34,7 @@ public interface IPartGeometryKernel
     string WeldBead(string baseBody,IReadOnlyList<string> edgeReferences,double radius);
 }
 // Strings are immutable; native cache is detached from the document/viewport.
-public sealed record PartFeatureOutput(string? SketchData, string? BRep);
+public sealed record PartFeatureOutput(string? SketchData, string? BRep, string? SpatialPathData = null);
 public sealed class PartFeatureEvaluator(IPartGeometryKernel kernel) : IFeatureEvaluator<PartFeatureOutput>
 {
     public PartFeatureOutput Build(FeatureNode node,IReadOnlyDictionary<Guid,PartFeatureOutput> dependencies)
@@ -42,6 +45,12 @@ public sealed class PartFeatureEvaluator(IPartGeometryKernel kernel) : IFeatureE
             var state=PartFile.Deserialize(data);var model=new SketchModel(state.Plane);model.RestoreSnapshot(state.Sketch);return model;
         }
         string Base(Guid id)=>dependencies[id].BRep??throw new InvalidOperationException("Expected base solid.");
+        IReadOnlyList<Vector3d> SpatialPath(Guid id)
+        {
+            var json=dependencies[id].SpatialPathData??throw new InvalidOperationException("Expected 3D sketch path.");
+            return JsonSerializer.Deserialize<Vector3d[]>(json)??throw new InvalidDataException("Invalid 3D sketch path data.");
+        }
+        bool IsSpatial(Guid id)=>dependencies[id].SpatialPathData is not null;
         IReadOnlyList<string> EdgeReferences(Guid baseId)
         {
             var references=node.References??Array.Empty<FeatureReference>();
@@ -52,6 +61,7 @@ public sealed class PartFeatureEvaluator(IPartGeometryKernel kernel) : IFeatureE
         return node.Parameters switch
         {
             SketchFeatureParameters s => new(PartFile.Serialize(new(s.Plane,s.Sketch,null)),null),
+            SpatialSketchFeatureParameters s => new(null,null,JsonSerializer.Serialize(s.Points)),
             ExtrudeFeatureParameters e => new(null,kernel.Extrude(Sketch(e.SketchId),e.Depth)),
             CutFeatureParameters c => new(null,kernel.Cut(Base(c.BaseFeatureId),
                 Sketch(c.SketchId),c.Reverse?-c.Depth:c.Depth,c.Termination)),
@@ -62,8 +72,12 @@ public sealed class PartFeatureEvaluator(IPartGeometryKernel kernel) : IFeatureE
                 h.Center,h.Diameter,h.Depth,h.Termination,h.Reverse)),
             RevolveFeatureParameters r => new(null,kernel.Revolve(r.BaseFeatureId is Guid rb?Base(rb):null,Sketch(r.SketchId),r.AxisEntityId,r.AngleDegrees,r.Reverse)),
             RevolveCutFeatureParameters r => new(null,kernel.RevolveCut(Base(r.BaseFeatureId),Sketch(r.SketchId),r.AxisEntityId,r.AngleDegrees,r.Reverse)),
-            SweepFeatureParameters s => new(null,kernel.Sweep(s.BaseFeatureId is Guid sb?Base(sb):null,Sketch(s.ProfileSketchId),Sketch(s.PathSketchId))),
-            SweepCutFeatureParameters s => new(null,kernel.SweepCut(Base(s.BaseFeatureId),Sketch(s.ProfileSketchId),Sketch(s.PathSketchId))),
+            SweepFeatureParameters s => new(null,IsSpatial(s.PathSketchId)
+                ?kernel.SweepSpatial(s.BaseFeatureId is Guid sb?Base(sb):null,Sketch(s.ProfileSketchId),SpatialPath(s.PathSketchId))
+                :kernel.Sweep(s.BaseFeatureId is Guid sb2?Base(sb2):null,Sketch(s.ProfileSketchId),Sketch(s.PathSketchId))),
+            SweepCutFeatureParameters s => new(null,IsSpatial(s.PathSketchId)
+                ?kernel.SweepCutSpatial(Base(s.BaseFeatureId),Sketch(s.ProfileSketchId),SpatialPath(s.PathSketchId))
+                :kernel.SweepCut(Base(s.BaseFeatureId),Sketch(s.ProfileSketchId),Sketch(s.PathSketchId))),
             LoftFeatureParameters l => new(null,kernel.Loft(l.BaseFeatureId is Guid lb?Base(lb):null,l.ProfileSketchIds.Select(Sketch).ToArray())),
             LoftCutFeatureParameters l => new(null,kernel.LoftCut(Base(l.BaseFeatureId),l.ProfileSketchIds.Select(Sketch).ToArray())),
             ShellFeatureParameters s => new(null,kernel.Shell(Base(s.BaseFeatureId),
@@ -90,7 +104,9 @@ public sealed class PartFeatureEvaluator(IPartGeometryKernel kernel) : IFeatureE
             SheetMetalJogFeatureParameters s => new(null,kernel.Jog(Base(s.BaseFeatureId),EdgeReferences(s.BaseFeatureId),s.Height,s.Offset,s.Thickness,s.Reverse)),
             SheetMetalRipFeatureParameters s => new(null,kernel.Rip(Base(s.BaseFeatureId),EdgeReferences(s.BaseFeatureId),s.Gap)),
             SheetMetalCornerReliefFeatureParameters s => new(null,kernel.CornerRelief(Base(s.BaseFeatureId),EdgeReferences(s.BaseFeatureId),s.Radius)),
-            StructuralMemberFeatureParameters s => new(null,kernel.Sweep(null,Sketch(s.ProfileSketchId),Sketch(s.PathSketchId))),
+            StructuralMemberFeatureParameters s => new(null,IsSpatial(s.PathSketchId)
+                ?kernel.SweepSpatial(null,Sketch(s.ProfileSketchId),SpatialPath(s.PathSketchId))
+                :kernel.Sweep(null,Sketch(s.ProfileSketchId),Sketch(s.PathSketchId))),
             EndCapFeatureParameters e => new(null,kernel.EndCap(Base(e.BaseFeatureId),
                 (node.References??Array.Empty<FeatureReference>()).Single(r=>r.Kind==TopologyKind.Face&&r.ProducerId==e.BaseFeatureId).SemanticName,
                 e.Thickness,e.Reverse)),
