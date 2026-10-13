@@ -2617,12 +2617,10 @@ namespace SrcCad::Kernel::Occt
         {
             TopoDS_Shape shape=decodeFeature(body);
             TopoDS_Face face=resolveFaceReference(shape,faceReference);
-            gp_Pnt planeOrigin;gp_Dir u,v,normal;
-            if(!planarFaceFrame(face,planeOrigin,u,v,normal))
-                throw gcnew InvalidOperationException("Referenced assembly face is not planar.");
-            GProp_GProps props;BRepGProp::SurfaceProperties(face,props);
-            gp_Pnt center=props.CentreOfMass();
-            return gcnew array<double>{center.X(),center.Y(),center.Z(),normal.X(),normal.Y(),normal.Z()};
+            FaceSemanticSignature signature;
+            if(!faceSemanticSignature(face,signature))
+                throw gcnew InvalidOperationException("Referenced assembly face has no supported mate frame.");
+            return gcnew array<double>{signature.X,signature.Y,signature.Z,signature.NX,signature.NY,signature.NZ};
         }
         catch(const Standard_Failure& ex){throw gcnew InvalidOperationException(gcnew String(ex.GetMessageString()));}
     }
