@@ -126,7 +126,7 @@
                     <Separator Margin="8,2"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Yay" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Slot" Click="CadCommandPlaceholder_Click"/>
-                    <Button Style="{StaticResource CadCommandButton}" Content="Çokgen" Click="CadCommandPlaceholder_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Çokgen" Click="Polygon_Click" ToolTip="Kenar sayısını girin; merkez ve çevre noktasıyla düzenli çokgen oluşturun."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Elips" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Çizim Radyusu" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Çizim Pahı" Click="CadCommandPlaceholder_Click"/>
