@@ -1100,6 +1100,7 @@ public partial class MainWindow
             var item=new MenuItem{Header=title};item.Click+=(_,_)=>action();menu.Items.Add(item);
         }
         Add("Dikdörtgen Profil",()=>CreateLibraryProfile(false));
+        Add("Kutu Profil",CreateBoxLibraryProfile);
         Add("Dairesel Profil",()=>CreateLibraryProfile(true));
         menu.PlacementTarget=sender as UIElement;menu.Placement=System.Windows.Controls.Primitives.PlacementMode.Bottom;menu.IsOpen=true;
     }
@@ -1138,6 +1139,47 @@ public partial class MainWindow
         if(!_partSession.TryCommit(ReplaceGraphNode(node))){Status(GraphError());return;}
         RefreshPartTree(node.Id);
         Status($"{node.Name} oluşturuldu • {width:0.###}"+(circle?" mm çap":$" × {height:0.###} mm"));
+    }
+
+    private void CreateBoxLibraryProfile()
+    {
+        if(_partSession is null)return;
+        double width=60,height=40,thickness=3;
+        bool Prompt(string title,string unit,double initial,Action<double> assign)
+        {
+            var value=initial;
+            var dialog=new DimensionEditDialog(title,initial,unit,text=>
+            {
+                if(!DimensionNumbers.TryParseScalar(text,out var parsed)||parsed<=1e-9)return "Pozitif ölçü girin.";
+                value=parsed;return null;
+            }){Owner=this};
+            if(dialog.ShowDialog()!=true)return false;
+            assign(value);return true;
+        }
+
+        if(!Prompt("Kutu Profil Genişliği","mm",width,v=>width=v)||
+           !Prompt("Kutu Profil Yüksekliği","mm",height,v=>height=v)||
+           !Prompt("Et Kalınlığı","mm",thickness,v=>thickness=v))return;
+        if(thickness*2>=Math.Min(width,height))
+        {
+            Status("Et kalınlığı profil genişlik/yüksekliğinin yarısından küçük olmalı.");return;
+        }
+
+        var sketch=new SketchModel(_selectedPlane);
+        sketch.AddCornerRectangle(new Point2d(-width*0.5,-height*0.5),
+            new Point2d(width*0.5,height*0.5),1e-9);
+        sketch.AddCornerRectangle(new Point2d(-width*0.5+thickness,-height*0.5+thickness),
+            new Point2d(width*0.5-thickness,height*0.5-thickness),1e-9);
+        if(!sketch.TryGetExtrusionProfile(out _,out var holes,out _)||holes.Count!=1)
+        {
+            Status("Kutu profil kesiti oluşturulamadı.");return;
+        }
+
+        var node=new FeatureNode(Guid.NewGuid(),NextGraphName("Profil Kutu"),
+            new SketchFeatureParameters(sketch.Plane,sketch.CaptureSnapshot()));
+        if(!_partSession.TryCommit(ReplaceGraphNode(node))){Status(GraphError());return;}
+        RefreshPartTree(node.Id);
+        Status($"{node.Name} oluşturuldu • {width:0.###} × {height:0.###} × {thickness:0.###} mm");
     }
 
     private void Gusset_Click(object sender,RoutedEventArgs e)
