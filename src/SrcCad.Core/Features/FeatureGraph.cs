@@ -7,7 +7,7 @@ using SrcCad.Core.Persistence;
 
 namespace SrcCad.Core.Features;
 
-public enum FeatureKind { Sketch, Extrude, ExtrudedCut, Fillet, Chamfer, Hole, Revolve, RevolvedCut, Shell, Draft, Mirror, LinearPattern, CircularPattern }
+public enum FeatureKind { Sketch, Extrude, ExtrudedCut, Fillet, Chamfer, Hole, Revolve, RevolvedCut, Shell, Draft, Rib, Mirror, LinearPattern, CircularPattern }
 public enum RebuildState { Clean, Dirty, Suppressed, Blocked, Failed }
 public enum ExtrusionTermination { Blind, ThroughAll }
 public enum TopologyKind { Body, Face, Edge, Vertex }
@@ -25,6 +25,7 @@ public sealed record FeatureReference(Guid ProducerId, TopologyKind Kind, string
 [JsonDerivedType(typeof(RevolveCutFeatureParameters), "revolved-cut")]
 [JsonDerivedType(typeof(ShellFeatureParameters), "shell")]
 [JsonDerivedType(typeof(DraftFeatureParameters), "draft")]
+[JsonDerivedType(typeof(RibFeatureParameters), "rib")]
 [JsonDerivedType(typeof(MirrorFeatureParameters), "mirror")]
 [JsonDerivedType(typeof(LinearPatternFeatureParameters), "linear-pattern")]
 [JsonDerivedType(typeof(CircularPatternFeatureParameters), "circular-pattern")]
@@ -41,6 +42,7 @@ public sealed record RevolveFeatureParameters(Guid SketchId, int AxisEntityId, d
 public sealed record RevolveCutFeatureParameters(Guid BaseFeatureId, Guid SketchId, int AxisEntityId, double AngleDegrees = 360, bool Reverse = false) : FeatureParameters;
 public sealed record ShellFeatureParameters(Guid BaseFeatureId, double Thickness, bool Outward = false) : FeatureParameters;
 public sealed record DraftFeatureParameters(Guid BaseFeatureId, PlaneFrame NeutralPlane, double AngleDegrees, bool Reverse = false) : FeatureParameters;
+public sealed record RibFeatureParameters(Guid BaseFeatureId, Guid SketchId, double Thickness, double Depth, bool Reverse = false) : FeatureParameters;
 public sealed record MirrorFeatureParameters(Guid BaseFeatureId, PlaneFrame Plane, bool KeepOriginal = true) : FeatureParameters;
 public sealed record LinearPatternFeatureParameters(Guid BaseFeatureId, Vector3d Direction, double Spacing, int Count) : FeatureParameters;
 public sealed record CircularPatternFeatureParameters(Guid BaseFeatureId, Vector3d AxisOrigin, Vector3d AxisDirection, double AngleDegrees, int Count) : FeatureParameters;
@@ -53,7 +55,7 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
       ChamferFeatureParameters => FeatureKind.Chamfer, HoleFeatureParameters => FeatureKind.Hole,
       RevolveFeatureParameters => FeatureKind.Revolve, RevolveCutFeatureParameters => FeatureKind.RevolvedCut,
       ShellFeatureParameters => FeatureKind.Shell, DraftFeatureParameters => FeatureKind.Draft,
-      MirrorFeatureParameters => FeatureKind.Mirror,
+      RibFeatureParameters => FeatureKind.Rib, MirrorFeatureParameters => FeatureKind.Mirror,
       LinearPatternFeatureParameters => FeatureKind.LinearPattern, CircularPatternFeatureParameters => FeatureKind.CircularPattern,
       _ => throw new InvalidDataException("Unsupported feature") };
     [JsonIgnore] public Guid[] Dependencies => (Parameters switch
@@ -67,6 +69,7 @@ public sealed record FeatureNode(Guid Id, string Name, FeatureParameters Paramet
         RevolveCutFeatureParameters r => new[] { r.BaseFeatureId,r.SketchId },
         ShellFeatureParameters s => new[] { s.BaseFeatureId },
         DraftFeatureParameters d => new[] { d.BaseFeatureId },
+        RibFeatureParameters r => new[] { r.BaseFeatureId,r.SketchId },
         MirrorFeatureParameters m => new[] { m.BaseFeatureId },
         LinearPatternFeatureParameters p => new[] { p.BaseFeatureId },
         CircularPatternFeatureParameters p => new[] { p.BaseFeatureId },
@@ -208,6 +211,14 @@ public static class FeatureDocumentFile
                        node.References.Any(r=>r.Kind!=TopologyKind.Face||r.ProducerId!=d.BaseFeatureId))
                         throw new InvalidDataException("Invalid draft.");
                     _=d.NeutralPlane.Validate();
+                    break;
+                case RibFeatureParameters r:
+                    if(document.Node(r.BaseFeatureId).Kind==FeatureKind.Sketch||
+                       document.Node(r.SketchId).Parameters is not SketchFeatureParameters rs||
+                       !rs.Sketch.Entities.OfType<SketchLine>().Any(line=>!line.Construction)||
+                       !double.IsFinite(r.Thickness)||r.Thickness<=1e-9||
+                       !double.IsFinite(r.Depth)||r.Depth<=1e-9)
+                        throw new InvalidDataException("Invalid rib.");
                     break;
                 case MirrorFeatureParameters m:
                     if(document.Node(m.BaseFeatureId).Kind==FeatureKind.Sketch)throw new InvalidDataException("Invalid mirror base.");

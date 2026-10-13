@@ -68,6 +68,24 @@ internal sealed class OcctPartGeometryKernel : IPartGeometryKernel
             new[]{neutralPlane.Origin.X,neutralPlane.Origin.Y,neutralPlane.Origin.Z,
                   neutralPlane.Normal.X,neutralPlane.Normal.Y,neutralPlane.Normal.Z},
             angleDegrees,reverse);
+    public string Rib(string baseBody,SketchModel source,double thickness,double depth,bool reverse)
+    {
+        var p=source.Plane;
+        var lines=source.Entities.OfType<SketchLine>().Where(line=>!line.Construction).ToArray();
+        if(lines.Length==0)throw new InvalidOperationException("Rib requires at least one non-construction sketch line.");
+        var data=new List<double>();
+        foreach(var line in lines)
+        {
+            var a=source.Point(line.StartPointId).Position;
+            var b=source.Point(line.EndPointId).Position;
+            if(Point2d.Distance(a,b)<=1e-9)continue;
+            data.AddRange(new[]{a.X,a.Y,b.X,b.Y});
+        }
+        if(data.Count==0)throw new InvalidOperationException("Rib sketch contains no usable line.");
+        return OcctFeatureKernel.Rib(baseBody,data.ToArray(),
+            new[]{p.Origin.X,p.Origin.Y,p.Origin.Z,p.U.X,p.U.Y,p.U.Z,p.V.X,p.V.Y,p.V.Z,p.Normal.X,p.Normal.Y,p.Normal.Z},
+            thickness,depth,reverse);
+    }
     public string Mirror(string baseBody,SrcCad.Core.Geometry.PlaneFrame plane,bool keepOriginal)
         => OcctFeatureKernel.Mirror(baseBody,
             new[]{plane.Origin.X,plane.Origin.Y,plane.Origin.Z,plane.U.X,plane.U.Y,plane.U.Z,plane.Normal.X,plane.Normal.Y,plane.Normal.Z},

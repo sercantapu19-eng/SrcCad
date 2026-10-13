@@ -25,6 +25,7 @@ internal static class FeatureGraphTests
                 RevolveCutFeatureParameters p=>p.AngleDegrees,
                 ShellFeatureParameters p=>p.Thickness,
                 DraftFeatureParameters p=>p.AngleDegrees,
+                RibFeatureParameters p=>p.Depth,
                 MirrorFeatureParameters=>1,
                 LinearPatternFeatureParameters p=>p.Count,
                 CircularPatternFeatureParameters p=>p.Count,
@@ -135,6 +136,17 @@ internal static class FeatureGraphTests
         Check(draftClone.Node(draftNode.Id).Kind==FeatureKind.Draft&&
               ((DraftFeatureParameters)draftClone.Node(draftNode.Id).Parameters).AngleDegrees==3,
             "draft neutral plane angle and face reference roundtrip");
+
+        var ribSketch=new SketchModel(StandardPlanes.Front);
+        var ribA=ribSketch.CreatePointExact(new(5,5));
+        var ribB=ribSketch.CreatePointExact(new(35,5));
+        ribSketch.AddLine(ribA,ribB);
+        var ribSketchNode=new FeatureNode(Guid.NewGuid(),"ÇizimN",new SketchFeatureParameters(StandardPlanes.Front,ribSketch.CaptureSnapshot()));
+        var ribNode=new FeatureNode(Guid.NewGuid(),"Nervür1",new RibFeatureParameters(boss.Id,ribSketchNode.Id,3,10));
+        var ribDoc=initial with{Features=initial.Features.Concat(new[]{ribSketchNode,ribNode}).ToArray()};
+        var ribClone=FeatureDocumentFile.Clone(ribDoc);
+        Check(ribClone.Node(ribNode.Id).Kind==FeatureKind.Rib&&((RibFeatureParameters)ribClone.Node(ribNode.Id).Parameters).Thickness==3,
+            "rib sketch dependency thickness/depth roundtrip");
 
         var mirrorNode=new FeatureNode(Guid.NewGuid(),"Aynala1",new MirrorFeatureParameters(boss.Id,StandardPlanes.Front));
         var mirrorDoc=initial with{Features=initial.Features.Append(mirrorNode).ToArray()};

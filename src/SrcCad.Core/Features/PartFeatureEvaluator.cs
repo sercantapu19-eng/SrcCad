@@ -14,6 +14,7 @@ public interface IPartGeometryKernel
     string RevolveCut(string baseBody,SketchModel source,int axisEntityId,double angleDegrees,bool reverse);
     string Shell(string baseBody,IReadOnlyList<string> faceReferences,double thickness,bool outward);
     string Draft(string baseBody,IReadOnlyList<string> faceReferences,PlaneFrame neutralPlane,double angleDegrees,bool reverse);
+    string Rib(string baseBody,SketchModel source,double thickness,double depth,bool reverse);
     string Mirror(string baseBody,PlaneFrame plane,bool keepOriginal);
     string LinearPattern(string baseBody,Vector3d direction,double spacing,int count);
     string CircularPattern(string baseBody,Vector3d axisOrigin,Vector3d axisDirection,double angleDegrees,int count);
@@ -56,6 +57,7 @@ public sealed class PartFeatureEvaluator(IPartGeometryKernel kernel) : IFeatureE
             DraftFeatureParameters d => new(null,kernel.Draft(Base(d.BaseFeatureId),
                 (node.References??Array.Empty<FeatureReference>()).Where(r=>r.Kind==TopologyKind.Face&&r.ProducerId==d.BaseFeatureId).Select(r=>r.SemanticName).ToArray(),
                 d.NeutralPlane,d.AngleDegrees,d.Reverse)),
+            RibFeatureParameters r => new(null,kernel.Rib(Base(r.BaseFeatureId),Sketch(r.SketchId),r.Thickness,r.Depth,r.Reverse)),
             MirrorFeatureParameters m => new(null,kernel.Mirror(Base(m.BaseFeatureId),m.Plane,m.KeepOriginal)),
             LinearPatternFeatureParameters p => new(null,kernel.LinearPattern(Base(p.BaseFeatureId),p.Direction,p.Spacing,p.Count)),
             CircularPatternFeatureParameters p => new(null,kernel.CircularPattern(Base(p.BaseFeatureId),p.AxisOrigin,p.AxisDirection,p.AngleDegrees,p.Count)),
