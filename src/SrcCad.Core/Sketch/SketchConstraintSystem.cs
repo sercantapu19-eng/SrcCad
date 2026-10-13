@@ -177,10 +177,56 @@ public sealed partial class SketchModel
         }
         return rank;
     }
+    private double[] RelationDiagnosticResiduals(SketchRelation r)
+    {
+        if(r.ReferenceA is not null)return ReferenceRelationResidual(r);
+        Point2d A(SketchLine l)=>Point(l.StartPointId).Position;
+        Point2d B(SketchLine l)=>Point(l.EndPointId).Position;
+        double Len(SketchLine l)=>Point2d.Distance(A(l),B(l));
+        var a=Entity(r.EntityA) as SketchLine;var b=Entity(r.EntityB) as SketchLine;
+        return r.Type switch
+        {
+            SketchRelationType.Fixed=>Array.Empty<double>(),
+            SketchRelationType.Horizontal=>new[]{B(a!).Y-A(a!).Y},
+            SketchRelationType.Vertical=>new[]{B(a!).X-A(a!).X},
+            SketchRelationType.Coincident=>new[]{
+                Point(r.PointB).Position.X-Point(r.PointA).Position.X,
+                Point(r.PointB).Position.Y-Point(r.PointA).Position.Y},
+            SketchRelationType.Concentric=>new[]{
+                Point(((SketchCircle)Entity(r.EntityB)!).CenterPointId).Position.X-Point(((SketchCircle)Entity(r.EntityA)!).CenterPointId).Position.X,
+                Point(((SketchCircle)Entity(r.EntityB)!).CenterPointId).Position.Y-Point(((SketchCircle)Entity(r.EntityA)!).CenterPointId).Position.Y},
+            SketchRelationType.Equal=>new[]{a is not null&&b is not null
+                ?Len(a)-Len(b)
+                :((SketchCircle)Entity(r.EntityA)!).Radius-((SketchCircle)Entity(r.EntityB)!).Radius},
+            SketchRelationType.Collinear=>new[]{SignedLineDistance(A(b!),A(a!),B(a!)),SignedLineDistance(B(b!),A(a!),B(a!))},
+            SketchRelationType.Parallel or SketchRelationType.Perpendicular=>new[]{
+                (r.Type==SketchRelationType.Parallel
+                    ?(B(a!).X-A(a!).X)*(B(b!).Y-A(b!).Y)-(B(a!).Y-A(a!).Y)*(B(b!).X-A(b!).X)
+                    :(B(a!).X-A(a!).X)*(B(b!).X-A(b!).X)+(B(a!).Y-A(a!).Y)*(B(b!).Y-A(b!).Y))/
+                Math.Max(1e-12,Len(a!)*Len(b!))},
+            _=>Array.Empty<double>()
+        };
+    }
+
+    private double[] DimensionDiagnosticResiduals(SketchDimension d)
+        => d.ReferenceA is null
+            ?new[]{Measure(d)-d.Value}
+            :ReferenceDimensionResiduals(d).ToArray();
+
     public SketchDefinitionInfo SolverDefinition()
     {
         var vars=SolverVariables();var residual=ConstraintResiduals();
-        if(!ConstraintsSatisfied()) return new(vars.Count,false,true,"Çakışan ilişkiler / ölçüler");
+        if(!ConstraintsSatisfied())
+        {
+            const double tolerance=1e-6;
+            var badRelations=Relations.Where(r=>RelationDiagnosticResiduals(r).Any(v=>!double.IsFinite(v)||Math.Abs(v)>tolerance))
+                .Select(r=>$"İlişki #{r.Id}").ToArray();
+            var badDimensions=Dimensions.Where(d=>d.Driving&&DimensionDiagnosticResiduals(d).Any(v=>!double.IsFinite(v)||Math.Abs(v)>tolerance))
+                .Select(d=>$"Ölçü #{d.Id}").ToArray();
+            var details=badRelations.Concat(badDimensions).Take(8).ToArray();
+            var text=details.Length==0?"Çakışan ilişkiler / ölçüler":"Çakışma: "+string.Join(", ",details);
+            return new(vars.Count,false,true,text);
+        }
         var rank=Rank(Jacobian(vars,residual));var dof=vars.Count-rank;
         var redundant=Math.Max(0,residual.Length-rank);
         var text=dof==0?"Tam Tanımlı (0 DOF)":$"Eksik Tanımlı ({dof} DOF)";
