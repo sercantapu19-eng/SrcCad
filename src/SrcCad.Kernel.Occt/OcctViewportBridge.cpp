@@ -90,6 +90,7 @@
 #include <iomanip>
 #include <limits>
 #include <set>
+#include <array>
 #include <msclr/marshal_cppstd.h>
 
 using namespace System;
@@ -107,6 +108,8 @@ namespace SrcCad::Kernel::Occt
         std::vector<Handle(AIS_Shape)> SketchObjects;
         std::vector<Handle(AIS_Shape)> PreviewObjects;
         std::vector<Handle(AIS_Shape)> AssemblyObjects;
+        std::vector<std::string> AssemblyIds;
+        std::vector<std::array<double,6>> AssemblyTransforms;
         std::vector<Handle(AIS_InteractiveObject)> SketchTextObjects;
         Handle(AIS_Shape) PreviewSolid;
         Handle(AIS_Shape) SolidPresentation;
