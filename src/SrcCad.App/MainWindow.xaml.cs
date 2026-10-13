@@ -317,6 +317,7 @@ public partial class MainWindow : Window
             UpdateActiveEdgeFeatureSelection();
             UpdateActiveHoleSelection();
             UpdateActiveShellSelection();
+            UpdateActiveDraftSelection();
             Status(selected ? _viewer.SelectionSummary() : "Seçim yok");
             if (selected && e.Clicks >= 2 && !toggle)
                 NormalToSelectedSupport();
@@ -2224,6 +2225,7 @@ public partial class MainWindow : Window
         RevolveButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&(_sketch is not null||_partSession is not null);
         RevolveCutButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
         ShellButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
+        DraftButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
         MirrorButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
         LinearPatternButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
         CircularPatternButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;

@@ -668,6 +668,100 @@ public partial class MainWindow
 
     private void ShellFeatureCancel_Click(object sender,RoutedEventArgs e)=>EndGraphFeature();
 
+    private void Draft_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession())return;
+        var baseNode=CurrentSolidFeature();
+        if(baseNode is null){Status("Draft için mevcut katı gerekiyor.");return;}
+        var neutral=_selectedPlane;
+        _viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Face);
+        BeginDraftFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Draft"),
+            new DraftFeatureParameters(baseNode.Id,neutral,3,false),
+            References:SelectedFaceReferences(baseNode.Id)));
+    }
+
+    private void BeginDraftFeature(FeatureNode node)
+    {
+        if(node.Parameters is not DraftFeatureParameters draft)throw new InvalidOperationException("Unsupported draft feature.");
+        _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;
+        DraftAngle.Text=draft.AngleDegrees.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        DraftReverse.IsChecked=draft.Reverse;
+        DraftNeutralPlaneText.Text=draft.NeutralPlane.Name;
+        DraftSelectionText.Text=(node.References?.Length??0)==0?"Yüz seçilmedi":$"{node.References!.Length} yüz seçili";
+        DraftFeatureError.Text=(node.References?.Length??0)==0?"En az bir draft yüzü seçin.":"";
+        DraftFeaturePanel.Visibility=Visibility.Visible;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;
+        HoleFeaturePanel.Visibility=Visibility.Collapsed;RevolveFeaturePanel.Visibility=Visibility.Collapsed;
+        ShellFeaturePanel.Visibility=Visibility.Collapsed;MirrorFeaturePanel.Visibility=Visibility.Collapsed;PatternFeaturePanel.Visibility=Visibility.Collapsed;
+        PropertyTitle.Text=node.Name;
+        PropertyInfo.Text="Gerçek OCCT draft • nötr düzlem + seçili yüzler • parametrik açı • canlı B-Rep önizleme";
+        ManagerTabs.SelectedItem=PropertyManagerTab;
+        _viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Face);
+        _loadingGraphParameters=false;
+        if((node.References?.Length??0)>0)UpdateDraftFeaturePreview();
+        else{_viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();}
+        RefreshCommandState();
+    }
+
+    internal void UpdateActiveDraftSelection()
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not DraftFeatureParameters draft)return;
+        var references=SelectedFaceReferences(draft.BaseFeatureId);
+        _graphFeatureEdit=_graphFeatureEdit with{References=references};
+        DraftSelectionText.Text=references.Length==0?"Yüz seçilmedi":$"{references.Length} yüz seçili";
+        UpdateDraftFeaturePreview();
+    }
+
+    private FeatureDocument? DraftFeatureCandidate()
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not DraftFeatureParameters draft||
+           (_graphFeatureEdit.References?.Length??0)==0||
+           !DimensionNumbers.TryParseScalar(DraftAngle.Text,out var angle)||
+           !double.IsFinite(angle)||angle<=1e-9||angle>=89.0)return null;
+        return ReplaceGraphNode(_graphFeatureEdit with
+        {
+            Parameters=draft with{AngleDegrees=angle,Reverse=DraftReverse.IsChecked==true}
+        });
+    }
+
+    private void DraftFeatureParameterChanged(object sender,RoutedEventArgs e)
+    {
+        if(!_loadingGraphParameters)UpdateDraftFeaturePreview();
+    }
+
+    private void UpdateDraftFeaturePreview()
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not DraftFeatureParameters)return;
+        var candidate=DraftFeatureCandidate();
+        if(candidate is null)
+        {
+            _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.0);
+            DraftFeatureError.Text=(_graphFeatureEdit.References?.Length??0)==0
+                ?"En az bir draft yüzü seçin.":"Açı 0 ile 89 derece arasında olmalı.";
+            return;
+        }
+        var preview=_partSession.Preview(candidate);
+        var body=preview.Success?LastBody(candidate,id=>preview.Outputs.GetValueOrDefault(id)):null;
+        if(body is not null&&_viewer.PreviewFeatureBody(body))
+        {
+            _viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.72);
+            DraftFeatureError.Text="";return;
+        }
+        _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.0);
+        DraftFeatureError.Text=preview.Report.Nodes.LastOrDefault(n=>n.State==RebuildState.Failed)?.Error??preview.Report.Error??"Draft önizlemesi oluşturulamadı.";
+    }
+
+    private void DraftFeatureOk_Click(object sender,RoutedEventArgs e)
+    {
+        var candidate=DraftFeatureCandidate();
+        if(candidate is null||_partSession is null){DraftFeatureError.Text="Yüz ve geçerli draft açısı gerekiyor.";return;}
+        if(!_partSession.TryCommit(candidate)){DraftFeatureError.Text=GraphError();return;}
+        var id=_graphFeatureEdit!.Id;EndGraphFeature();RefreshPartTree(id);
+        Status("Parametrik draft onaylandı; model yeniden oluşturuldu.");
+    }
+
+    private void DraftFeatureCancel_Click(object sender,RoutedEventArgs e)=>EndGraphFeature();
+
     private string? CurrentBodyBRep()
     {
         if(!EnsurePartSession()||_partSession is null)return null;
@@ -940,6 +1034,7 @@ public partial class MainWindow
         if(node.Parameters is HoleFeatureParameters){BeginHoleFeature(node);return;}
         if(node.Parameters is RevolveFeatureParameters or RevolveCutFeatureParameters){BeginRevolveFeature(node);return;}
         if(node.Parameters is ShellFeatureParameters){BeginShellFeature(node);return;}
+        if(node.Parameters is DraftFeatureParameters){BeginDraftFeature(node);return;}
         if(node.Parameters is MirrorFeatureParameters){BeginMirrorFeature(node);return;}
         if(node.Parameters is LinearPatternFeatureParameters or CircularPatternFeatureParameters){BeginPatternFeature(node);return;}
         _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;_depthWheel.Reset();
@@ -986,7 +1081,7 @@ public partial class MainWindow
     {
         _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.0);
         _graphFeatureEdit=null;_extrudeCommandActive=false;
-        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;RevolveFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;MirrorFeaturePanel.Visibility=Visibility.Collapsed;PatternFeaturePanel.Visibility=Visibility.Collapsed;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;RevolveFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;DraftFeaturePanel.Visibility=Visibility.Collapsed;MirrorFeaturePanel.Visibility=Visibility.Collapsed;PatternFeaturePanel.Visibility=Visibility.Collapsed;
         _viewer.ClearSelection();_viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Face);
         ManagerTabs.SelectedItem=FeatureManagerTab;RefreshCommandState();
     }
@@ -1009,6 +1104,7 @@ public partial class MainWindow
         HoleFeaturePanel.Visibility=Visibility.Collapsed;
         RevolveFeaturePanel.Visibility=Visibility.Collapsed;
         ShellFeaturePanel.Visibility=Visibility.Collapsed;
+        DraftFeaturePanel.Visibility=Visibility.Collapsed;
         MirrorFeaturePanel.Visibility=Visibility.Collapsed;
         PatternFeaturePanel.Visibility=Visibility.Collapsed;
     }
