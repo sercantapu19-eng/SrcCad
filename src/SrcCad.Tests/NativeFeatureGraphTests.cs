@@ -144,6 +144,31 @@ internal static class NativeFeatureGraphTests
                   Math.Abs(cylinderFrame[6]-1)<1e-9&&Math.Abs(cylinderFrame[7]-8)<1e-6,
                 "cylindrical face resolves normalized axis and radius frame for concentric/tangent mates");
 
+            var multiSketch=new SketchModel(plane);
+            multiSketch.AddCornerRectangle(new(-50,-10),new(-30,10),.001);
+            multiSketch.AddCornerRectangle(new(30,-10),new(50,10),.001);
+            var multiBody=new OcctPartGeometryKernel().Extrude(multiSketch,10);
+            var multiInfo=OcctFeatureKernel.Inspect(multiBody);
+            Check(Math.Abs(multiInfo[0]-8000)<1e-4&&multiInfo[1]==2,
+                "two disjoint sketch regions extrude as two persistent solids");
+
+            var annulusSketch=new SketchModel(plane);
+            annulusSketch.AddCircle(annulusSketch.CreatePointExact(new(0,0)),20);
+            annulusSketch.AddCircle(annulusSketch.CreatePointExact(new(0,0)),10);
+            var annulusBody=new OcctPartGeometryKernel().Extrude(annulusSketch,10);
+            var annulusInfo=OcctFeatureKernel.Inspect(annulusBody);
+            Check(Math.Abs(annulusInfo[0]-Math.PI*(20*20-10*10)*10)<1e-3&&annulusInfo[1]==1,
+                "concentric circle region extrudes as exact annular solid");
+
+            var islandSketch=new SketchModel(plane);
+            islandSketch.AddCornerRectangle(new(-50,-50),new(50,50),.001);
+            islandSketch.AddCornerRectangle(new(-30,-30),new(30,30),.001);
+            islandSketch.AddCornerRectangle(new(-10,-10),new(10,10),.001);
+            var islandBody=new OcctPartGeometryKernel().Extrude(islandSketch,10);
+            var islandInfo=OcctFeatureKernel.Inspect(islandBody);
+            Check(Math.Abs(islandInfo[0]-68000)<1e-4&&islandInfo[1]==2,
+                "nested sketch island restores material as a second solid region");
+
             var bossEdges=OcctFeatureKernel.EdgeReferences(bossBody);
             Check(bossEdges.Length>=4,"extruded body exposes semantic edge references");
 
