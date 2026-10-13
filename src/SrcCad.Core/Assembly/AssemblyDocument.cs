@@ -317,12 +317,42 @@ public static class AssemblyMateSolver
         switch(mate.Type)
         {
             case MateType.Coincident:
-                transform=transform with{Translation=aOrigin-rotatedBOrigin};
+            {
+                if(aHasDirection&&!bHasDirection)
+                {
+                    var normal=WorldDirection(a,localDirectionA!.Value);
+                    var signed=Vector3d.Dot(currentBOrigin-aOrigin,normal);
+                    transform=transform with{Translation=transform.Translation-normal*signed};
+                }
+                else if(!aHasDirection&&bHasDirection)
+                {
+                    var normal=WorldDirection(b,localDirectionB!.Value);
+                    var signed=Vector3d.Dot(aOrigin-currentBOrigin,normal);
+                    transform=transform with{Translation=transform.Translation+normal*signed};
+                }
+                else
+                    transform=transform with{Translation=aOrigin-rotatedBOrigin};
                 break;
+            }
             case MateType.Distance:
             {
-                var normal=aHasDirection?WorldDirection(a,localDirectionA!.Value):Vector3d.UnitX;
-                transform=transform with{Translation=(aOrigin+normal*mate.Value)-rotatedBOrigin};
+                if(aHasDirection&&!bHasDirection)
+                {
+                    var normal=WorldDirection(a,localDirectionA!.Value);
+                    var signed=Vector3d.Dot(currentBOrigin-aOrigin,normal);
+                    transform=transform with{Translation=transform.Translation+normal*(mate.Value-signed)};
+                }
+                else if(!aHasDirection&&bHasDirection)
+                {
+                    var normal=WorldDirection(b,localDirectionB!.Value);
+                    var signed=Vector3d.Dot(aOrigin-currentBOrigin,normal);
+                    transform=transform with{Translation=transform.Translation+normal*(signed-mate.Value)};
+                }
+                else
+                {
+                    var normal=aHasDirection?WorldDirection(a,localDirectionA!.Value):Vector3d.UnitX;
+                    transform=transform with{Translation=(aOrigin+normal*mate.Value)-rotatedBOrigin};
+                }
                 break;
             }
             case MateType.Concentric when aHasDirection:
