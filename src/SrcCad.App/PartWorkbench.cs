@@ -1416,6 +1416,107 @@ public partial class MainWindow
 
     private void PatternFeatureCancel_Click(object sender,RoutedEventArgs e)=>EndGraphFeature();
 
+    private SheetMetalBaseFeatureParameters? SheetMetalDefaults()
+        => _partSession?.Document.Features.Select(n=>n.Parameters).OfType<SheetMetalBaseFeatureParameters>().LastOrDefault();
+
+    private void EdgeFlange_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive||!EnsurePartSession()||_partSession is null)return;
+        var defaults=SheetMetalDefaults();
+        if(defaults is null){Status("Kenar Flanşı için önce Taban Flanş oluşturun.");return;}
+        var baseNode=CurrentSolidFeature();
+        if(baseNode is null){Status("Kenar Flanşı için sac gövdesi gerekiyor.");return;}
+        _viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Edge);
+        BeginEdgeFlangeFeature(new FeatureNode(Guid.NewGuid(),NextGraphName("Kenar Flanşı"),
+            new SheetMetalEdgeFlangeFeatureParameters(baseNode.Id,25,90,defaults.Thickness,defaults.BendRadius,false),
+            References:SelectedEdgeReferences(baseNode.Id)));
+    }
+
+    private void BeginEdgeFlangeFeature(FeatureNode node)
+    {
+        if(node.Parameters is not SheetMetalEdgeFlangeFeatureParameters flange)throw new InvalidOperationException("Unsupported edge flange.");
+        _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;
+        EdgeFlangeLength.Text=flange.Length.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        EdgeFlangeAngle.Text=flange.AngleDegrees.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        EdgeFlangeThickness.Text=flange.Thickness.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        EdgeFlangeBendRadius.Text=flange.BendRadius.ToString("G17",System.Globalization.CultureInfo.CurrentCulture);
+        EdgeFlangeReverse.IsChecked=flange.Reverse;
+        EdgeFlangeSelectionText.Text=(node.References?.Length??0)==0?"Doğrusal sac kenarı seçin.":$"{node.References!.Length} kenar seçili";
+        EdgeFlangeError.Text=(node.References?.Length??0)==0?"En az bir kenar seçin.":"";
+        EdgeFlangePanel.Visibility=Visibility.Visible;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;
+        RevolveFeaturePanel.Visibility=Visibility.Collapsed;MultiSketchFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;
+        DraftFeaturePanel.Visibility=Visibility.Collapsed;RibFeaturePanel.Visibility=Visibility.Collapsed;ReferenceGeometryPanel.Visibility=Visibility.Collapsed;
+        MirrorFeaturePanel.Visibility=Visibility.Collapsed;PatternFeaturePanel.Visibility=Visibility.Collapsed;SheetMetalBasePanel.Visibility=Visibility.Collapsed;
+        PropertyTitle.Text=node.Name;PropertyInfo.Text="Gerçek OCCT sac kenar flanşı • çoklu doğrusal kenar • açı/uzunluk/kalınlık/büküm yarıçapı • canlı önizleme";
+        ManagerTabs.SelectedItem=PropertyManagerTab;_viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Edge);
+        _loadingGraphParameters=false;
+        if((node.References?.Length??0)>0)UpdateEdgeFlangePreview();
+        else{_viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();}
+        RefreshCommandState();
+    }
+
+    internal void UpdateActiveEdgeFlangeSelection()
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not SheetMetalEdgeFlangeFeatureParameters flange)return;
+        var references=SelectedEdgeReferences(flange.BaseFeatureId);
+        _graphFeatureEdit=_graphFeatureEdit with{References=references};
+        EdgeFlangeSelectionText.Text=references.Length==0?"Doğrusal sac kenarı seçin.":$"{references.Length} kenar seçili";
+        UpdateEdgeFlangePreview();
+    }
+
+    private FeatureDocument? EdgeFlangeCandidate()
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not SheetMetalEdgeFlangeFeatureParameters flange||
+           (_graphFeatureEdit.References?.Length??0)==0||
+           !DimensionNumbers.TryParse(EdgeFlangeLength.Text,SketchDimensionType.LineLength,out var length,out _)||
+           !DimensionNumbers.TryParseScalar(EdgeFlangeAngle.Text,out var angle)||
+           !DimensionNumbers.TryParse(EdgeFlangeThickness.Text,SketchDimensionType.LineLength,out var thickness,out _)||
+           !DimensionNumbers.TryParseScalar(EdgeFlangeBendRadius.Text,out var radius)||
+           angle<=1e-6||angle>=179.999||radius<0)return null;
+        return ReplaceGraphNode(_graphFeatureEdit with{Parameters=flange with
+        {
+            Length=length,AngleDegrees=angle,Thickness=thickness,BendRadius=radius,Reverse=EdgeFlangeReverse.IsChecked==true
+        }});
+    }
+
+    private void EdgeFlangeParameterChanged(object sender,RoutedEventArgs e)
+    {
+        if(!_loadingGraphParameters)UpdateEdgeFlangePreview();
+    }
+
+    private void UpdateEdgeFlangePreview()
+    {
+        if(_partSession is null||_graphFeatureEdit?.Parameters is not SheetMetalEdgeFlangeFeatureParameters)return;
+        var candidate=EdgeFlangeCandidate();
+        if(candidate is null)
+        {
+            _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.0);
+            EdgeFlangeError.Text=(_graphFeatureEdit.References?.Length??0)==0
+                ?"En az bir doğrusal sac kenarı seçin.":"Uzunluk/kalınlık > 0, açı 0–180° arasında, yarıçap ≥ 0 olmalı.";
+            return;
+        }
+        var preview=_partSession.Preview(candidate);
+        var body=preview.Success?LastBody(candidate,id=>preview.Outputs.GetValueOrDefault(id)):null;
+        if(body is not null&&_viewer.PreviewFeatureBody(body))
+        {
+            _viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.72);
+            EdgeFlangeError.Text="";return;
+        }
+        _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.0);
+        EdgeFlangeError.Text=preview.Report.Nodes.LastOrDefault(n=>n.State==RebuildState.Failed)?.Error??preview.Report.Error??"Kenar Flanşı önizlemesi oluşturulamadı.";
+    }
+
+    private void EdgeFlangeOk_Click(object sender,RoutedEventArgs e)
+    {
+        var candidate=EdgeFlangeCandidate();
+        if(candidate is null||_partSession is null){EdgeFlangeError.Text="Kenar ve geçerli flanş parametreleri gerekiyor.";return;}
+        if(!_partSession.TryCommit(candidate)){EdgeFlangeError.Text=GraphError();return;}
+        var id=_graphFeatureEdit!.Id;EndGraphFeature();RefreshPartTree(id);Status("Parametrik Kenar Flanşı onaylandı.");
+    }
+
+    private void EdgeFlangeCancel_Click(object sender,RoutedEventArgs e)=>EndGraphFeature();
+
     private FeatureNode? BaseFlangeSketchCandidate()
     {
         if(_partSession is null)return null;
@@ -1532,6 +1633,7 @@ public partial class MainWindow
         if(node.Parameters is LinearPatternFeatureParameters or CircularPatternFeatureParameters){BeginPatternFeature(node);return;}
         if(node.Parameters is ReferencePlaneFeatureParameters or ReferenceAxisFeatureParameters or ReferencePointFeatureParameters){BeginReferenceGeometryFeature(node);return;}
         if(node.Parameters is SheetMetalBaseFeatureParameters){BeginSheetMetalBaseFeature(node);return;}
+        if(node.Parameters is SheetMetalEdgeFlangeFeatureParameters){BeginEdgeFlangeFeature(node);return;}
         _graphFeatureEdit=node;_extrudeCommandActive=true;_loadingGraphParameters=true;_depthWheel.Reset();
         var cut=node.Parameters as CutFeatureParameters;
         var sheetCut=node.Parameters as SheetMetalCutFeatureParameters;
@@ -1582,7 +1684,7 @@ public partial class MainWindow
     {
         _viewer.CancelExtrusionPreview();_viewer.ShowCommittedSolid();_viewer.SetCommittedSolidTransparency(0.0);
         _graphFeatureEdit=null;_extrudeCommandActive=false;
-        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;RevolveFeaturePanel.Visibility=Visibility.Collapsed;MultiSketchFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;DraftFeaturePanel.Visibility=Visibility.Collapsed;RibFeaturePanel.Visibility=Visibility.Collapsed;ReferenceGeometryPanel.Visibility=Visibility.Collapsed;MirrorFeaturePanel.Visibility=Visibility.Collapsed;PatternFeaturePanel.Visibility=Visibility.Collapsed;SheetMetalBasePanel.Visibility=Visibility.Collapsed;
+        GraphFeaturePanel.Visibility=Visibility.Collapsed;EdgeFeaturePanel.Visibility=Visibility.Collapsed;HoleFeaturePanel.Visibility=Visibility.Collapsed;RevolveFeaturePanel.Visibility=Visibility.Collapsed;MultiSketchFeaturePanel.Visibility=Visibility.Collapsed;ShellFeaturePanel.Visibility=Visibility.Collapsed;DraftFeaturePanel.Visibility=Visibility.Collapsed;RibFeaturePanel.Visibility=Visibility.Collapsed;ReferenceGeometryPanel.Visibility=Visibility.Collapsed;MirrorFeaturePanel.Visibility=Visibility.Collapsed;PatternFeaturePanel.Visibility=Visibility.Collapsed;SheetMetalBasePanel.Visibility=Visibility.Collapsed;EdgeFlangePanel.Visibility=Visibility.Collapsed;
         _viewer.ClearSelection();_viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Face);
         ManagerTabs.SelectedItem=FeatureManagerTab;RefreshCommandState();
     }
@@ -1612,5 +1714,6 @@ public partial class MainWindow
         MirrorFeaturePanel.Visibility=Visibility.Collapsed;
         PatternFeaturePanel.Visibility=Visibility.Collapsed;
         SheetMetalBasePanel.Visibility=Visibility.Collapsed;
+        EdgeFlangePanel.Visibility=Visibility.Collapsed;
     }
 }

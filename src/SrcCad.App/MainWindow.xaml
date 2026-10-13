@@ -138,7 +138,7 @@
             <TabItem Header="SAC LEVHA">
                 <WrapPanel Margin="8">
                     <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadExtrudeIcon}" Content="Taban Flanş" Click="BaseFlange_Click" x:Name="BaseFlangeButton" ToolTip="Kapalı çizimden gerçek sac gövdesi oluşturur; kalınlık, büküm yarıçapı ve K-faktörü parametriktir."/>
-                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadExtrudeIcon}" Content="Kenar Flanşı" Click="CadCommandPlaceholder_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadExtrudeIcon}" Content="Kenar Flanşı" Click="EdgeFlange_Click" x:Name="EdgeFlangeButton" ToolTip="Sacın doğrusal kenarlarını seçin; uzunluk, açı, kalınlık ve büküm yarıçapıyla gerçek flanş oluşturur."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Gönye Flanşı" Click="CadCommandPlaceholder_Click"/>
                     <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadCutIcon}" Content="Sac Kes" Click="SheetCut_Click" x:Name="SheetCutButton" ToolTip="Sac yüzünde oluşturulan kapalı çizimi gerçek Through-All kesme olarak uygular."/>
                     <Button Style="{StaticResource CadCommandButton}" Content="Hem" Click="CadCommandPlaceholder_Click"/>
@@ -442,6 +442,27 @@
                                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                     <Button Content="✓" Width="52" Height="34" Click="PatternFeatureOk_Click"/>
                                     <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="PatternFeatureCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="EdgeFlangePanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Kenar Flanşı" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <TextBlock Text="Flanş Uzunluğu (mm)"/>
+                                <TextBox x:Name="EdgeFlangeLength" TextChanged="EdgeFlangeParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock Text="Açı (°)"/>
+                                <TextBox x:Name="EdgeFlangeAngle" TextChanged="EdgeFlangeParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock Text="Sac Kalınlığı (mm)"/>
+                                <TextBox x:Name="EdgeFlangeThickness" TextChanged="EdgeFlangeParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock Text="Büküm Yarıçapı (mm)"/>
+                                <TextBox x:Name="EdgeFlangeBendRadius" TextChanged="EdgeFlangeParameterChanged" Margin="0,4,0,8"/>
+                                <CheckBox x:Name="EdgeFlangeReverse" Content="Flanş Yönünü Ters Çevir" Checked="EdgeFlangeParameterChanged" Unchecked="EdgeFlangeParameterChanged" Margin="0,0,0,8"/>
+                                <TextBlock Text="Seçili Kenarlar" FontWeight="Bold"/>
+                                <TextBlock x:Name="EdgeFlangeSelectionText" Text="Doğrusal sac kenarı seçin." TextWrapping="Wrap" Margin="0,4,0,8"/>
+                                <TextBlock Text="Ctrl ile birden fazla kenar seçebilirsiniz. Geometri seçilen kenarın komşu sac yüzünden yönünü otomatik çıkarır." Foreground="#5F6B76" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="EdgeFlangeError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="EdgeFlangeOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="EdgeFlangeCancel_Click"/>
                                 </StackPanel>
                             </StackPanel>
 

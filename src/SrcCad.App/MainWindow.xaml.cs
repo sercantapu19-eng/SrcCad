@@ -318,6 +318,7 @@ public partial class MainWindow : Window
             UpdateActiveHoleSelection();
             UpdateActiveShellSelection();
             UpdateActiveDraftSelection();
+            UpdateActiveEdgeFlangeSelection();
             Status(selected ? _viewer.SelectionSummary() : "Seçim yok");
             if (selected && e.Clicks >= 2 && !toggle)
                 NormalToSelectedSupport();
@@ -448,7 +449,7 @@ public partial class MainWindow : Window
     {
         if(_graphFeatureEdit is not null)
         {
-            if(_graphFeatureEdit.Parameters is FilletFeatureParameters or ChamferFeatureParameters or HoleFeatureParameters or RevolveFeatureParameters or RevolveCutFeatureParameters or ShellFeatureParameters or MirrorFeatureParameters or LinearPatternFeatureParameters or CircularPatternFeatureParameters)return;
+            if(_graphFeatureEdit.Parameters is FilletFeatureParameters or ChamferFeatureParameters or HoleFeatureParameters or RevolveFeatureParameters or RevolveCutFeatureParameters or SweepFeatureParameters or SweepCutFeatureParameters or LoftFeatureParameters or LoftCutFeatureParameters or ShellFeatureParameters or DraftFeatureParameters or RibFeatureParameters or MirrorFeatureParameters or LinearPatternFeatureParameters or CircularPatternFeatureParameters or ReferencePlaneFeatureParameters or ReferenceAxisFeatureParameters or ReferencePointFeatureParameters or SheetMetalBaseFeatureParameters or SheetMetalEdgeFlangeFeatureParameters)return;
             if(DimensionNumbers.TryParseScalar(GraphDepth.Text,out var value))
                 GraphDepth.Text=_depthWheel.Apply(value,delta).ToString("G17",CultureInfo.CurrentCulture);
             return;
@@ -2265,6 +2266,8 @@ public partial class MainWindow : Window
         CircularPatternButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
         ReferenceGeometryButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&(_sketch is not null||_partSession is not null);
         BaseFlangeButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&!_hasSolid&&(_sketch is not null||_partSession is not null);
+        EdgeFlangeButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid&&_partSession is not null&&
+            _partSession.Document.Features.Any(n=>n.Kind==SrcCad.Core.Features.FeatureKind.SheetMetalBase);
         SheetCutButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid&&_partSession is not null&&
             _partSession.Document.Features.Any(n=>n.Kind==SrcCad.Core.Features.FeatureKind.SheetMetalBase)&&CutProfileCandidate() is not null;
         if(_partSession is not null)
