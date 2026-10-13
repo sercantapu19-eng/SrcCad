@@ -97,15 +97,40 @@ internal sealed class OcctPartGeometryKernel : IPartGeometryKernel
         return p;
     }
 
+    private static double[] PackSpatialPath(IReadOnlyList<SrcCad.Core.Geometry.Vector3d> path)
+    {
+        if(path.Count<2)throw new InvalidOperationException("3D sweep path requires at least two points.");
+        var values=new List<double>();
+        for(var i=0;i<path.Count;i++)
+        {
+            var p=path[i];
+            if(!double.IsFinite(p.X)||!double.IsFinite(p.Y)||!double.IsFinite(p.Z))
+                throw new InvalidOperationException("3D path point must be finite.");
+            if(i>0&&(p-path[i-1]).Length<=1e-9)throw new InvalidOperationException("3D path contains duplicate consecutive points.");
+            values.AddRange(new[]{p.X,p.Y,p.Z});
+        }
+        return values.ToArray();
+    }
+
     public string Sweep(string? baseBody,SketchModel profile,SketchModel path)
     {
         var p=SimpleProfile(profile);
         return OcctFeatureKernel.Sweep(baseBody,p.Outer,p.Circle,p.Frame,PackSweepPath(path));
     }
+    public string SweepSpatial(string? baseBody,SketchModel profile,IReadOnlyList<SrcCad.Core.Geometry.Vector3d> path)
+    {
+        var p=SimpleProfile(profile);
+        return OcctFeatureKernel.Sweep(baseBody,p.Outer,p.Circle,p.Frame,PackSpatialPath(path));
+    }
     public string SweepCut(string baseBody,SketchModel profile,SketchModel path)
     {
         var p=SimpleProfile(profile);
         return OcctFeatureKernel.SweepCut(baseBody,p.Outer,p.Circle,p.Frame,PackSweepPath(path));
+    }
+    public string SweepCutSpatial(string baseBody,SketchModel profile,IReadOnlyList<SrcCad.Core.Geometry.Vector3d> path)
+    {
+        var p=SimpleProfile(profile);
+        return OcctFeatureKernel.SweepCut(baseBody,p.Outer,p.Circle,p.Frame,PackSpatialPath(path));
     }
     public string Loft(string? baseBody,IReadOnlyList<SketchModel> profiles)
     {
