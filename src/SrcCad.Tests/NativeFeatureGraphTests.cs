@@ -52,6 +52,10 @@ internal static class NativeFeatureGraphTests
                 catch(InvalidOperationException){}
             }
             Check(flangeEdge is not null&&flangeBody is not null,"native edge flange resolves a straight sheet edge and adds joined material");
+            var roundedFlange=OcctFeatureKernel.EdgeFlange(sheetSession.Output(sheetNode.Id)!.BRep!,new[]{flangeEdge!},12,90,2,2,false);
+            var roundedFlangeInfo=OcctFeatureKernel.Inspect(roundedFlange);
+            Check(roundedFlangeInfo[0]>sheetInspect[0]&&roundedFlangeInfo[1]==1,
+                "native edge flange with 2 mm bend radius keeps a valid joined B-Rep");
             var edgeFlangeNode=new FeatureNode(Guid.NewGuid(),"Kenar Flanşı1",
                 new SheetMetalEdgeFlangeFeatureParameters(sheetNode.Id,12,90,2,0),
                 References:new[]{new FeatureReference(sheetNode.Id,TopologyKind.Edge,flangeEdge!)});
