@@ -25,6 +25,20 @@ public partial class MainWindow
 
     private bool InDrawingMode=>_drawingDocument is not null;
 
+    internal bool CancelActiveDrawingCommand()
+    {
+        var active=DrawingViewPanel.Visibility==Visibility.Visible||
+                   DrawingAnnotationPanel.Visibility==Visibility.Visible;
+        if(!active)return false;
+        DrawingViewPanel.Visibility=Visibility.Collapsed;
+        DrawingAnnotationPanel.Visibility=Visibility.Collapsed;
+        _drawingEditingViewId=null;
+        _drawingEditingAnnotationId=null;
+        ManagerTabs.SelectedItem=FeatureManagerTab;
+        Status("Teknik resim komutu iptal edildi.");
+        return true;
+    }
+
     private void SetDrawingDocument(DrawingDocument next,bool record=true)
     {
         var safe=DrawingDocumentFile.Clone(next);
