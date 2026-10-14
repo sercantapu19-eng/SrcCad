@@ -2000,7 +2000,7 @@ public partial class MainWindow
         HoleFeaturePanel.Visibility=Visibility.Collapsed;
         RevolveFeaturePanel.Visibility=Visibility.Collapsed;
         PropertyTitle.Text=node.Name;
-        PropertyInfo.Text="Gerçek OCCT kalın cidarlı kabuk • Ctrl ile çoklu açılacak yüz • canlı önizleme";
+        PropertyInfo.Text="Gerçek OCCT kalın cidarlı kabuk • yüzleri art arda tıklayarak çoklu seç • Ctrl gerekmez • canlı önizleme";
         ManagerTabs.SelectedItem=PropertyManagerTab;
         _viewer.SetSelectionMode(SrcCad.Kernel.Occt.CadSelectionMode.Face);
         _loadingGraphParameters=false;
