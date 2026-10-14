@@ -347,7 +347,11 @@ public partial class MainWindow : Window
         if (e.Button == WinForms.MouseButtons.Middle)
         {
             _middleDown = true;
-            _panMode = (WinForms.Control.ModifierKeys & WinForms.Keys.Control) == WinForms.Keys.Control;
+            // Technical drawings are a 2D sheet: middle-drag pans the sheet and
+            // must never tilt it into 3D. Other workbenches keep CAD rotate;
+            // Ctrl+MMB remains pan.
+            _panMode = InDrawingMode ||
+                       (WinForms.Control.ModifierKeys & WinForms.Keys.Control) == WinForms.Keys.Control;
             if (!_panMode) _viewer.StartRotation(e.X, e.Y);
             return;
         }
