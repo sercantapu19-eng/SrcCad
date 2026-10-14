@@ -298,6 +298,10 @@ public partial class MainWindow : Window
             {
                 CancelExtrude();
             }
+            else if(InAssemblyMode&&CancelActiveAssemblyCommand())
+            {
+                return true;
+            }
             else if (_inSketch && _smartDimensionMode)
             {
                 _smartDimensionMode = false;
@@ -322,7 +326,8 @@ public partial class MainWindow : Window
         => _graphFeatureEdit?.Parameters is
             FilletFeatureParameters or ChamferFeatureParameters or WeldBeadFeatureParameters or
             SheetMetalHemFeatureParameters or SheetMetalRipFeatureParameters or SheetMetalCornerReliefFeatureParameters or
-            SheetMetalEdgeFlangeFeatureParameters or SheetMetalMiterFlangeFeatureParameters or SheetMetalJogFeatureParameters;
+            SheetMetalEdgeFlangeFeatureParameters or SheetMetalMiterFlangeFeatureParameters or SheetMetalJogFeatureParameters or
+            ShellFeatureParameters or DraftFeatureParameters;
 
     private bool MouseWheelEditsDepth()
         => _extrudeCommandActive &&
@@ -388,6 +393,7 @@ public partial class MainWindow : Window
             var ctrl = (WinForms.Control.ModifierKeys & WinForms.Keys.Control) == WinForms.Keys.Control;
             var toggle = ctrl || FeatureSelectionAccumulatesWithoutCtrl();
             var selected = _viewer.SelectDetected(toggle);
+            if(InAssemblyMode)SyncAssemblySelectionFromViewport();
             UpdateActiveEdgeFeatureSelection();
             UpdateActiveHoleSelection();
             UpdateActiveHoleWizardSelection();
