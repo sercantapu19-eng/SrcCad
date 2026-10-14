@@ -2414,9 +2414,19 @@ public partial class MainWindow
     private void UpdateInspectMeasureFromSelection(bool hoverPreview=false)
     {
         if(!_inspectMeasureMode)return;
-        var measure=_viewer.SelectedTopologyMeasure();
+
+        // SOLIDWORKS-like behavior:
+        // - while moving the mouse, preview the topology currently under the cursor;
+        // - after a click, keep the selected topology's measurement in the status bar.
+        // A previous selection must never mask the live hover result.
+        var measure=hoverPreview
+            ?_viewer.DetectedTopologyMeasure()
+            :_viewer.SelectedTopologyMeasure();
         if(measure.Length==0)
-            measure=_viewer.DetectedTopologyMeasure();
+            measure=hoverPreview
+                ?_viewer.SelectedTopologyMeasure()
+                :_viewer.DetectedTopologyMeasure();
+
         var details=FormatTopologyMeasure(measure,out var compact);
         PropertyTitle.Text="Ölç";
         if(details is null)
@@ -2431,7 +2441,7 @@ public partial class MainWindow
         }
 
         PropertyInfo.Text=details;
-        MeasureStatusText.Text=(hoverPreview?"ÖNİZLEME  ":"")+compact;
+        MeasureStatusText.Text=(hoverPreview?"ÖNİZLEME  ":"ÖLÇ  ")+compact;
         ManagerTabs.SelectedItem=PropertyManagerTab;
         if(!hoverPreview)Status(compact);
     }
