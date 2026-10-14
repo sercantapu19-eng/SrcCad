@@ -27,6 +27,42 @@ public partial class MainWindow
 
     private bool InAssemblyMode=>_assemblyDocument is not null;
 
+    internal void SyncAssemblySelectionFromViewport()
+    {
+        if(_assemblyDocument is null||_assemblyRoot is null)return;
+        var idText=_viewer.SelectedAssemblyComponentId();
+        if(!Guid.TryParse(idText,out var id))return;
+        foreach(var item in _assemblyRoot.Items.OfType<TreeViewItem>())
+        {
+            if(item.Tag is Guid componentId&&componentId==id)
+            {
+                item.IsSelected=true;
+                item.BringIntoView();
+                var component=_assemblyDocument.Components.FirstOrDefault(c=>c.Id==id);
+                if(component is not null)Status(component.Name+" seçildi.");
+                return;
+            }
+        }
+    }
+
+    internal bool CancelActiveAssemblyCommand()
+    {
+        var active=AssemblyMovePanel.Visibility==Visibility.Visible||
+                   AssemblyMatePanel.Visibility==Visibility.Visible||
+                   AssemblyPatternPanel.Visibility==Visibility.Visible;
+        if(!active)return false;
+        AssemblyMovePanel.Visibility=Visibility.Collapsed;
+        AssemblyMatePanel.Visibility=Visibility.Collapsed;
+        AssemblyPatternPanel.Visibility=Visibility.Collapsed;
+        _assemblyEditingComponentId=null;
+        _assemblyEditingMateId=null;
+        _assemblyPickedMateA=null;
+        _assemblyPickedMateB=null;
+        ManagerTabs.SelectedItem=FeatureManagerTab;
+        Status("Montaj komutu iptal edildi.");
+        return true;
+    }
+
     private void SetAssemblyDocument(AssemblyDocument next,bool record=true)
     {
         var safe=AssemblyDocumentFile.Clone(next);
