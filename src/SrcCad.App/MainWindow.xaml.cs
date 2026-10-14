@@ -398,6 +398,19 @@ public partial class MainWindow : Window
         else
         {
             _viewer.MoveTo(e.X, e.Y);
+
+            // Measure is an inspection command, not a feature-selection command.
+            // Always replace the measured topology on a plain click and do not let
+            // active fillet/flange/shell multi-selection rules consume the pick.
+            if(_inspectMeasureMode)
+            {
+                var selected=_viewer.SelectDetected(false);
+                UpdateInspectMeasureFromSelection();
+                if(!selected)
+                    Status("Ölç aktif • imleci gerçek bir kenar, yüz veya köşe üzerine getirip tıklayın.");
+                return;
+            }
+
             var ctrl = (WinForms.Control.ModifierKeys & WinForms.Keys.Control) == WinForms.Keys.Control;
             var toggle = ctrl || FeatureSelectionAccumulatesWithoutCtrl();
             var selected = _viewer.SelectDetected(toggle);
@@ -410,11 +423,8 @@ public partial class MainWindow : Window
             UpdateActiveDraftSelection();
             UpdateActiveEdgeFlangeSelection();
             UpdateActiveEndCapSelection();
-            if(_inspectMeasureMode)
-                UpdateInspectMeasureFromSelection();
-            else
-                Status(selected ? _viewer.SelectionSummary() : "Seçim yok");
-            if (selected && e.Clicks >= 2 && !toggle && !_inspectMeasureMode)
+            Status(selected ? _viewer.SelectionSummary() : "Seçim yok");
+            if (selected && e.Clicks >= 2 && !toggle)
                 NormalToSelectedSupport();
         }
     }
