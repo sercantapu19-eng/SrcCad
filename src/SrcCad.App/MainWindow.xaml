@@ -680,7 +680,7 @@
                                 <TextBox x:Name="EdgeFeatureValue" TextChanged="EdgeFeatureParameterChanged" Margin="0,4,0,8"/>
                                 <TextBlock Text="Seçili Kenarlar" FontWeight="Bold"/>
                                 <TextBlock x:Name="EdgeFeatureSelectionText" Text="Kenar seçilmedi" TextWrapping="Wrap" Margin="0,4,0,8"/>
-                                <TextBlock Text="Ctrl ile çoklu kenar seçebilirsiniz. Seçim değiştikçe gerçek B-Rep önizleme yeniden oluşturulur." TextWrapping="Wrap" Foreground="#5F6B76" Margin="0,0,0,8"/>
+                                <TextBlock Text="Kenarları art arda tıklayarak çoklu seçebilirsiniz; Ctrl gerekmez. Seçim değiştikçe gerçek B-Rep önizleme yeniden oluşturulur." TextWrapping="Wrap" Foreground="#5F6B76" Margin="0,0,0,8"/>
                                 <TextBlock x:Name="EdgeFeatureError" Foreground="#AA2020" TextWrapping="Wrap"/>
                                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                     <Button Content="✓" Width="52" Height="34" Click="EdgeFeatureOk_Click"/>
@@ -743,7 +743,7 @@
                                 <CheckBox x:Name="ShellOutward" Content="Dışa Doğru Kalınlaştır" Checked="ShellFeatureParameterChanged" Unchecked="ShellFeatureParameterChanged" Margin="0,0,0,8"/>
                                 <TextBlock Text="Açılacak Yüzler" FontWeight="Bold"/>
                                 <TextBlock x:Name="ShellSelectionText" Text="En az bir yüz seçin." TextWrapping="Wrap" Margin="0,4,0,8"/>
-                                <TextBlock Text="Ctrl ile birden fazla yüz seçebilirsiniz." Foreground="#5F6B76" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                <TextBlock Text="Yüzleri art arda tıklayarak çoklu seçebilirsiniz; Ctrl gerekmez." Foreground="#5F6B76" TextWrapping="Wrap" Margin="0,0,0,8"/>
                                 <TextBlock x:Name="ShellFeatureError" Foreground="#AA2020" TextWrapping="Wrap"/>
                                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                     <Button Content="✓" Width="52" Height="34" Click="ShellFeatureOk_Click"/>
@@ -759,7 +759,7 @@
                                 <TextBlock x:Name="DraftNeutralPlaneText" Text="Aktif düzlem" TextWrapping="Wrap" Margin="0,4,0,8"/>
                                 <TextBlock Text="Draft Uygulanacak Yüzler" FontWeight="Bold"/>
                                 <TextBlock x:Name="DraftSelectionText" Text="En az bir yüz seçin." TextWrapping="Wrap" Margin="0,4,0,8"/>
-                                <TextBlock Text="Ctrl ile çoklu yüz seçebilirsiniz. Nötr düzlem, komut başlatılırken aktif olan Ön/Üst/Sağ düzlemdir." Foreground="#5F6B76" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                <TextBlock Text="Yüzleri art arda tıklayarak çoklu seçebilirsiniz; Ctrl gerekmez. Nötr düzlem, komut başlatılırken aktif olan Ön/Üst/Sağ düzlemdir." Foreground="#5F6B76" TextWrapping="Wrap" Margin="0,0,0,8"/>
                                 <TextBlock x:Name="DraftFeatureError" Foreground="#AA2020" TextWrapping="Wrap"/>
                                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                     <Button Content="✓" Width="52" Height="34" Click="DraftFeatureOk_Click"/>
@@ -859,7 +859,7 @@
                                 <CheckBox x:Name="EdgeFlangeReverse" Content="Flanş Yönünü Ters Çevir" Checked="EdgeFlangeParameterChanged" Unchecked="EdgeFlangeParameterChanged" Margin="0,0,0,8"/>
                                 <TextBlock Text="Seçili Kenarlar" FontWeight="Bold"/>
                                 <TextBlock x:Name="EdgeFlangeSelectionText" Text="Doğrusal sac kenarı seçin." TextWrapping="Wrap" Margin="0,4,0,8"/>
-                                <TextBlock Text="Ctrl ile birden fazla kenar seçebilirsiniz. Geometri seçilen kenarın komşu sac yüzünden yönünü otomatik çıkarır." Foreground="#5F6B76" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                <TextBlock Text="Kenarları art arda tıklayarak çoklu seçebilirsiniz; Ctrl gerekmez. Geometri seçilen kenarın komşu sac yüzünden yönünü otomatik çıkarır." Foreground="#5F6B76" TextWrapping="Wrap" Margin="0,0,0,8"/>
                                 <TextBlock x:Name="EdgeFlangeError" Foreground="#AA2020" TextWrapping="Wrap"/>
                                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                     <Button Content="✓" Width="52" Height="34" Click="EdgeFlangeOk_Click"/>
