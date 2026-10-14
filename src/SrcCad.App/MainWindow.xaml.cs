@@ -302,6 +302,10 @@ public partial class MainWindow : Window
             {
                 return true;
             }
+            else if(InDrawingMode&&CancelActiveDrawingCommand())
+            {
+                return true;
+            }
             else if (_inSketch && _smartDimensionMode)
             {
                 _smartDimensionMode = false;
