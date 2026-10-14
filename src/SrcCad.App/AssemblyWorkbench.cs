@@ -158,6 +158,7 @@ public partial class MainWindow
         PartNode.Visibility=Visibility.Visible;
         AssemblyMovePanel.Visibility=Visibility.Collapsed;
         AssemblyMatePanel.Visibility=Visibility.Collapsed;
+        AssemblyPatternPanel.Visibility=Visibility.Collapsed;
     }
 
     private string RebuildAssemblyComponent(string sourcePath)
