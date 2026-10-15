@@ -1,0 +1,7 @@
+Resolve-Path: /workspace/scratch/65ac1ad78f99/SrcCad/tools/Run-SolidAcceptance.ps1:6
+Line |
+   6 |  $OcctRoot = (Resolve-Path -LiteralPath $OcctRoot).Path
+     |               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Cannot find path
+     | '/workspace/scratch/65ac1ad78f99/vcpkg_installed/x64-windows' because it
+     | does not exist.

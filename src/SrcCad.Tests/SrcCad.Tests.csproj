@@ -1,11 +1,42 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
     <OutputType>Exe</OutputType>
     <AssemblyName>SrcCad.Tests</AssemblyName>
     <RootNamespace>SrcCad.Tests</RootNamespace>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(EnableNativeAcceptance)' == 'true'">
+    <DefineConstants>$(DefineConstants);NATIVE_ACCEPTANCE</DefineConstants>
+    <OutputPath>bin\$(Platform)\$(Configuration)\native\</OutputPath>
+    <IntermediateOutputPath>obj\$(Platform)\$(Configuration)\native\$(TargetFramework)\</IntermediateOutputPath>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(EnableNativeAcceptance)' == 'true'">
+    <Compile Include="..\SrcCad.App\OcctPartGeometryKernel.cs" Link="OcctPartGeometryKernel.cs" />
+    <Reference Include="SrcCad.Kernel.Occt">
+      <HintPath>$(NativeBridgePath)</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\SrcCad.Core\SrcCad.Core.csproj" />
     <ProjectReference Include="..\SrcCad.Commands\SrcCad.Commands.csproj" />
   </ItemGroup>
+  <Target Name="ValidateNativeAcceptanceInputs" BeforeTargets="ResolveReferences"
+          Condition="'$(EnableNativeAcceptance)' == 'true'">
+    <Error Condition="!Exists('$(NativeBridgePath)')" Text="NativeBridgePath missing: $(NativeBridgePath)" />
+    <Error Condition="!Exists('$(NativeIjwHostPath)')" Text="NativeIjwHostPath missing: $(NativeIjwHostPath)" />
+    <Error Condition="!Exists('$(NativeOcctRuntimeDir)\TKernel.dll')" Text="NativeOcctRuntimeDir missing OCCT TKernel.dll: $(NativeOcctRuntimeDir)" />
+  </Target>
+  <Target Name="DeployNativeAcceptanceRuntime" AfterTargets="Build"
+          Condition="'$(EnableNativeAcceptance)' == 'true'">
+    <ItemGroup>
+      <NativeAcceptanceRuntime Include="$(NativeBridgePath);$(NativeIjwHostPath);$(NativeOcctRuntimeDir)\*.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(NativeAcceptanceRuntime)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="false" />
+    <Error Condition="!Exists('$(TargetDir)SrcCad.Kernel.Occt.dll')" Text="C++/CLI bridge was not deployed." />
+    <Error Condition="!Exists('$(TargetDir)ijwhost.dll')" Text="C++/CLI host was not deployed." />
+    <WriteLinesToFile File="$(NativeTestDeploymentManifest)" Lines="$(TargetPath)"
+                      Overwrite="true" Encoding="UTF-8" Condition="'$(NativeTestDeploymentManifest)' != ''" />
+  </Target>
 </Project>
+

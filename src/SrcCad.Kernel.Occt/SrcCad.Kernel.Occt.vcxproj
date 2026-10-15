@@ -40,11 +40,12 @@
       <LanguageStandard>stdcpp20</LanguageStandard>
       <PreprocessorDefinitions>NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <DisableSpecificWarnings>4679;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <AdditionalIncludeDirectories>$(OcctRoot)\include\opencascade;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <AdditionalLibraryDirectories>$(OcctRoot)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>TKernel.lib;TKMath.lib;TKG2d.lib;TKG3d.lib;TKGeomBase.lib;TKGeomAlgo.lib;TKBRep.lib;TKTopAlgo.lib;TKPrim.lib;TKService.lib;TKV3d.lib;TKOpenGl.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>TKernel.lib;TKMath.lib;TKG2d.lib;TKG3d.lib;TKGeomBase.lib;TKGeomAlgo.lib;TKBRep.lib;TKOffset.lib;TKTopAlgo.lib;TKFillet.lib;TKPrim.lib;TKBO.lib;TKBool.lib;TKService.lib;TKV3d.lib;TKOpenGl.lib;TKXSBase.lib;TKDESTEP.lib;TKDEIGES.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -54,18 +55,27 @@
       <LanguageStandard>stdcpp20</LanguageStandard>
       <PreprocessorDefinitions>NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <DisableSpecificWarnings>4679;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <AdditionalIncludeDirectories>$(OcctRoot)\include\opencascade;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <AdditionalLibraryDirectories>$(OcctRoot)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>TKernel.lib;TKMath.lib;TKG2d.lib;TKG3d.lib;TKGeomBase.lib;TKGeomAlgo.lib;TKBRep.lib;TKTopAlgo.lib;TKPrim.lib;TKService.lib;TKV3d.lib;TKOpenGl.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>TKernel.lib;TKMath.lib;TKG2d.lib;TKG3d.lib;TKGeomBase.lib;TKGeomAlgo.lib;TKBRep.lib;TKOffset.lib;TKTopAlgo.lib;TKFillet.lib;TKPrim.lib;TKBO.lib;TKBool.lib;TKService.lib;TKV3d.lib;TKOpenGl.lib;TKXSBase.lib;TKDESTEP.lib;TKDEIGES.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="OcctProbe.h" />
+    <ClInclude Include="OcctFeatureKernel.h" />
     <ClInclude Include="OcctViewportBridge.h" />
     <ClCompile Include="OcctProbe.cpp" />
     <ClCompile Include="OcctViewportBridge.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <Target Name="WriteNativeAcceptanceDeployment" AfterTargets="Build"
+          Condition="'$(NativeDeploymentManifest)' != ''">
+    <WriteLinesToFile File="$(NativeDeploymentManifest)"
+                      Lines="$(TargetPath);$(TargetDir)ijwhost.dll"
+                      Overwrite="true" Encoding="UTF-8" />
+  </Target>
 </Project>
+

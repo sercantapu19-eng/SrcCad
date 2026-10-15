@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
     <AssemblyName>SrcCad.Commands</AssemblyName>
     <RootNamespace>SrcCad.Commands</RootNamespace>
   </PropertyGroup>
@@ -7,3 +8,4 @@
     <ProjectReference Include="..\SrcCad.Core\SrcCad.Core.csproj" />
   </ItemGroup>
 </Project>
+

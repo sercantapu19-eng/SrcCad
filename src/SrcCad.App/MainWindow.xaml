@@ -2,18 +2,19 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:wfi="clr-namespace:System.Windows.Forms.Integration;assembly=WindowsFormsIntegration"
-        Title="SrcCad V1.4 Usable Part Alpha"
+        Title="SrcCad — Parametrik CAD"
         Width="1450" Height="900"
         MinWidth="1050" MinHeight="650"
         WindowStartupLocation="CenterScreen"
         Loaded="Window_Loaded"
         Closing="Window_Closing"
+        PreviewMouseWheel="Window_PreviewMouseWheel"
         PreviewKeyDown="Window_PreviewKeyDown">
     <Grid Background="#EAF1F6">
         <Grid.RowDefinitions>
             <RowDefinition Height="54"/>
             <RowDefinition Height="28"/>
-            <RowDefinition Height="118"/>
+            <RowDefinition Height="154"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="28"/>
         </Grid.RowDefinitions>
@@ -32,7 +33,7 @@
                     <TextBlock Text="Parametrik CAD • OCCT B-Rep" FontSize="11" Foreground="#B8C6D2"/>
                 </StackPanel>
                 <Border Grid.Column="2" VerticalAlignment="Center" Background="#263541" CornerRadius="12" Padding="12,4">
-                    <TextBlock Text="V1.4 USABLE PART ALPHA" Foreground="#DDE8F0" FontSize="11"/>
+                    <TextBlock Text="PARAMETRİK CAD • ALPHA" Foreground="#DDE8F0" FontSize="11"/>
                 </Border>
             </Grid>
         </Border>
@@ -40,42 +41,283 @@
         <Menu Grid.Row="1" Background="#FBFCFD" BorderBrush="#CDD5DC" BorderThickness="0,0,0,1">
             <MenuItem Header="Dosya">
                 <MenuItem Header="Yeni Parça" InputGestureText="Ctrl+N" Click="NewPart_Click"/>
+                <MenuItem Header="Yeni Montaj" Click="NewAssembly_Click"/>
+                <Separator/>
+                <MenuItem Header="Parça Aç…" InputGestureText="Ctrl+O" Click="OpenPart_Click"/>
+                <MenuItem Header="Montaj Aç…" Click="OpenAssembly_Click"/>
+                <MenuItem Header="STEP / IGES İçe Aktar…" Click="ImportCad_Click"/>
+                <MenuItem Header="DXF Çizim İçe Aktar…" Click="ImportSketchDxf_Click"/>
+                <MenuItem Header="Çizimi DXF Dışa Aktar…" Click="ExportSketchDxf_Click"/>
+                <MenuItem Header="Parçayı Farklı Kaydet…" InputGestureText="Ctrl+S" Click="SavePart_Click"/>
+                <MenuItem Header="Montajı Kaydet…" Click="SaveAssembly_Click"/>
+                <MenuItem Header="STEP Olarak Dışa Aktar…" Click="ExportStep_Click"/>
+                <MenuItem Header="IGES Olarak Dışa Aktar…" Click="ExportIges_Click"/>
+                <Separator/>
+                <MenuItem Header="Yeni Teknik Resim" Click="NewDrawing_Click"/>
+                <MenuItem Header="Teknik Resim Aç…" Click="OpenDrawing_Click"/>
+                <MenuItem Header="Teknik Resmi Kaydet…" Click="SaveDrawing_Click"/>
                 <Separator/>
                 <MenuItem Header="Çıkış" Click="Exit_Click"/>
             </MenuItem>
-            <MenuItem Header="Düzenle"/>
-            <MenuItem Header="Görünüm"/>
-            <MenuItem Header="Araçlar"/>
-            <MenuItem Header="Yardım"/>
+            <MenuItem Header="Düzenle">
+                <MenuItem Header="Geri Al" InputGestureText="Ctrl+Z" Click="UndoActiveDocument_Click"/>
+                <MenuItem Header="Yinele" InputGestureText="Ctrl+Y" Click="RedoActiveDocument_Click"/>
+            </MenuItem>
+            <MenuItem Header="Görünüm">
+                <MenuItem Header="Ekrana Sığdır" InputGestureText="F" Click="Fit_Click"/>
+                <MenuItem Header="Seçime Dik Bak" InputGestureText="Ctrl+8" Click="NormalTo_Click"/>
+                <Separator/>
+                <MenuItem Header="İzometrik" Click="Iso_Click"/>
+                <MenuItem Header="Ön" Click="Front_Click"/>
+                <MenuItem Header="Üst" Click="Top_Click"/>
+                <MenuItem Header="Sağ" Click="Right_Click"/>
+                <Separator/>
+                <MenuItem Header="Gölgeli + Kenarlı" Click="ShadedEdges_Click"/>
+                <MenuItem Header="Gölgeli" Click="Shaded_Click"/>
+                <MenuItem Header="Tel Kafes" Click="Wireframe_Click"/>
+            </MenuItem>
+            <MenuItem Header="Araçlar">
+                <MenuItem Header="Ölç" Click="InspectMeasure_Click"/>
+                <MenuItem Header="Kütle / Geometri Özellikleri" Click="InspectMassProperties_Click"/>
+                <MenuItem Header="Geometri Kontrolü" Click="InspectGeometry_Click"/>
+                <Separator/>
+                <MenuItem Header="Kesit Görünümü" Click="InspectSectionView_Click"/>
+                <MenuItem Header="Draft Analizi" Click="InspectDraftAnalysis_Click"/>
+                <MenuItem Header="Çakışma Kontrolü" Click="InspectInterference_Click"/>
+                <MenuItem Header="B-Rep Karşılaştır" Click="InspectCompare_Click"/>
+            </MenuItem>
+            <MenuItem Header="Yardım" Click="About_Click"/>
         </Menu>
 
         <TabControl Grid.Row="2" x:Name="CommandTabs" Background="#F5F7F9" BorderBrush="#C8D1D9">
             <TabItem Header="UNSURLAR" x:Name="FeaturesTab">
-                <WrapPanel Margin="8">
-                    <Button Style="{StaticResource CommandButton}" Content="Çizim" Click="StartSketch_Click" x:Name="StartSketchButton"/>
-                    <Button Style="{StaticResource CommandButton}" Content="Ekstrüzyon" Click="Extrude_Click" x:Name="ExtrudeButton" IsEnabled="False"/>
-                    <Separator Margin="8,2"/>
-                    <Button Style="{StaticResource CommandButton}" Content="Yeni Parça" Click="NewPart_Click"/>
-                </WrapPanel>
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                    <StackPanel Orientation="Horizontal" Margin="6">
+                        <GroupBox Header="Başlangıç" Margin="0,0,6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadSketchIcon}" Content="Çizim" Click="StartSketch_Click" x:Name="StartSketchButton" ToolTip="Düzlem veya düzlemsel yüz seçin; Çizim yeni sketch'i doğrudan o destek üzerinde açar."/>
+                                <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadSketchIcon}" Content="Yeni Çizim" Click="NewProfileSketch_Click" x:Name="NewProfileSketchButton" IsEnabled="False" Visibility="Collapsed"/>
+                                <Button Style="{StaticResource CommandButton}" Content="Yeni Parça" Click="NewPart_Click" Margin="4"/>
+                            </StackPanel>
+                        </GroupBox>
+                        <GroupBox Header="Katı Oluştur" Margin="0,0,6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadExtrudeIcon}" Content="Ekstrüzyon" Click="Extrude_Click" x:Name="ExtrudeButton" IsEnabled="False"/>
+                                <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadCutIcon}" Content="Ekstrüzyon Kes" Click="Cut_Click" x:Name="CutButton" IsEnabled="False"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Döndürme" Click="Revolve_Click" x:Name="RevolveButton"/>
+                                <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadCutIcon}" Content="Döndürerek Kes" Click="RevolveCut_Click" x:Name="RevolveCutButton"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Süpürme ▾" Click="CommandFamily_Click" x:Name="SweepButton">
+                                    <Button.ContextMenu><ContextMenu>
+                                        <MenuItem Header="Süpürme (Boss)" Click="SweepBoss_Click"/>
+                                        <MenuItem Header="Süpürerek Kes" Click="SweepCut_Click"/>
+                                    </ContextMenu></Button.ContextMenu>
+                                </Button>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Loft ▾" Click="CommandFamily_Click" x:Name="LoftButton">
+                                    <Button.ContextMenu><ContextMenu>
+                                        <MenuItem Header="Loft (Boss)" Click="LoftBoss_Click"/>
+                                        <MenuItem Header="Loft Kes" Click="LoftCut_Click"/>
+                                    </ContextMenu></Button.ContextMenu>
+                                </Button>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Sınır ▾" Click="CommandFamily_Click">
+                                    <Button.ContextMenu><ContextMenu>
+                                        <MenuItem Header="Sınır (Boss)" Click="BoundaryBoss_Click"/>
+                                        <MenuItem Header="Sınır Kes" Click="BoundaryCut_Click"/>
+                                    </ContextMenu></Button.ContextMenu>
+                                </Button>
+                            </StackPanel>
+                        </GroupBox>
+                        <GroupBox Header="Detay Özellikleri" Margin="0,0,6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource CadCommandButton}" Content="Radyus" Click="Fillet_Click" x:Name="FilletButton"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Pah" Click="Chamfer_Click" x:Name="ChamferButton"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Delik" Click="Hole_Click" x:Name="HoleButton"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Delik Sihirbazı" Click="HoleWizard_Click" x:Name="HoleWizardButton"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Kubbe" Click="Dome_Click" x:Name="DomeButton"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Kabuk" Click="Shell_Click" x:Name="ShellButton"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Draft" Click="Draft_Click" x:Name="DraftButton"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Nervür" Click="Rib_Click" x:Name="RibButton"/>
+                            </StackPanel>
+                        </GroupBox>
+                        <GroupBox Header="Dizilim / Gövde / Referans">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource CadCommandButton}" Content="Doğrusal Dizilim" Click="LinearPattern_Click" x:Name="LinearPatternButton"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Dairesel Dizilim" Click="CircularPattern_Click" x:Name="CircularPatternButton"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Çizim Güdümlü Dizilim" Click="SketchPattern_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Aynala" Click="Mirror_Click" x:Name="MirrorButton"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Gövde İşlemleri ▾" Click="CommandFamily_Click">
+                                    <Button.ContextMenu><ContextMenu>
+                                        <MenuItem Header="Birleştir / Çıkar / Ortak" Click="BodyBoolean_Click"/>
+                                        <MenuItem Header="Gövdeyi Taşı / Kopyala" Click="MoveCopyBody_Click"/>
+                                        <MenuItem Header="Gövdeyi Böl" Click="SplitBody_Click"/>
+                                    </ContextMenu></Button.ContextMenu>
+                                </Button>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Referans Geometri ▾" Click="CommandFamily_Click" x:Name="ReferenceGeometryButton">
+                                    <Button.ContextMenu><ContextMenu>
+                                        <MenuItem Header="Düzlem (Ofset)" Click="ReferencePlane_Click"/>
+                                        <MenuItem Header="Eksen" Click="ReferenceAxis_Click"/>
+                                        <MenuItem Header="Nokta" Click="ReferencePoint_Click"/>
+                                    </ContextMenu></Button.ContextMenu>
+                                </Button>
+                            </StackPanel>
+                        </GroupBox>
+                    </StackPanel>
+                </ScrollViewer>
             </TabItem>
             <TabItem Header="ÇİZİM" x:Name="SketchTab">
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                    <StackPanel Orientation="Horizontal" Margin="6">
+                        <GroupBox Header="Çizim Kontrolü" Margin="0,0,6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadExitSketchIcon}" Content="Çizimden Çık" Click="ExitSketch_Click" x:Name="ExitSketchButton"/>
+                                <Button x:Name="CancelSourceSketchEditButton" Style="{StaticResource CommandButton}" Content="Düzenlemeyi&#x0a;İptal Et" Click="CancelSourceSketchEdit_Click" Visibility="Collapsed" Margin="4"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Seç (Esc)" Tag="{StaticResource CadSelectIcon}" Click="SelectTool_Click"/>
+                            </StackPanel>
+                        </GroupBox>
+                        <GroupBox Header="Geometri" Margin="0,0,6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource CadCommandButton}" Content="Nokta" Click="Point_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Çizgi ▾" Tag="{StaticResource CadLineIcon}" Click="CommandFamily_Click" x:Name="LineButton">
+                                    <Button.ContextMenu><ContextMenu>
+                                        <MenuItem Header="Çizgi" Click="Line_Click"/>
+                                        <MenuItem Header="Merkez Çizgisi" Click="Centerline_Click"/>
+                                    </ContextMenu></Button.ContextMenu>
+                                </Button>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Dikdörtgen ▾" Tag="{StaticResource CadRectangleIcon}" Click="CommandFamily_Click">
+                                    <Button.ContextMenu><ContextMenu>
+                                        <MenuItem Header="Köşe Dikdörtgen" Click="CornerRectangle_Click"/>
+                                        <MenuItem Header="Merkez Dikdörtgen" Click="CenterRectangle_Click"/>
+                                        <MenuItem Header="3 Noktalı Köşe Dikdörtgen" Click="ThreePointRectangle_Click"/>
+                                    </ContextMenu></Button.ContextMenu>
+                                </Button>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Daire ▾" Tag="{StaticResource CadCircleIcon}" Click="CommandFamily_Click">
+                                    <Button.ContextMenu><ContextMenu>
+                                        <MenuItem Header="Merkez-Yarıçap Dairesi" Click="Circle_Click"/>
+                                        <MenuItem Header="3 Nokta Dairesi" Click="ThreePointCircle_Click"/>
+                                    </ContextMenu></Button.ContextMenu>
+                                </Button>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Yay ▾" Click="CommandFamily_Click">
+                                    <Button.ContextMenu><ContextMenu>
+                                        <MenuItem Header="Merkez Yay" Click="Arc_Click"/>
+                                        <MenuItem Header="3 Nokta Yay" Click="ThreePointArc_Click"/>
+                                    </ContextMenu></Button.ContextMenu>
+                                </Button>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Slot" Click="Slot_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Çokgen" Click="Polygon_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Elips" Click="Ellipse_Click"/>
+                            </StackPanel>
+                        </GroupBox>
+                        <GroupBox Header="Düzenle" Margin="0,0,6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource CadCommandButton}" Content="Çizim Radyusu" Click="SketchFillet_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Çizim Pahı" Click="SketchChamfer_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Çizgi Kırp" Tag="{StaticResource CadTrimIcon}" Click="Trim_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Uzat" Click="ExtendSketch_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Ofset" Click="OffsetSketch_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Aynala" Click="MirrorSketch_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Doğrusal Dizilim" Click="LinearSketchPattern_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Dairesel Dizilim" Click="CircularSketchPattern_Click"/>
+                            </StackPanel>
+                        </GroupBox>
+                        <GroupBox Header="Ölçü / İlişki">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadDimensionIcon}" Content="Akıllı Ölçü" Click="SmartDimension_Click" x:Name="SmartDimensionButton"/>
+                                <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadDimensionIcon}" Content="Yarıçap Ölçü" Click="RadiusSketchDimension_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadRelationIcon}" Content="İlişkiler" Click="ShowSketchRelations_Click"/>
+                            </StackPanel>
+                        </GroupBox>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem Header="SAC LEVHA">
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                    <StackPanel Orientation="Horizontal" Margin="6">
+                        <GroupBox Header="Sac Başlangıç" Margin="0,0,6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadExtrudeIcon}" Content="Sac Oluştur" Click="BaseFlange_Click" x:Name="BaseFlangeButton" ToolTip="Kapalı çizimden Taban Flanş oluşturarak yeni sac levha parçası başlatır."/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Sac'a Dönüştür" Click="ConvertToSheetMetal_Click" x:Name="ConvertToSheetMetalButton"/>
+                            </StackPanel>
+                        </GroupBox>
+                        <GroupBox Header="Flanş / Büküm" Margin="0,0,6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadExtrudeIcon}" Content="Kenar Flanşı" Click="EdgeFlange_Click" x:Name="EdgeFlangeButton"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Gönye Flanşı" Click="MiterFlange_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Hem" Click="Hem_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Jog" Click="Jog_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Çizilmiş Büküm" Click="SketchedBend_Click"/>
+                            </StackPanel>
+                        </GroupBox>
+                        <GroupBox Header="Kes / Açınım">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadCutIcon}" Content="Sac Kes" Click="SheetCut_Click" x:Name="SheetCutButton"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Yırtık" Click="Rip_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Köşe Rölyefi" Click="CornerRelief_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Açınım" Click="Unfold_Click"/>
+                                <Button Style="{StaticResource CadCommandButton}" Content="Katla" Click="Fold_Click"/>
+                            </StackPanel>
+                        </GroupBox>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem Header="PROFİLLER">
                 <WrapPanel Margin="8">
-                    <Button Style="{StaticResource CommandButton}" Content="Çizgi" Click="Line_Click" x:Name="LineButton"/>
-                    <Button Style="{StaticResource CommandButton}" Content="Köşe Noktası&#x0a;ile Dikdörtgen" Click="CornerRectangle_Click"/>
-                    <Button Style="{StaticResource CommandButton}" Content="Merkez ile&#x0a;Dikdörtgen" Click="CenterRectangle_Click"/>
-                    <Button Style="{StaticResource CommandButton}" Content="Daire" Click="Circle_Click"/>
-                    <Separator Margin="8,2"/>
-                    <Button Style="{StaticResource CommandButton}" Content="Akıllı&#x0a;Ölçülendirme" Click="SmartDimension_Click" x:Name="SmartDimensionButton"/>
-                    <Button Style="{StaticResource CommandButton}" Content="İlişki&#x0a;Ekle" Click="ShowSketchRelations_Click"/>
-                    <Separator Margin="8,2"/>
-                    <Button Style="{StaticResource CommandButton}" Content="Çizimden&#x0a;Çık" Click="ExitSketch_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadSketchIcon}" Content="3B Çizim" Click="SpatialSketch_Click" ToolTip="Dünya koordinatlarında parametrik 3B yol noktaları oluşturur; Sweep ve Yapısal Eleman yolunda kullanılabilir."/>
+                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadExtrudeIcon}" Content="Yapısal Eleman" Click="StructuralMember_Click" ToolTip="Kapalı profil çizimini yol çizimi boyunca gerçek OCCT katısı olarak oluşturur."/>
+                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadTrimIcon}" Content="Kırp / Uzat" Click="StructuralTrim_Click" ToolTip="Aktif/Seçili düzlemle yapısal gövdeyi gerçek OCCT yarım-uzay işlemiyle kırpar; korunacak taraf değiştirilebilir."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Köşebent" Click="Gusset_Click" ToolTip="Açık çizimden gerçek OCCT nervür/gusset katısı oluşturur."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Uç Kapağı" Click="EndCap_Click" x:Name="EndCapButton" ToolTip="Düzlemsel uç yüzünü seçin; gerçek OCCT B-Rep uç kapağı ekler."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Kaynak Dikişi" Click="WeldBead_Click" x:Name="WeldBeadButton" ToolTip="Seçili kenarlar boyunca gerçek OCCT süpürme kaynak dikişi katısı oluşturur."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Kesim Listesi" Click="StructuralCutList_Click" ToolTip="Yapısal Eleman feature'larından gerçek boy/kesit alanı/hacim listesi üretir."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Profil Kütüphanesi" Click="ProfileLibrary_Click" ToolTip="Ölçülü dikdörtgen veya dairesel profil sketch'i üretir; Yapısal Eleman için kullanılabilir."/>
                 </WrapPanel>
             </TabItem>
-            <TabItem Header="SAC LEVHA" IsEnabled="False"/>
-            <TabItem Header="PROFİLLER" IsEnabled="False"/>
-            <TabItem Header="MONTAJ" IsEnabled="False"/>
-            <TabItem Header="TEKNİK RESİM" IsEnabled="False"/>
-            <TabItem Header="ÖLÇÜM / İNCELEME" IsEnabled="False"/>
+            <TabItem Header="MONTAJ">
+                <WrapPanel Margin="8">
+                    <Button Style="{StaticResource CadCommandButton}" Content="Yeni Montaj" Click="NewAssembly_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Bileşen Ekle" Click="AddAssemblyComponent_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Montaj İlişkisi" Click="AssemblyMate_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Taşı / Döndür" Click="AssemblyMove_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Patlatılmış Görünüm" Click="AssemblyExplode_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Normal Görünüm" Click="AssemblyResetView_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Doğrusal Dizilim" Click="AssemblyLinearPattern_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Dairesel Dizilim" Click="AssemblyCircularPattern_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Bileşen Aynala" Click="AssemblyMirror_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Çakışma Kontrolü" Click="AssemblyInterference_Click"/>
+                </WrapPanel>
+            </TabItem>
+            <TabItem Header="TEKNİK RESİM">
+                <WrapPanel Margin="8">
+                    <Button Style="{StaticResource CadCommandButton}" Content="Yeni Pafta" Click="DrawingNewSheet_Click" ToolTip="Aktif paftanın boyut ve izdüşüm standardıyla yeni teknik resim paftası oluşturur."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Paftayı Sil" Click="DrawingDeleteSheet_Click" ToolTip="Aktif paftayı, görünüşlerini ve notlarını tek işlemde siler. Son pafta silinemez."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Önceki Pafta" Click="DrawingPreviousSheet_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Sonraki Pafta" Click="DrawingNextSheet_Click"/>
+                    <Separator Margin="8,2"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Model Görünümü" Click="DrawingModelView_Click" ToolTip=".scpart modelinden gerçek OCCT kenar izdüşümü oluşturur."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="İzdüşüm" Click="DrawingProjectedView_Click" ToolTip="Seçili görünüşten bağlı Üst/Sağ görünüş üretir."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Kesit" Click="DrawingSectionView_Click" ToolTip="Seçili görünüşten model merkezinden geçen gerçek OCCT kesit eğrileri üretir."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Detay" Click="DrawingDetailView_Click" ToolTip="Seçili görünüşten 2× detay görünüşü oluşturur."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Kopuk Görünüm" Click="DrawingBrokenView_Click" ToolTip="Seçili görünüşün orta bölgesini kaldırıp kalıcı kopuk görünüm oluşturur."/>
+                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadDimensionIcon}" Content="Akıllı Ölçü" Click="DrawingSmartDimension_Click" ToolTip="İmlece en yakın izdüşüm kenarı veya daire için ilişkili doğrusal/çap ölçüsü üretir."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Yarıçap Ölçü" Click="DrawingRadiusDimension_Click" ToolTip="İmlece en yakın dairesel izdüşüme ilişkili R ölçüsü ekler."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Açı Ölçü" Click="DrawingAngularDimension_Click" ToolTip="İmlece en yakın açılı iki izdüşüm kenarına ilişkili açı ölçüsü ekler."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Delik Çağrısı" Click="DrawingHoleCallout_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Merkez İşareti" Click="DrawingCenterMark_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Not" Click="DrawingAddNote_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Malzeme Listesi" Click="DrawingBom_Click" ToolTip=".scasm görünüşünden gerçek bileşen adetleriyle BOM oluşturur."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Balon" Click="DrawingBalloon_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="DXF Aktar" Click="DrawingExportDxf_Click" ToolTip="Aktif .scdrw sayfasını gerçek görünüş çizgileri ve notlarıyla ASCII DXF olarak dışa aktarır."/>
+                </WrapPanel>
+            </TabItem>
+            <TabItem Header="ÖLÇÜM / İNCELEME">
+                <WrapPanel Margin="8">
+                    <Button Style="{StaticResource CadCommandButton}" Tag="{StaticResource CadDimensionIcon}" Content="Ölç" Click="InspectMeasure_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Kütle Özellikleri" Click="InspectMassProperties_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Kesit Görünümü" Click="InspectSectionView_Click" ToolTip="Aktif düzlem yönünde model merkezinden gerçek OCCT kesit eğrilerini gösterir."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Geometri Kontrolü" Click="InspectGeometry_Click"/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Draft Analizi" Click="InspectDraftAnalysis_Click" ToolTip="Seçili yüzlerin aktif çekme yönüne göre gerçek draft açısını hesaplar."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Çakışma" Click="InspectInterference_Click" ToolTip="İki .scpart B-Rep arasındaki gerçek ortak hacmi OCCT ile hesaplar."/>
+                    <Button Style="{StaticResource CadCommandButton}" Content="Karşılaştır" Click="InspectCompare_Click" ToolTip="İki modelin hacim ve topoloji özetini karşılaştırır."/>
+                </WrapPanel>
+            </TabItem>
         </TabControl>
 
         <Grid Grid.Row="3">
@@ -88,16 +330,32 @@
             <TabControl Grid.Column="0" x:Name="ManagerTabs" BorderBrush="#BAC5CE" Background="#F8FAFB">
                 <TabItem Header="FeatureManager" x:Name="FeatureManagerTab">
                     <TreeView x:Name="FeatureTree" BorderThickness="0" Background="#FAFBFC"
-                              SelectedItemChanged="FeatureTree_SelectedItemChanged">
+                              SelectedItemChanged="FeatureTree_SelectedItemChanged" MouseDoubleClick="FeatureTree_MouseDoubleClick"
+                              PreviewMouseRightButtonDown="FeatureTree_PreviewMouseRightButtonDown">
                         <TreeViewItem Header="Parça1" x:Name="PartNode" IsExpanded="True">
                             <TreeViewItem Header="Geçmiş"/>
                             <TreeViewItem Header="Sensörler"/>
                             <TreeViewItem Header="Detaylandırmalar"/>
-                            <TreeViewItem Header="Malzeme &lt;belirli değil&gt;"/>
+                            <TreeViewItem Header="Malzeme &lt;belirli değil&gt;" Tag="material" x:Name="MaterialNode"/>
                             <TreeViewItem Header="Orijin" x:Name="OriginNode" IsExpanded="True">
-                                <TreeViewItem Header="Ön Düzlem" Tag="plane:front" x:Name="FrontPlaneNode"/>
-                                <TreeViewItem Header="Üst Düzlem" Tag="plane:top" x:Name="TopPlaneNode"/>
-                                <TreeViewItem Header="Sağ Düzlem" Tag="plane:right" x:Name="RightPlaneNode"/>
+                                <TreeViewItem Header="Ön Düzlem" Tag="plane:front" x:Name="FrontPlaneNode">
+                                    <TreeViewItem.ContextMenu><ContextMenu>
+                                        <MenuItem Header="Çizim Başlat" Click="StartSketch_Click"/>
+                                        <MenuItem Header="Dik Bak" Click="NormalTo_Click"/>
+                                    </ContextMenu></TreeViewItem.ContextMenu>
+                                </TreeViewItem>
+                                <TreeViewItem Header="Üst Düzlem" Tag="plane:top" x:Name="TopPlaneNode">
+                                    <TreeViewItem.ContextMenu><ContextMenu>
+                                        <MenuItem Header="Çizim Başlat" Click="StartSketch_Click"/>
+                                        <MenuItem Header="Dik Bak" Click="NormalTo_Click"/>
+                                    </ContextMenu></TreeViewItem.ContextMenu>
+                                </TreeViewItem>
+                                <TreeViewItem Header="Sağ Düzlem" Tag="plane:right" x:Name="RightPlaneNode">
+                                    <TreeViewItem.ContextMenu><ContextMenu>
+                                        <MenuItem Header="Çizim Başlat" Click="StartSketch_Click"/>
+                                        <MenuItem Header="Dik Bak" Click="NormalTo_Click"/>
+                                    </ContextMenu></TreeViewItem.ContextMenu>
+                                </TreeViewItem>
                             </TreeViewItem>
                         </TreeViewItem>
                     </TreeView>
@@ -107,6 +365,19 @@
                         <StackPanel Margin="12">
                             <TextBlock x:Name="PropertyTitle" Text="Özellikler" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,10"/>
                             <TextBlock x:Name="PropertyInfo" Text="Düzlem seçin ve Çizim komutunu başlatın." TextWrapping="Wrap" Foreground="#52606B"/>
+
+                            <StackPanel x:Name="MaterialPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Malzeme" FontWeight="Bold"/>
+                                <ComboBox x:Name="MaterialPresetBox" SelectionChanged="MaterialPresetChanged" Margin="0,4,0,8"/>
+                                <TextBlock Text="Yoğunluk (g/cm³)" FontWeight="Bold"/>
+                                <TextBox x:Name="MaterialDensity" TextChanged="MaterialDensityChanged" Margin="0,4,0,8"/>
+                                <TextBlock x:Name="MaterialInfo" TextWrapping="Wrap" Foreground="#5F6B76" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="MaterialError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="MaterialOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="MaterialCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
 
                             <StackPanel x:Name="SketchPropertyPanel" Visibility="Collapsed" Margin="0,16,0,0">
                                 <TextBlock Text="Çizim Durumu" FontWeight="Bold"/>
@@ -122,6 +393,11 @@
                                     <Button Content="Paralel" Margin="0,0,4,4" Click="ParallelRelation_Click"/>
                                     <Button Content="Dik" Margin="0,0,4,4" Click="PerpendicularRelation_Click"/>
                                     <Button Content="Eşit" Margin="0,0,4,4" Click="EqualRelation_Click"/>
+                                    <Button Content="Eşdoğrusal" Margin="0,0,4,4" Click="CollinearRelation_Click"/>
+                                    <Button Content="Eşmerkezli" Margin="0,0,4,4" Click="ConcentricRelation_Click"/>
+                                    <Button Content="Orta Nokta" Click="MidpointRelation_Click" Margin="2" Padding="6,3"/>
+                                    <Button Content="Teğet" Click="TangentRelation_Click" Margin="2" Padding="6,3"/>
+                                    <Button Content="Simetrik" Click="SymmetricRelation_Click" Margin="2" Padding="6,3" ToolTip="İki nokta ve bir merkez çizgisi seçin; noktaları eksene göre parametrik simetrik yapar."/>
                                     <Button Content="Sabitle" Margin="0,0,4,4" Click="FixRelation_Click"/>
                                 </WrapPanel>
 
@@ -134,13 +410,516 @@
                                 <Button Content="Seçili Ölçüyü Düzenle" Margin="0,4,0,0" Click="EditSelectedDimension_Click"/>
                             </StackPanel>
 
+                            <StackPanel x:Name="AssemblyMovePanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Konum X / Y / Z (mm)" FontWeight="Bold"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,8">
+                                    <TextBox x:Name="AssemblyMoveX" Width="70"/>
+                                    <TextBox x:Name="AssemblyMoveY" Width="70" Margin="4,0,0,0"/>
+                                    <TextBox x:Name="AssemblyMoveZ" Width="70" Margin="4,0,0,0"/>
+                                </StackPanel>
+                                <TextBlock Text="Döndürme Rx / Ry / Rz (°)" FontWeight="Bold"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,8">
+                                    <TextBox x:Name="AssemblyRotateX" Width="70"/>
+                                    <TextBox x:Name="AssemblyRotateY" Width="70" Margin="4,0,0,0"/>
+                                    <TextBox x:Name="AssemblyRotateZ" Width="70" Margin="4,0,0,0"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="✓" Width="52" Height="34" Click="AssemblyMoveOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="AssemblyMoveCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="AssemblyMatePanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Bileşen A" FontWeight="Bold"/>
+                                <ComboBox x:Name="AssemblyMateA" Margin="0,4,0,4"/>
+                                <ComboBox x:Name="AssemblyMateAReference" Margin="0,0,0,4" ToolTip="Orijin, standart düzlem veya eksen referansı" SelectionChanged="AssemblyMateReferenceChanged"/>
+                                <Button Content="Seçili Yüzü A Referansı Yap" Click="AssemblyCaptureMateA_Click" Margin="0,0,0,4"/>
+                                <TextBlock x:Name="AssemblyMateAReferenceText" Text="Standart referans" TextWrapping="Wrap" Foreground="#5F6B76" Margin="0,0,0,8"/>
+                                <TextBlock Text="Bileşen B" FontWeight="Bold"/>
+                                <ComboBox x:Name="AssemblyMateB" Margin="0,4,0,4"/>
+                                <ComboBox x:Name="AssemblyMateBReference" Margin="0,0,0,4" ToolTip="Orijin, standart düzlem veya eksen referansı" SelectionChanged="AssemblyMateReferenceChanged"/>
+                                <Button Content="Seçili Yüzü B Referansı Yap" Click="AssemblyCaptureMateB_Click" Margin="0,0,0,4"/>
+                                <TextBlock x:Name="AssemblyMateBReferenceText" Text="Standart referans" TextWrapping="Wrap" Foreground="#5F6B76" Margin="0,0,0,8"/>
+                                <TextBlock Text="İlişki Tipi" FontWeight="Bold"/>
+                                <ComboBox x:Name="AssemblyMateType" Margin="0,4,0,8"/>
+                                <TextBlock Text="Mesafe / Açı Değeri" FontWeight="Bold"/>
+                                <TextBox x:Name="AssemblyMateValue" Margin="0,4,0,8"/>
+                                <TextBlock Text="Coincident / Parallel / Perpendicular / Concentric / Distance / Angle ilişkileri standart referansların veya gerçek düzlemsel/silindirik yüzlerin 3B çerçevelerini çözer." TextWrapping="Wrap" Foreground="#5F6B76" Margin="0,0,0,8"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="✓" Width="52" Height="34" Click="AssemblyMateOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="AssemblyMateCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="AssemblyPatternPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock x:Name="AssemblyPatternTitle" Text="Bileşen Dizilimi" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <TextBlock Text="Adet"/>
+                                <TextBox x:Name="AssemblyPatternCount" Margin="0,4,0,8"/>
+                                <TextBlock x:Name="AssemblyPatternValueLabel" Text="Aralık (mm)"/>
+                                <TextBox x:Name="AssemblyPatternValue" Margin="0,4,0,8"/>
+                                <CheckBox x:Name="AssemblyPatternCircular" Content="Dairesel" IsHitTestVisible="False" Margin="0,0,0,8"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="✓" Width="52" Height="34" Click="AssemblyPatternOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="AssemblyPatternCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="DrawingViewPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Teknik Resim Görünüşü" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <TextBlock Text="Ad"/>
+                                <TextBox x:Name="DrawingViewName" Margin="0,4,0,8"/>
+                                <TextBlock Text="Sayfa Konumu X / Y (mm)"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,8">
+                                    <TextBox x:Name="DrawingViewX" Width="90"/>
+                                    <TextBox x:Name="DrawingViewY" Width="90" Margin="4,0,0,0"/>
+                                </StackPanel>
+                                <TextBlock Text="Ölçek"/>
+                                <TextBox x:Name="DrawingViewScale" Margin="0,4,0,8"/>
+                                <TextBlock x:Name="DrawingViewInfo" TextWrapping="Wrap" Foreground="#5F6B76" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="DrawingViewError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="DrawingViewOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="DrawingViewCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="DrawingAnnotationPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Not / Ölçü" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <TextBlock Text="Metin"/>
+                                <TextBox x:Name="DrawingAnnotationText" Margin="0,4,0,8" AcceptsReturn="True" MinHeight="54"/>
+                                <TextBlock Text="Sayfa Konumu X / Y (mm)"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,8">
+                                    <TextBox x:Name="DrawingAnnotationX" Width="90"/>
+                                    <TextBox x:Name="DrawingAnnotationY" Width="90" Margin="4,0,0,0"/>
+                                </StackPanel>
+                                <TextBlock x:Name="DrawingAnnotationError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="DrawingAnnotationOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="DrawingAnnotationCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="SheetBendPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Çizilmiş Büküm" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <TextBlock Text="Büküm Açısı (°)"/>
+                                <TextBox x:Name="SheetBendAngle" TextChanged="SheetBendParameterChanged" Margin="0,4,0,8"/>
+                                <CheckBox x:Name="SheetBendReverse" Content="Yönü Ters Çevir" Checked="SheetBendParameterChanged" Unchecked="SheetBendParameterChanged" Margin="0,0,0,8"/>
+                                <TextBlock Text="Büküm Çizimi" FontWeight="Bold"/>
+                                <TextBlock x:Name="SheetBendSketchText" TextWrapping="Wrap" Margin="0,4,0,8"/>
+                                <TextBlock Text="Sketch tam bir normal çizgi içermelidir; çizgi gerçek 3B büküm eksenidir." Foreground="#5F6B76" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="SheetBendError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="SheetBendOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="SheetBendCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="SheetFlattenPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock x:Name="SheetFlattenTitle" Text="Açınım" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <TextBlock Text="Büküm Seti" FontWeight="Bold"/>
+                                <TextBlock x:Name="SheetFlattenSummary" TextWrapping="Wrap" Margin="0,4,0,8"/>
+                                <TextBlock Text="Tüm aktif bükümler parametrik sıraya göre birlikte açılır/yeniden katlanır." Foreground="#5F6B76" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="SheetFlattenError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="SheetFlattenOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="SheetFlattenCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="StructuralTrimPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Profil Kırp / Uzat" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <TextBlock Text="Kırpma Düzlemi" FontWeight="Bold"/>
+                                <TextBlock x:Name="StructuralTrimPlaneText" TextWrapping="Wrap" Margin="0,4,0,8"/>
+                                <CheckBox x:Name="StructuralTrimKeepPositive" Content="Pozitif Tarafı Koru" Checked="StructuralTrimParameterChanged" Unchecked="StructuralTrimParameterChanged" Margin="0,0,0,8"/>
+                                <TextBlock Text="Seçili düzlem gövdeyi iki tarafa ayırır; seçilen yarı gerçek B-Rep olarak tutulur." Foreground="#5F6B76" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="StructuralTrimError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="StructuralTrimOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="StructuralTrimCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="SpatialSketchPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="3B Çizim / Yol" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <TextBlock Text="Yeni Nokta X / Y / Z (mm)"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,8">
+                                    <TextBox x:Name="SpatialPointX" Width="70" Text="0"/>
+                                    <TextBox x:Name="SpatialPointY" Width="70" Margin="4,0,0,0" Text="0"/>
+                                    <TextBox x:Name="SpatialPointZ" Width="70" Margin="4,0,0,0" Text="0"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                    <Button Content="Nokta Ekle" Click="SpatialPointAdd_Click" Padding="8,4"/>
+                                    <Button Content="Seçimden Ekle" Click="SpatialPointFromSelection_Click" Padding="8,4" Margin="6,0,0,0"
+                                            ToolTip="Seçili gerçek köşeyi veya seçili düzlemsel yüz üzerindeki imleç noktasını 3B yola ekler."/>
+                                    <Button Content="Son Noktayı Sil" Click="SpatialPointRemove_Click" Padding="8,4" Margin="6,0,0,0"/>
+                                </StackPanel>
+                                <CheckBox x:Name="SpatialClosed" Content="Yolu Kapat" Margin="0,0,0,8" Checked="SpatialSketchChanged" Unchecked="SpatialSketchChanged"/>
+                                <TextBlock Text="Noktalar" FontWeight="Bold"/>
+                                <TextBlock x:Name="SpatialPointList" Text="Henüz nokta yok." TextWrapping="Wrap" Margin="0,4,0,8"/>
+                                <TextBlock x:Name="SpatialSketchError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="SpatialSketchOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="SpatialSketchCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="SplitBodyPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Gövdeyi Böl" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <TextBlock Text="Bölme Düzlemi" FontWeight="Bold"/>
+                                <TextBlock x:Name="SplitBodyPlaneText" TextWrapping="Wrap" Margin="0,4,0,8"/>
+                                <TextBlock Text="Her iki taraf ayrı katı olarak tek multibody B-Rep içinde korunur." Foreground="#5F6B76" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="SplitBodyError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="✓" Width="52" Height="34" Click="SplitBodyOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="AdvancedBodyCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="SketchPatternPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Çizim Güdümlü Dizilim" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <TextBlock Text="Nokta Çizimi" FontWeight="Bold"/>
+                                <ComboBox x:Name="SketchPatternSketch" SelectionChanged="SketchPatternParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock Text="Origin dışındaki sketch noktaları gövde kopyalarının gerçek 3B ofsetleridir." Foreground="#5F6B76" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="SketchPatternError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="✓" Width="52" Height="34" Click="SketchPatternOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="AdvancedBodyCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="BodyBooleanPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Gövde Boolean" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <TextBlock Text="Gövde A"/><ComboBox x:Name="BooleanBodyA" SelectionChanged="BodyBooleanParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock Text="Gövde B"/><ComboBox x:Name="BooleanBodyB" SelectionChanged="BodyBooleanParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock Text="İşlem"/><ComboBox x:Name="BooleanOperation" SelectionChanged="BodyBooleanParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock x:Name="BodyBooleanError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="BodyBooleanOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="AdvancedBodyCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="MoveCopyBodyPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Gövdeyi Taşı / Kopyala" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <TextBlock Text="Taşıma X / Y / Z (mm)"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,8">
+                                    <TextBox x:Name="MoveBodyX" Width="70" TextChanged="MoveCopyBodyParameterChanged"/>
+                                    <TextBox x:Name="MoveBodyY" Width="70" Margin="4,0,0,0" TextChanged="MoveCopyBodyParameterChanged"/>
+                                    <TextBox x:Name="MoveBodyZ" Width="70" Margin="4,0,0,0" TextChanged="MoveCopyBodyParameterChanged"/>
+                                </StackPanel>
+                                <TextBlock Text="Döndürme Rx / Ry / Rz (°)"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,8">
+                                    <TextBox x:Name="MoveBodyRx" Width="70" TextChanged="MoveCopyBodyParameterChanged"/>
+                                    <TextBox x:Name="MoveBodyRy" Width="70" Margin="4,0,0,0" TextChanged="MoveCopyBodyParameterChanged"/>
+                                    <TextBox x:Name="MoveBodyRz" Width="70" Margin="4,0,0,0" TextChanged="MoveCopyBodyParameterChanged"/>
+                                </StackPanel>
+                                <CheckBox x:Name="MoveBodyKeepOriginal" Content="Orijinal Gövdeyi Koru (Kopyala)" Checked="MoveCopyBodyParameterChanged" Unchecked="MoveCopyBodyParameterChanged" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="MoveCopyBodyError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="✓" Width="52" Height="34" Click="MoveCopyBodyOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="AdvancedBodyCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="DomePanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Kubbe" FontWeight="Bold"/>
+                                <TextBlock Text="Yükseklik (mm)" Margin="0,6,0,0"/>
+                                <TextBox x:Name="DomeHeight" TextChanged="DomeParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock x:Name="DomeSelectionText" Text="Düzlemsel yüz seçin." TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="DomeError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="✓" Width="52" Height="34" Click="DomeOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="AdvancedBodyCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="HoleWizardPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Delik Sihirbazı" FontWeight="Bold"/>
+                                <TextBlock Text="Tip" Margin="0,6,0,0"/>
+                                <ComboBox x:Name="HoleWizardTypeBox" SelectionChanged="HoleWizardParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock Text="Delik Çapı / Derinliği (mm)"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,8">
+                                    <TextBox x:Name="HoleWizardDiameter" Width="100" TextChanged="HoleWizardParameterChanged"/>
+                                    <TextBox x:Name="HoleWizardDepth" Width="100" Margin="6,0,0,0" TextChanged="HoleWizardParameterChanged"/>
+                                </StackPanel>
+                                <TextBlock Text="Havşa Çapı / Derinliği (mm)"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,8">
+                                    <TextBox x:Name="HoleWizardCounterDiameter" Width="100" TextChanged="HoleWizardParameterChanged"/>
+                                    <TextBox x:Name="HoleWizardCounterDepth" Width="100" Margin="6,0,0,0" TextChanged="HoleWizardParameterChanged"/>
+                                </StackPanel>
+                                <CheckBox x:Name="HoleWizardReverse" Content="Yönü Ters Çevir" Checked="HoleWizardParameterChanged" Unchecked="HoleWizardParameterChanged" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="HoleWizardSelectionText" Text="Düzlemsel yüz seçin ve delik merkezini tıklayın." TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="HoleWizardError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="✓" Width="52" Height="34" Click="HoleWizardOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="AdvancedBodyCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="GraphFeaturePanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Derinlik (mm)"/>
+                                <TextBox x:Name="GraphDepth" TextChanged="GraphParameterChanged" Margin="0,4,0,8"/>
+                                <CheckBox x:Name="GraphThroughAll" Content="Tümünden Geç" Checked="GraphParameterChanged" Unchecked="GraphParameterChanged"/>
+                                <CheckBox x:Name="GraphReverse" Content="Yönü Ters Çevir" Checked="GraphParameterChanged" Unchecked="GraphParameterChanged" Margin="0,8"/>
+                                <CheckBox x:Name="GraphMidPlane" Content="Orta Düzlem" Checked="GraphParameterChanged" Unchecked="GraphParameterChanged" Margin="0,0,0,6"/>
+                                <CheckBox x:Name="GraphDirection2Enabled" Content="İkinci Yön" Checked="GraphParameterChanged" Unchecked="GraphParameterChanged" Margin="0,0,0,4"/>
+                                <TextBlock x:Name="GraphDirection2Label" Text="İkinci Yön Derinliği (mm)"/>
+                                <TextBox x:Name="GraphDirection2Depth" TextChanged="GraphParameterChanged" Margin="0,4,0,8"/>
+                                <CheckBox x:Name="GraphMergeResult" Content="Sonucu Birleştir" IsChecked="True" Checked="GraphParameterChanged" Unchecked="GraphParameterChanged" Margin="0,0,0,8"/>
+                                <CheckBox x:Name="GraphUpToFace" Content="Yüzeye Kadar" Checked="GraphParameterChanged" Unchecked="GraphParameterChanged" Margin="0,0,0,4"/>
+                                <Button x:Name="GraphCaptureUpToFace" Content="Seçili Yüzü Hedef Yap" Click="GraphCaptureUpToFace_Click" Margin="0,0,0,4"/>
+                                <TextBlock x:Name="GraphUpToFaceTarget" Text="Hedef yüz seçilmedi" TextWrapping="Wrap" Foreground="#5F6B76" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="GraphFeatureError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="GraphFeatureOk_Click" x:Name="GraphAcceptButton"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="GraphFeatureCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+                            <StackPanel x:Name="EdgeFeaturePanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock x:Name="EdgeFeatureValueLabel" Text="Değer (mm)" FontWeight="Bold"/>
+                                <TextBox x:Name="EdgeFeatureValue" TextChanged="EdgeFeatureParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock Text="Seçili Kenarlar" FontWeight="Bold"/>
+                                <TextBlock x:Name="EdgeFeatureSelectionText" Text="Kenar seçilmedi" TextWrapping="Wrap" Margin="0,4,0,8"/>
+                                <TextBlock Text="Kenarları art arda tıklayarak çoklu seçebilirsiniz; Ctrl gerekmez. Seçim değiştikçe gerçek B-Rep önizleme yeniden oluşturulur." TextWrapping="Wrap" Foreground="#5F6B76" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="EdgeFeatureError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="EdgeFeatureOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="EdgeFeatureCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="HoleFeaturePanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Delik Çapı (mm)" FontWeight="Bold"/>
+                                <TextBox x:Name="HoleDiameter" TextChanged="HoleFeatureParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock Text="Derinlik (mm)" FontWeight="Bold"/>
+                                <TextBox x:Name="HoleDepth" TextChanged="HoleFeatureParameterChanged" Margin="0,4,0,8"/>
+                                <CheckBox x:Name="HoleThroughAll" Content="Tümünden Geç" Checked="HoleFeatureParameterChanged" Unchecked="HoleFeatureParameterChanged" Margin="0,0,0,8"/>
+                                <CheckBox x:Name="HoleReverse" Content="Yönü Ters Çevir" Checked="HoleFeatureParameterChanged" Unchecked="HoleFeatureParameterChanged" Margin="0,0,0,8"/>
+                                <TextBlock Text="Konum / Destek" FontWeight="Bold"/>
+                                <TextBlock x:Name="HoleSelectionText" Text="Düzlemsel yüz seçin ve konumu tıklayın." TextWrapping="Wrap" Margin="0,4,0,8"/>
+                                <TextBlock x:Name="HoleFeatureError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="HoleFeatureOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="HoleFeatureCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="RevolveFeaturePanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Döndürme Açısı (°)" FontWeight="Bold"/>
+                                <TextBox x:Name="RevolveAngle" TextChanged="RevolveFeatureParameterChanged" Margin="0,4,0,8"/>
+                                <CheckBox x:Name="RevolveReverse" Content="Yönü Ters Çevir" Checked="RevolveFeatureParameterChanged" Unchecked="RevolveFeatureParameterChanged" Margin="0,0,0,8"/>
+                                <TextBlock Text="Eksen" FontWeight="Bold"/>
+                                <TextBlock x:Name="RevolveAxisText" Text="Çizimde tek bir Merkez Çizgisi gerekir." TextWrapping="Wrap" Margin="0,4,0,8"/>
+                                <TextBlock x:Name="RevolveFeatureError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="RevolveFeatureOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="RevolveFeatureCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="MultiSketchFeaturePanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock x:Name="MultiSketchFeatureTitle" Text="Süpürme / Loft" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <TextBlock Text="Profil 1"/>
+                                <ComboBox x:Name="MultiProfile1" SelectionChanged="MultiSketchFeatureParameterChanged" Margin="0,4,0,8"/>
+                                <StackPanel x:Name="MultiProfile2Panel" Visibility="Collapsed">
+                                    <TextBlock Text="Profil 2"/>
+                                    <ComboBox x:Name="MultiProfile2" SelectionChanged="MultiSketchFeatureParameterChanged" Margin="0,4,0,8"/>
+                                </StackPanel>
+                                <StackPanel x:Name="MultiPathPanel" Visibility="Collapsed">
+                                    <TextBlock Text="Yol Çizimi"/>
+                                    <ComboBox x:Name="MultiPath" SelectionChanged="MultiSketchFeatureParameterChanged" Margin="0,4,0,8"/>
+                                </StackPanel>
+                                <TextBlock x:Name="MultiSketchFeatureInfo" TextWrapping="Wrap" Foreground="#5F6B76" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="MultiSketchFeatureError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="MultiSketchFeatureOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="MultiSketchFeatureCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="ShellFeaturePanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Kabuk Kalınlığı (mm)" FontWeight="Bold"/>
+                                <TextBox x:Name="ShellThickness" TextChanged="ShellFeatureParameterChanged" Margin="0,4,0,8"/>
+                                <CheckBox x:Name="ShellOutward" Content="Dışa Doğru Kalınlaştır" Checked="ShellFeatureParameterChanged" Unchecked="ShellFeatureParameterChanged" Margin="0,0,0,8"/>
+                                <TextBlock Text="Açılacak Yüzler" FontWeight="Bold"/>
+                                <TextBlock x:Name="ShellSelectionText" Text="En az bir yüz seçin." TextWrapping="Wrap" Margin="0,4,0,8"/>
+                                <TextBlock Text="Yüzleri art arda tıklayarak çoklu seçebilirsiniz; Ctrl gerekmez." Foreground="#5F6B76" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="ShellFeatureError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="ShellFeatureOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="ShellFeatureCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="DraftFeaturePanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Draft Açısı (°)" FontWeight="Bold"/>
+                                <TextBox x:Name="DraftAngle" TextChanged="DraftFeatureParameterChanged" Margin="0,4,0,8"/>
+                                <CheckBox x:Name="DraftReverse" Content="Açıyı Ters Çevir" Checked="DraftFeatureParameterChanged" Unchecked="DraftFeatureParameterChanged" Margin="0,0,0,8"/>
+                                <TextBlock Text="Nötr Düzlem" FontWeight="Bold"/>
+                                <TextBlock x:Name="DraftNeutralPlaneText" Text="Aktif düzlem" TextWrapping="Wrap" Margin="0,4,0,8"/>
+                                <TextBlock Text="Draft Uygulanacak Yüzler" FontWeight="Bold"/>
+                                <TextBlock x:Name="DraftSelectionText" Text="En az bir yüz seçin." TextWrapping="Wrap" Margin="0,4,0,8"/>
+                                <TextBlock Text="Yüzleri art arda tıklayarak çoklu seçebilirsiniz; Ctrl gerekmez. Nötr düzlem, komut başlatılırken aktif olan Ön/Üst/Sağ düzlemdir." Foreground="#5F6B76" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="DraftFeatureError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="DraftFeatureOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="DraftFeatureCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="RibFeaturePanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Nervür Kalınlığı (mm)" FontWeight="Bold"/>
+                                <TextBox x:Name="RibThickness" TextChanged="RibFeatureParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock Text="Yükseklik / Derinlik (mm)" FontWeight="Bold"/>
+                                <TextBox x:Name="RibDepth" TextChanged="RibFeatureParameterChanged" Margin="0,4,0,8"/>
+                                <CheckBox x:Name="RibReverse" Content="Yönü Ters Çevir" Checked="RibFeatureParameterChanged" Unchecked="RibFeatureParameterChanged" Margin="0,0,0,8"/>
+                                <TextBlock Text="Kaynak Çizim" FontWeight="Bold"/>
+                                <TextBlock x:Name="RibSketchText" Text="Açık çizgi sketch'i seçilmedi." TextWrapping="Wrap" Margin="0,4,0,8"/>
+                                <TextBlock Text="Sketch en az bir normal (construction olmayan) çizgi içermeli ve nervür taban katıya temas etmelidir." Foreground="#5F6B76" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="RibFeatureError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="RibFeatureOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="RibFeatureCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="ReferenceGeometryPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock x:Name="ReferenceGeometryTypeText" Text="Referans Geometri" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <StackPanel x:Name="ReferencePlaneEditor" Visibility="Collapsed">
+                                    <TextBlock Text="Taban Düzlem"/>
+                                    <TextBlock x:Name="ReferencePlaneBaseText" TextWrapping="Wrap" Margin="0,4,0,8"/>
+                                    <TextBlock Text="Ofset (mm)"/>
+                                    <TextBox x:Name="ReferencePlaneOffset" TextChanged="ReferenceGeometryParameterChanged" Margin="0,4,0,8"/>
+                                </StackPanel>
+                                <StackPanel x:Name="ReferenceAxisEditor" Visibility="Collapsed">
+                                    <TextBlock Text="Başlangıç Noktası X / Y / Z (mm)"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,8">
+                                        <TextBox x:Name="ReferenceAxisX" Width="70" TextChanged="ReferenceGeometryParameterChanged"/>
+                                        <TextBox x:Name="ReferenceAxisY" Width="70" Margin="4,0,0,0" TextChanged="ReferenceGeometryParameterChanged"/>
+                                        <TextBox x:Name="ReferenceAxisZ" Width="70" Margin="4,0,0,0" TextChanged="ReferenceGeometryParameterChanged"/>
+                                    </StackPanel>
+                                    <TextBlock Text="Yön X / Y / Z"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,8">
+                                        <TextBox x:Name="ReferenceAxisDx" Width="70" TextChanged="ReferenceGeometryParameterChanged"/>
+                                        <TextBox x:Name="ReferenceAxisDy" Width="70" Margin="4,0,0,0" TextChanged="ReferenceGeometryParameterChanged"/>
+                                        <TextBox x:Name="ReferenceAxisDz" Width="70" Margin="4,0,0,0" TextChanged="ReferenceGeometryParameterChanged"/>
+                                    </StackPanel>
+                                </StackPanel>
+                                <StackPanel x:Name="ReferencePointEditor" Visibility="Collapsed">
+                                    <TextBlock Text="Nokta X / Y / Z (mm)"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,8">
+                                        <TextBox x:Name="ReferencePointX" Width="70" TextChanged="ReferenceGeometryParameterChanged"/>
+                                        <TextBox x:Name="ReferencePointY" Width="70" Margin="4,0,0,0" TextChanged="ReferenceGeometryParameterChanged"/>
+                                        <TextBox x:Name="ReferencePointZ" Width="70" Margin="4,0,0,0" TextChanged="ReferenceGeometryParameterChanged"/>
+                                    </StackPanel>
+                                </StackPanel>
+                                <TextBlock x:Name="ReferenceGeometryError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="ReferenceGeometryOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="ReferenceGeometryCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="MirrorFeaturePanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Ayna Düzlemi" FontWeight="Bold"/>
+                                <TextBlock x:Name="MirrorPlaneText" Text="Düzlem seçilmedi" TextWrapping="Wrap" Margin="0,4,0,8"/>
+                                <CheckBox x:Name="MirrorKeepOriginal" Content="Orijinal Gövdeyi Koru" Checked="MirrorFeatureParameterChanged" Unchecked="MirrorFeatureParameterChanged" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="MirrorFeatureError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="MirrorFeatureOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="MirrorFeatureCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="PatternFeaturePanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock x:Name="PatternFeatureTitle" Text="Dizilim" FontWeight="Bold"/>
+                                <TextBlock Text="Adet" Margin="0,6,0,0"/>
+                                <TextBox x:Name="PatternCount" TextChanged="PatternFeatureParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock x:Name="PatternValueLabel" Text="Aralık (mm)"/>
+                                <TextBox x:Name="PatternValue" TextChanged="PatternFeatureParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock Text="Referans Yön / Eksen" FontWeight="Bold"/>
+                                <TextBlock x:Name="PatternReferenceText" TextWrapping="Wrap" Margin="0,4,0,8"/>
+                                <TextBlock x:Name="PatternFeatureError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="PatternFeatureOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="PatternFeatureCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="EdgeFlangePanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Kenar Flanşı" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="EdgeFlangeLengthLabel" Text="Flanş Uzunluğu (mm)"/>
+                                <TextBox x:Name="EdgeFlangeLength" TextChanged="EdgeFlangeParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock x:Name="EdgeFlangeAngleLabel" Text="Açı (°)"/>
+                                <TextBox x:Name="EdgeFlangeAngle" TextChanged="EdgeFlangeParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock x:Name="EdgeFlangeThicknessLabel" Text="Sac Kalınlığı (mm)"/>
+                                <TextBox x:Name="EdgeFlangeThickness" TextChanged="EdgeFlangeParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock x:Name="EdgeFlangeBendRadiusLabel" Text="Büküm Yarıçapı (mm)"/>
+                                <TextBox x:Name="EdgeFlangeBendRadius" TextChanged="EdgeFlangeParameterChanged" Margin="0,4,0,8"/>
+                                <CheckBox x:Name="EdgeFlangeReverse" Content="Flanş Yönünü Ters Çevir" Checked="EdgeFlangeParameterChanged" Unchecked="EdgeFlangeParameterChanged" Margin="0,0,0,8"/>
+                                <TextBlock Text="Seçili Kenarlar" FontWeight="Bold"/>
+                                <TextBlock x:Name="EdgeFlangeSelectionText" Text="Doğrusal sac kenarı seçin." TextWrapping="Wrap" Margin="0,4,0,8"/>
+                                <TextBlock Text="Kenarları art arda tıklayarak çoklu seçebilirsiniz; Ctrl gerekmez. Geometri seçilen kenarın komşu sac yüzünden yönünü otomatik çıkarır." Foreground="#5F6B76" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="EdgeFlangeError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="EdgeFlangeOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="EdgeFlangeCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="EndCapPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Uç Kapağı Kalınlığı (mm)" FontWeight="Bold"/>
+                                <TextBox x:Name="EndCapThickness" TextChanged="EndCapParameterChanged" Margin="0,4,0,8"/>
+                                <CheckBox x:Name="EndCapReverse" Content="Yönü Ters Çevir" Checked="EndCapParameterChanged" Unchecked="EndCapParameterChanged" Margin="0,0,0,8"/>
+                                <TextBlock Text="Uç Yüzü" FontWeight="Bold"/>
+                                <TextBlock x:Name="EndCapSelectionText" Text="Düzlemsel uç yüzü seçin." TextWrapping="Wrap" Margin="0,4,0,8"/>
+                                <TextBlock x:Name="EndCapError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="EndCapOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="EndCapCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="SheetMetalConvertPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Sac'a Dönüştür" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <TextBlock Text="Sac Kalınlığı (mm)"/>
+                                <TextBox x:Name="ConvertSheetThickness" TextChanged="SheetMetalConvertParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock Text="Varsayılan Büküm Yarıçapı (mm)"/>
+                                <TextBox x:Name="ConvertSheetBendRadius" TextChanged="SheetMetalConvertParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock Text="K-Faktörü (0–1)"/>
+                                <TextBox x:Name="ConvertSheetKFactor" TextChanged="SheetMetalConvertParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock Text="Bu feature katıyı yeniden örneklemez; mevcut B-Rep'i sac parametreleriyle işaretler ve sonraki sac işlemlerinin bağımlılık kökü olur." Foreground="#5F6B76" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="SheetMetalConvertError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="SheetMetalConvertOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="SheetMetalConvertCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="SheetMetalBasePanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                <TextBlock Text="Taban Flanş" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <TextBlock Text="Sac Kalınlığı (mm)"/>
+                                <TextBox x:Name="SheetThickness" TextChanged="SheetMetalBaseParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock Text="Varsayılan Büküm Yarıçapı (mm)"/>
+                                <TextBox x:Name="SheetBendRadius" TextChanged="SheetMetalBaseParameterChanged" Margin="0,4,0,8"/>
+                                <TextBlock Text="K-Faktörü (0–1)"/>
+                                <TextBox x:Name="SheetKFactor" TextChanged="SheetMetalBaseParameterChanged" Margin="0,4,0,8"/>
+                                <CheckBox x:Name="SheetReverse" Content="Kalınlık Yönünü Ters Çevir" Checked="SheetMetalBaseParameterChanged" Unchecked="SheetMetalBaseParameterChanged" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="SheetMetalBaseInfo" TextWrapping="Wrap" Foreground="#5F6B76" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="SheetMetalBaseError" Foreground="#AA2020" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="✓" Width="52" Height="34" Click="SheetMetalBaseOk_Click"/>
+                                    <Button Content="✕" Width="52" Height="34" Margin="8,0,0,0" Click="SheetMetalBaseCancel_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+
                             <StackPanel x:Name="ExtrudePanel" Visibility="Collapsed" Margin="0,16,0,0">
                                 <TextBlock Text="Ekstrüzyon" FontWeight="Bold" Margin="0,0,0,8"/>
                                 <TextBlock Text="Derinlik (mm)"/>
                                 <TextBox x:Name="ExtrudeDepthTextBox" Text="20" Margin="0,4,0,4" TextChanged="ExtrudeDepth_TextChanged"/>
                                 <TextBlock Text="Mouse tekeri: ±10 mm" Foreground="#5F6B76" Margin="0,0,0,10"/>
                                 <StackPanel Orientation="Horizontal">
-                                    <Button Content="✓" FontSize="18" Width="52" Height="34" Margin="0,0,8,0" Click="ExtrudeOk_Click"/>
+                                    <Button Content="✓" FontSize="18" Width="52" Height="34" Margin="0,0,8,0" Click="ExtrudeOk_Click" x:Name="ExtrudeAcceptButton"/>
                                     <Button Content="✕" FontSize="18" Width="52" Height="34" Click="ExtrudeCancel_Click"/>
                                 </StackPanel>
                             </StackPanel>
@@ -159,11 +938,31 @@
                 <Border Grid.Row="0" Background="#F9FBFC" BorderBrush="#C8D2DA" BorderThickness="0,0,0,1">
                     <DockPanel Margin="8,2">
                         <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
-                            <Button Style="{StaticResource HeadButton}" Content="Fit" Click="Fit_Click"/>
+                            <Button Style="{StaticResource HeadButton}" Content="Fit" Click="Fit_Click" ToolTip="Ekrana Sığdır (F)"/>
+                            <Button Style="{StaticResource HeadButton}" Content="Dik Bak" Click="NormalTo_Click" ToolTip="Seçili düzlemsel yüze/düzleme dik bak (Ctrl+8)"/>
+                            <Button Style="{StaticResource HeadButton}" Content="Görünüş ▾" Click="CommandFamily_Click" ToolTip="Standart görünüş yönleri (Space)">
+                                <Button.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="İzometrik" Click="Iso_Click"/>
+                                        <Separator/>
+                                        <MenuItem Header="Ön" Click="Front_Click"/>
+                                        <MenuItem Header="Arka" Click="Back_Click"/>
+                                        <MenuItem Header="Üst" Click="Top_Click"/>
+                                        <MenuItem Header="Alt" Click="Bottom_Click"/>
+                                        <MenuItem Header="Sağ" Click="Right_Click"/>
+                                        <MenuItem Header="Sol" Click="Left_Click"/>
+                                    </ContextMenu>
+                                </Button.ContextMenu>
+                            </Button>
                             <Button Style="{StaticResource HeadButton}" Content="ISO" Click="Iso_Click"/>
                             <Button Style="{StaticResource HeadButton}" Content="Ön" Click="Front_Click"/>
                             <Button Style="{StaticResource HeadButton}" Content="Üst" Click="Top_Click"/>
                             <Button Style="{StaticResource HeadButton}" Content="Sağ" Click="Right_Click"/>
+                            <Separator Margin="6,4"/>
+                            <TextBlock Text="Görünüm:" VerticalAlignment="Center" Margin="2,0,4,0"/>
+                            <Button Style="{StaticResource HeadButton}" Content="Gölge+Kenar" Click="ShadedEdges_Click" ToolTip="Katı gölgelendirme + kenarlar"/>
+                            <Button Style="{StaticResource HeadButton}" Content="Gölge" Click="Shaded_Click" ToolTip="Yalnız gölgeli yüzey"/>
+                            <Button Style="{StaticResource HeadButton}" Content="Tel" Click="Wireframe_Click" ToolTip="Tel kafes"/>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
                             <TextBlock Text="Seçim:" VerticalAlignment="Center" Margin="12,0,4,0"/>
@@ -181,10 +980,17 @@
 
         <Border Grid.Row="4" Background="#F9FBFC" BorderBrush="#C7D0D8" BorderThickness="0,1,0,0">
             <Grid Margin="8,0">
-                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
                 <TextBlock x:Name="StatusText" Text="SrcCad hazır" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="1" Text="mm" VerticalAlignment="Center" Foreground="#51606C"/>
+                <TextBlock x:Name="MeasureStatusText" Grid.Column="1" Text="" VerticalAlignment="Center"
+                           FontWeight="SemiBold" Foreground="#1F5E8C" Margin="12,0,12,0"/>
+                <TextBlock x:Name="StatusUnitText" Grid.Column="2" Text="mm" VerticalAlignment="Center" Foreground="#51606C"/>
             </Grid>
         </Border>
     </Grid>
 </Window>
+

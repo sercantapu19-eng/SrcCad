@@ -50,14 +50,46 @@ public abstract class SketchCommandBase : ISketchCommand
     }
 }
 
+public sealed class PointSketchCommand : SketchCommandBase
+{
+    public PointSketchCommand(SketchModel sketch) : base(sketch) { }
+    public override string Id => "sketch.point";
+    public override string Title => "Nokta";
+    public override bool HasPendingStep => false;
+
+    public override void Begin(CommandContext context)
+    {
+        base.Begin(context);
+        Context.SetStatus?.Invoke("Nokta: konumu seçin.");
+    }
+
+    public override void Pick(SketchPick pick)
+    {
+        var before=Sketch.Points.Count;
+        var id=ResolvePoint(pick);
+        if(Sketch.Points.Count==before)
+        {
+            Context.SetStatus?.Invoke(id==0?"Origin zaten mevcut.":"Seçilen konumda nokta zaten mevcut.");
+            return;
+        }
+        Changed("Çizim noktası oluşturuldu.");
+    }
+
+    public override IReadOnlyList<SketchPreviewPrimitive> Preview(Point2d cursor)
+        => Array.Empty<SketchPreviewPrimitive>();
+
+    public override void CancelStep() { }
+}
+
 public sealed class LineSketchCommand : SketchCommandBase
 {
     private int? _startPointId;
     private int? _chainFirstPointId;
 
-    public LineSketchCommand(SketchModel sketch) : base(sketch) { }
-    public override string Id => "sketch.line";
-    public override string Title => "Çizgi";
+    private readonly bool construction;
+    public LineSketchCommand(SketchModel sketch, bool construction = false) : base(sketch) { this.construction = construction; }
+    public override string Id => construction ? "sketch.centerline" : "sketch.line";
+    public override string Title => construction ? "Merkez Çizgisi" : "Çizgi";
     public override bool HasPendingStep => _startPointId.HasValue;
 
     public override void Begin(CommandContext context)
@@ -89,7 +121,7 @@ public sealed class LineSketchCommand : SketchCommandBase
             return;
         }
 
-        var newLine = Sketch.AddLine(_startPointId.Value, endId);
+        var newLine = Sketch.AddLine(_startPointId.Value, endId, construction);
         Sketch.AddAutomaticLineRelation(newLine.Id);
         var closes = _chainFirstPointId.HasValue &&
                      endId == _chainFirstPointId.Value &&
@@ -256,3 +288,4 @@ public sealed class CircleSketchCommand : SketchCommandBase
 
     public override void CancelStep() => _center = null;
 }
+

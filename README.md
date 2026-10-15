@@ -1,3 +1,20 @@
+> **Geliştirme durumu (2026-10-13): SrcCad geniş kapsamlı parametrik CAD geliştirme branch'inde.**
+>
+> Aktif branch: `dev/smart-dimension-core`.
+>
+> Çalışma alanları: **UNSURLAR, ÇİZİM, SAC LEVHA, PROFİLLER, MONTAJ, TEKNİK RESİM, ÖLÇÜM / İNCELEME**.
+> Feature graph; edit/suppress/rebuild; Undo/Redo; save/open; kalıcı OCCT kenar/yüz referansları;
+> montaj mate çözümü; teknik resim ilişkili ölçüleri; STEP/IGES ve DXF akışları kaynakta bulunuyor.
+>
+> **Tamamlandı iddiası için zorunlu kabul kapısı:** Windows makinede `VERIFY_ALL.bat`.
+> Bu komut Debug + Release x64 solution build, managed regresyon, native C++/CLI + OCCT kabul testleri ve Release Windows UI interaction regresyonunu birlikte çalıştırır.
+> Sonuç `logs\verify-all.log` dosyasına; UI sonucu ayrıca `logs\windows-interaction.json` dosyasına yazılır. Bu kapı gerçek Windows ortamında PASS vermeden proje "%100 tamamlandı" kabul edilmez.
+>
+> `BASLAT.bat` günlük Release derleme + managed regresyon + uygulama başlatma akışıdır.
+> `VERIFY_ALL.bat` ise yayın/teslim öncesi tam kabul kapısıdır.
+>
+> SrcCad kendi marka ve görsel kimliğini kullanır; komut yerleşimi ve parametrik çalışma akışı deneyimli SolidWorks kullanıcılarının alışkanlıklarına yakın tutulur.
+
 # SrcCad V1.2 CAD Alpha
 
 Bu paket, SrcCad V1.1 Foundation testinin üzerine kurulan **ilk çizim yapılabilir OCCT sürümüdür**.
@@ -34,18 +51,6 @@ Eski `WpfPreviewKernel` kullanılmaz. Katı model ve seçim Open CASCADE (OCCT) 
 Merkez dikdörtgeni yalnız dört bağımsız çizgi olarak kaydedilmez. Modelde merkez noktası,
 dört köşe ve merkez-dikdörtgen tanımı tutulur; iki construction diagonal da gösterilir.
 Bu temel, V1.3 solver/Smart Dimension aşamasında merkez sabit kalacak driving dimension davranışı için hazırlanmıştır.
-
-## Bilerek henüz yok
-
-- Smart Dimension / driving dimension
-- DOF solver ve sketch relation çözümü
-- Cut / Revolve / Fillet vb.
-- Sac Levha
-- Profiller
-- Montaj
-- Teknik resim
-
-Çalışmayan komutlar aktif gösterilmez.
 
 ## Kurulum
 
@@ -157,3 +162,4 @@ Ekstrüzyon önizlemesi açıkken mouse tekeri:
 - minimum: 10 mm
 
 Normal modelleme modunda mouse tekeri yine zoom yapar.
+
