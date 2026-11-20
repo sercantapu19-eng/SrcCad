@@ -22,7 +22,16 @@ function Require-Command([string]$Name) {
 }
 
 $git = Require-Command "git"
-$cmake = Require-Command "cmake"
+$cmakeCommand = Get-Command "cmake" -ErrorAction SilentlyContinue
+if ($cmakeCommand) {
+    $cmake = $cmakeCommand.Source
+} else {
+    $cmakeCandidate = Get-ChildItem (Join-Path $AndroidSdk "cmake") -Filter "cmake.exe" -Recurse -ErrorAction SilentlyContinue |
+        Sort-Object FullName -Descending | Select-Object -First 1
+    if (-not $cmakeCandidate) { throw "CMake was not found. Install CMake from Android Studio SDK Manager or add cmake.exe to PATH." }
+    $cmake = $cmakeCandidate.FullName
+}
+
 $ninja = Get-Command "ninja" -ErrorAction SilentlyContinue
 if (-not $ninja) {
     $ninjaCandidate = Get-ChildItem (Join-Path $AndroidSdk "cmake") -Filter "ninja.exe" -Recurse -ErrorAction SilentlyContinue |
