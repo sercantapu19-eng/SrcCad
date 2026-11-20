@@ -194,7 +194,6 @@ bool intersectRayTriangle(
     return distance > 1.0e-9;
 }
 
-#if defined(SRCCAD_WITH_OCCT)
 bool pickExactBrepPoint(
     CadDocument& document, const double origin[3], const double direction[3], gp_Pnt& exactPoint) {
     if (!document.loaded || document.indices.size() < 3) return false;
