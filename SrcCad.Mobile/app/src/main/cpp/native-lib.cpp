@@ -6,9 +6,12 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <limits>
 
 #if defined(SRCCAD_WITH_OCCT)
 #include <BRepBndLib.hxx>
+#include <BRepBuilderAPI_MakeVertex.hxx>
+#include <BRepExtrema_DistShapeShape.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
 #include <BRep_Tool.hxx>
 #include <Bnd_Box.hxx>
@@ -33,13 +36,19 @@ struct CadDocument {
     double bounds[6] = {0, 0, 0, 0, 0, 0};
     int faceCount = 0;
     int triangleCount = 0;
+    std::vector<std::int32_t> triangleFaceIndices;
     bool loaded = false;
 #if defined(SRCCAD_WITH_OCCT)
     TopoDS_Shape shape;
+    std::vector<TopoDS_Face> faces;
 #endif
     void clear() {
         vertices.clear(); indices.clear();
         faceCount = 0; triangleCount = 0; loaded = false;
+        triangleFaceIndices.clear();
+#if defined(SRCCAD_WITH_OCCT)
+        faces.clear();
+#endif
         for (double& value : bounds) value = 0.0;
 #if defined(SRCCAD_WITH_OCCT)
         shape.Nullify();
@@ -103,6 +112,8 @@ std::string loadStep(CadDocument& document, const std::string& path) {
         const auto triangulation = BRep_Tool::Triangulation(face, location);
         if (triangulation.IsNull()) continue;
         ++document.faceCount;
+        const std::int32_t faceIndex = static_cast<std::int32_t>(document.faces.size());
+        document.faces.push_back(face);
         const auto& nodes = triangulation->Nodes();
         const auto& triangles = triangulation->Triangles();
 
@@ -133,6 +144,7 @@ std::string loadStep(CadDocument& document, const std::string& path) {
             document.indices.push_back(base);
             document.indices.push_back(base + 1);
             document.indices.push_back(base + 2);
+            document.triangleFaceIndices.push_back(faceIndex);
             ++document.triangleCount;
         }
     }
@@ -146,6 +158,69 @@ std::string loadStep(CadDocument& document, const std::string& path) {
     result << R"({"ok":true,"message":"STEP modeli yüklendi","faces":)" << document.faceCount
            << R"(,"triangles":)" << document.triangleCount << "}";
     return result.str();
+}
+
+bool intersectRayTriangle(
+    const double origin[3], const double direction[3],
+    const float* a, const float* b, const float* c,
+    double& distance) {
+    const double e1[3] = {b[0] - a[0], b[1] - a[1], b[2] - a[2]};
+    const double e2[3] = {c[0] - a[0], c[1] - a[1], c[2] - a[2]};
+    const double p[3] = {
+        direction[1] * e2[2] - direction[2] * e2[1],
+        direction[2] * e2[0] - direction[0] * e2[2],
+        direction[0] * e2[1] - direction[1] * e2[0]
+    };
+    const double determinant = e1[0] * p[0] + e1[1] * p[1] + e1[2] * p[2];
+    if (std::abs(determinant) < 1.0e-12) return false;
+    const double inverse = 1.0 / determinant;
+    const double tvec[3] = {origin[0] - a[0], origin[1] - a[1], origin[2] - a[2]};
+    const double u = (tvec[0] * p[0] + tvec[1] * p[1] + tvec[2] * p[2]) * inverse;
+    if (u < 0.0 || u > 1.0) return false;
+    const double q[3] = {
+        tvec[1] * e1[2] - tvec[2] * e1[1],
+        tvec[2] * e1[0] - tvec[0] * e1[2],
+        tvec[0] * e1[1] - tvec[1] * e1[0]
+    };
+    const double v = (direction[0] * q[0] + direction[1] * q[1] + direction[2] * q[2]) * inverse;
+    if (v < 0.0 || u + v > 1.0) return false;
+    distance = (e2[0] * q[0] + e2[1] * q[1] + e2[2] * q[2]) * inverse;
+    return distance > 1.0e-9;
+}
+
+#if defined(SRCCAD_WITH_OCCT)
+bool pickExactBrepPoint(
+    CadDocument& document, const double origin[3], const double direction[3], gp_Pnt& exactPoint) {
+    if (!document.loaded || document.indices.size() < 3) return false;
+    double nearest = std::numeric_limits<double>::max();
+    std::int32_t nearestFace = -1;
+
+    for (std::size_t triangle = 0; triangle < document.triangleFaceIndices.size(); ++triangle) {
+        const std::size_t offset = triangle * 3;
+        const std::int32_t ia = document.indices[offset];
+        const std::int32_t ib = document.indices[offset + 1];
+        const std::int32_t ic = document.indices[offset + 2];
+        const float* a = document.vertices.data() + static_cast<std::size_t>(ia) * 6;
+        const float* b = document.vertices.data() + static_cast<std::size_t>(ib) * 6;
+        const float* c = document.vertices.data() + static_cast<std::size_t>(ic) * 6;
+        double distance = 0.0;
+        if (intersectRayTriangle(origin, direction, a, b, c, distance) && distance < nearest) {
+            nearest = distance;
+            nearestFace = document.triangleFaceIndices[triangle];
+        }
+    }
+    if (nearestFace < 0 || static_cast<std::size_t>(nearestFace) >= document.faces.size()) return false;
+
+    const gp_Pnt approximate(
+        origin[0] + direction[0] * nearest,
+        origin[1] + direction[1] * nearest,
+        origin[2] + direction[2] * nearest);
+    const TopoDS_Vertex vertex = BRepBuilderAPI_MakeVertex(approximate).Vertex();
+    BRepExtrema_DistShapeShape projection(vertex, document.faces[static_cast<std::size_t>(nearestFace)]);
+    projection.Perform();
+    if (!projection.IsDone() || projection.NbSolution() < 1) return false;
+    exactPoint = projection.PointOnShape2(1);
+    return true;
 }
 #endif
 } // namespace
@@ -213,6 +288,52 @@ Java_com_srccad_mobile_NativeCadEngine_nativeGetIndices(JNIEnv* env, jobject, jl
                                reinterpret_cast<const jint*>(document->indices.data()));
     return result;
 }
+
+extern "C" JNIEXPORT jdoubleArray JNICALL
+Java_com_srccad_mobile_NativeCadEngine_nativePickRay(
+    JNIEnv* env, jobject, jlong handle, jdoubleArray javaOrigin, jdoubleArray javaDirection) {
+    CadDocument* document = fromHandle(handle);
+    if (document == nullptr || javaOrigin == nullptr || javaDirection == nullptr) return env->NewDoubleArray(0);
+    if (env->GetArrayLength(javaOrigin) < 3 || env->GetArrayLength(javaDirection) < 3) return env->NewDoubleArray(0);
+    double origin[3] = {0, 0, 0};
+    double direction[3] = {0, 0, 0};
+    env->GetDoubleArrayRegion(javaOrigin, 0, 3, origin);
+    env->GetDoubleArrayRegion(javaDirection, 0, 3, direction);
+    const double length = std::sqrt(direction[0] * direction[0] + direction[1] * direction[1] + direction[2] * direction[2]);
+    if (length <= 1.0e-12) return env->NewDoubleArray(0);
+    direction[0] /= length; direction[1] /= length; direction[2] /= length;
+#if defined(SRCCAD_WITH_OCCT)
+    try {
+        gp_Pnt point;
+        if (!pickExactBrepPoint(*document, origin, direction, point)) return env->NewDoubleArray(0);
+        const jdouble coordinates[3] = {point.X(), point.Y(), point.Z()};
+        jdoubleArray result = env->NewDoubleArray(3);
+        if (result != nullptr) env->SetDoubleArrayRegion(result, 0, 3, coordinates);
+        return result;
+    } catch (...) { return env->NewDoubleArray(0); }
+#else
+    return env->NewDoubleArray(0);
+#endif
+}
+
+extern "C" JNIEXPORT jdoubleArray JNICALL
+Java_com_srccad_mobile_NativeCadEngine_nativeMeasurePoints(
+    JNIEnv* env, jobject, jlong handle, jdoubleArray javaA, jdoubleArray javaB) {
+    if (fromHandle(handle) == nullptr || javaA == nullptr || javaB == nullptr ||
+        env->GetArrayLength(javaA) < 3 || env->GetArrayLength(javaB) < 3) return env->NewDoubleArray(0);
+    jdouble a[3] = {0, 0, 0};
+    jdouble b[3] = {0, 0, 0};
+    env->GetDoubleArrayRegion(javaA, 0, 3, a);
+    env->GetDoubleArrayRegion(javaB, 0, 3, b);
+    const double dx = b[0] - a[0];
+    const double dy = b[1] - a[1];
+    const double dz = b[2] - a[2];
+    const jdouble values[4] = {std::sqrt(dx * dx + dy * dy + dz * dz), dx, dy, dz};
+    jdoubleArray result = env->NewDoubleArray(4);
+    if (result != nullptr) env->SetDoubleArrayRegion(result, 0, 4, values);
+    return result;
+}
+
 extern "C" JNIEXPORT jdoubleArray JNICALL
 Java_com_srccad_mobile_NativeCadEngine_nativeGetBounds(JNIEnv* env, jobject, jlong handle) {
     CadDocument* document = fromHandle(handle);
