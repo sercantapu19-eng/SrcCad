@@ -4,19 +4,30 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val occtRoot = providers.gradleProperty("srccadOcctRoot").orNull
+    ?: System.getenv("SRCCAD_OCCT_ROOT")
+    ?: ""
+
 android {
     namespace = "com.srccad.mobile"
     compileSdk = 36
+    ndkVersion = "28.2.13676358"
 
     defaultConfig {
         applicationId = "com.srccad.mobile"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
         ndk { abiFilters += listOf("arm64-v8a") }
         externalNativeBuild {
-            cmake { cppFlags += listOf("-std=c++17") }
+            cmake {
+                cppFlags += listOf("-std=c++17", "-fexceptions", "-frtti")
+                arguments += listOf(
+                    "-DSRCCAD_ENABLE_OCCT=" + if (occtRoot.isBlank()) "OFF" else "ON",
+                    "-DSRCCAD_OCCT_ROOT=" + occtRoot
+                )
+            }
         }
     }
 
