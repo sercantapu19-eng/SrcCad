@@ -17,6 +17,8 @@ Android companion viewer for SrcCad. This project is isolated under `SrcCad.Mobi
 - Demo geometry is display-only; measurement stays disabled for the demo
 - Windows PowerShell script to cross-compile OCCT for Android arm64-v8a
 - Gradle 8.13 wrapper and one-click Windows build script
+- User-provided SrcCadWorks logo used for the in-app brand mark and Android launcher icons across density buckets
+- Responsive portrait/landscape layout with a collapsible information panel
 - OCCT LGPL 2.1 and Open CASCADE exception license texts under `app/src/main/assets/licenses/` for the STEP-enabled package
 
 ## Build status
