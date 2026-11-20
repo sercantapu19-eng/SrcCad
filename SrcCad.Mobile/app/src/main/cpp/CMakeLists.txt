@@ -24,13 +24,16 @@ if(SRCCAD_ENABLE_OCCT)
         message(FATAL_ERROR "SRCCAD_OCCT_ROOT is required when SRCCAD_ENABLE_OCCT=ON")
     endif()
 
-    find_path(SRCCAD_OCCT_INCLUDE_DIR
-        NAMES STEPControl_Reader.hxx
-        PATHS "${SRCCAD_OCCT_ROOT}/include/opencascade" "${SRCCAD_OCCT_ROOT}/include"
-        NO_DEFAULT_PATH
-    )
-    if(NOT SRCCAD_OCCT_INCLUDE_DIR)
-        message(FATAL_ERROR "Could not find STEPControl_Reader.hxx under ${SRCCAD_OCCT_ROOT}/include")
+    # Use the install-tree path directly. CMake's Android toolchain applies
+    # sysroot search re-rooting to find_path(); that can hide absolute host-side
+    # cross-compiled SDK include directories even though the files exist.
+    set(SRCCAD_OCCT_INCLUDE_DIR "${SRCCAD_OCCT_ROOT}/include/opencascade")
+    if(NOT EXISTS "${SRCCAD_OCCT_INCLUDE_DIR}/STEPControl_Reader.hxx")
+        set(SRCCAD_OCCT_INCLUDE_DIR "${SRCCAD_OCCT_ROOT}/include")
+    endif()
+    if(NOT EXISTS "${SRCCAD_OCCT_INCLUDE_DIR}/STEPControl_Reader.hxx")
+        message(FATAL_ERROR
+            "Could not find STEPControl_Reader.hxx in ${SRCCAD_OCCT_ROOT}/include/opencascade or /include")
     endif()
 
     file(GLOB SRCCAD_OCCT_SHARED_LIBS CONFIGURE_DEPENDS
