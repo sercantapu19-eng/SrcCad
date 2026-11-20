@@ -9,15 +9,17 @@
 - [x] Orbit, pan, pinch zoom and fit-view interaction
 - [x] Optional OCCT CMake integration and 16 KB ELF linker alignment
 - [x] Windows PowerShell OCCT Android build script
+- [x] Gradle 8.13 wrapper
 - [ ] Verify Gradle sync/build in Android Studio
 - [ ] Produce and install debug APK on Samsung Galaxy S22 Ultra
 
-## M1 — STEP viewing (first functional milestone)
+## M1 — STEP viewing
 - [x] STEPControl_Reader import path (compiled when OCCT is supplied)
 - [x] B-rep tessellation and bounding-box extraction path
+- [x] Mesh-based screen-ray hit test mapped back to the owning B-rep face
 - [ ] Build OCCT for Android arm64-v8a and link the libraries
 - [ ] Verify import with small, medium and large real STEP files
-- [ ] Verify the rendered mesh and camera interaction on-device
+- [ ] Verify rendered mesh and camera interaction on-device
 
 Acceptance:
 1. User selects a local .step/.stp file.
@@ -28,11 +30,12 @@ Acceptance:
 6. Validate geometry against known reference dimensions.
 
 ## M2 — Geometric measurement
-- [ ] Native face/edge/vertex picking
-- [ ] Two-point distance in model coordinates (not screen or mesh-pixel distance)
-- [ ] Circular edge/face diameter and radius measurement
+- [x] Two-point surface measurement path using B-rep point projection and model-space distance
+- [ ] Vertex and edge snapping
+- [ ] Diameter and radius measurement on circular geometry
 - [ ] Angle measurement between supported geometric entities
-- [ ] Display source length units and measurement precision
+- [ ] Validate point-picking and distances against reference STEP models
+- [ ] Display measurement precision and unit metadata
 
 ## M3 — IGES and section inspection
 - [ ] IGES import
@@ -47,7 +50,7 @@ Acceptance:
 - [ ] Do not advertise a format as supported until real-file tests pass
 
 ## Engineering constraints
-- Keep Android-specific code inside `SrcCad.Mobile/`.
+- Keep Android-specific code inside \`SrcCad.Mobile/\`.
 - Do not alter the existing Windows WPF/C++/CLI viewer or OCCT bridge.
 - Do not vendor proprietary CAD readers or binaries without checking redistribution terms.
 - Do not publish a release APK until acceptance checks pass.
