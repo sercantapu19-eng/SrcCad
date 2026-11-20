@@ -4,9 +4,10 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val defaultOcctRoot = rootProject.file("third_party/occt-android/arm64-v8a")
 val occtRoot = providers.gradleProperty("srccadOcctRoot").orNull
     ?: System.getenv("SRCCAD_OCCT_ROOT")
-    ?: ""
+    ?: if (defaultOcctRoot.exists()) defaultOcctRoot.absolutePath else ""
 
 android {
     namespace = "com.srccad.mobile"
