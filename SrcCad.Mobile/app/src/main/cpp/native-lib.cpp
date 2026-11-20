@@ -108,8 +108,8 @@ std::string loadStep(CadDocument& document, const std::string& path) {
     const double dy = document.bounds[4] - document.bounds[1];
     const double dz = document.bounds[5] - document.bounds[2];
     const double diagonal = std::sqrt(dx * dx + dy * dy + dz * dz);
-    const double deflection = std::max(0.01, diagonal * 0.001);
-    BRepMesh_IncrementalMesh mesher(shape, deflection, false, 0.35, true);
+    const double deflection = std::max(0.001, diagonal * 0.0005);
+    BRepMesh_IncrementalMesh mesher(shape, deflection, false, 0.22, true);
     if (!mesher.IsDone()) return loadError("Model üçgen ağına dönüştürülemedi.");
 
     for (TopExp_Explorer explorer(shape, TopAbs_FACE); explorer.More(); explorer.Next()) {
