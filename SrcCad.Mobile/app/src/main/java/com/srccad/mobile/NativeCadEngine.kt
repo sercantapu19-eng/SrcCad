@@ -13,6 +13,7 @@ object NativeCadEngine {
     /** Interleaved XYZ + normal data (6 floats per vertex). */
     external fun nativeGetVertices(handle: Long): FloatArray
     external fun nativeGetIndices(handle: Long): IntArray
+    external fun nativeGetTriangleFaceIndices(handle: Long): IntArray
     /** xmin, ymin, zmin, xmax, ymax, zmax. */
     external fun nativeGetBounds(handle: Long): DoubleArray
     /** Cast a model-space ray and classify the hit B-rep edge/face.
