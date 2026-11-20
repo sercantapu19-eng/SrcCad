@@ -66,7 +66,7 @@ $cmakeArgs = @(
     "-DCMAKE_INSTALL_PREFIX=$installDir",
     "-DBUILD_LIBRARY_TYPE=Shared",
     "-DBUILD_CPP_STANDARD=C++17",
-    "-DBUILD_ADDITIONAL_TOOLKITS=TKDESTEP;TKMesh",
+    "-DBUILD_ADDITIONAL_TOOLKITS=TKDESTEP;TKMesh;TKTopAlgo",
     "-DBUILD_MODULE_FoundationClasses=OFF",
     "-DBUILD_MODULE_ModelingData=OFF",
     "-DBUILD_MODULE_ModelingAlgorithms=OFF",
@@ -100,8 +100,9 @@ if ($LASTEXITCODE -ne 0) { throw "OCCT install failed." }
 
 $stepHeader = Get-ChildItem $installDir -Filter "STEPControl_Reader.hxx" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
 $stepLibrary = Get-ChildItem $installDir -Filter "libTKDESTEP.so" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-if (-not $stepHeader -or -not $stepLibrary) {
-    throw "OCCT install validation failed: STEPControl_Reader.hxx or libTKDESTEP.so is missing. Inspect the build output/toolkit list."
+$topologyLibrary = Get-ChildItem $installDir -Filter "libTKTopAlgo.so" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not $stepHeader -or -not $stepLibrary -or -not $topologyLibrary) {
+    throw "OCCT install validation failed: STEPControl_Reader.hxx, libTKDESTEP.so or libTKTopAlgo.so is missing. Inspect the build output/toolkit list."
 }
 
 Write-Host ""
