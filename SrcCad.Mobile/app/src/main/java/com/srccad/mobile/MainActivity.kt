@@ -31,9 +31,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
@@ -108,7 +110,10 @@ class MainActivity : ComponentActivity() {
                                     Image(
                                         painter = painterResource(R.drawable.srccad_brand),
                                         contentDescription = "SrcCad logo",
-                                        modifier = Modifier.size(if (compactLayout) 52.dp else 64.dp)
+                                        modifier = Modifier
+                                            .width(if (compactLayout) 104.dp else 120.dp)
+                                            .padding(vertical = 4.dp),
+                                        contentScale = ContentScale.Fit
                                     )
                                     Column {
                                         Text("SrcCad Mobile", color = Color.White, style = MaterialTheme.typography.titleLarge)
