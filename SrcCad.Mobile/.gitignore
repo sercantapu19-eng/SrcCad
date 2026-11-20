@@ -1,0 +1,10 @@
+# Android / Gradle
+.gradle/
+**/build/
+local.properties
+*.iml
+
+# Locally built OCCT sources and Android binaries
+/third_party/occt-src/
+/third_party/occt-build/
+/third_party/occt-android/
