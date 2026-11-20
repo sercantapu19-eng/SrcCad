@@ -15,8 +15,11 @@ object NativeCadEngine {
     external fun nativeGetIndices(handle: Long): IntArray
     /** xmin, ymin, zmin, xmax, ymax, zmax. */
     external fun nativeGetBounds(handle: Long): DoubleArray
-    /** Cast a model-space ray and return an exact B-rep point, or an empty array. */
-    external fun nativePickRay(handle: Long, origin: DoubleArray, direction: DoubleArray): DoubleArray
+    /** Cast a model-space ray and classify the hit B-rep edge/face.
+     * Returns kind, XYZ, primary/secondary metrics, direction XYZ and direction-valid flag. */
+    external fun nativePickGeometry(
+        handle: Long, origin: DoubleArray, direction: DoubleArray, edgeTolerance: Double
+    ): DoubleArray
     /** Returns distance, delta-X, delta-Y, delta-Z in model units. */
     external fun nativeMeasurePoints(handle: Long, pointA: DoubleArray, pointB: DoubleArray): DoubleArray
 }
