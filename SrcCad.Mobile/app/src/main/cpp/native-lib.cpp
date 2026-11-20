@@ -35,6 +35,7 @@
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Shape.hxx>
 #include <TopoDS_Vertex.hxx>
+#include <gp_Ax1.hxx>
 #include <gp_Cylinder.hxx>
 #include <gp_Pln.hxx>
 #include <gp_Pnt.hxx>
