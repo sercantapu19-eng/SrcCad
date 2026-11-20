@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cmath>
+#include <exception>
 #include <new>
 #include <sstream>
 #include <string>
@@ -17,6 +18,7 @@
 #include <Bnd_Box.hxx>
 #include <IFSelect_ReturnStatus.hxx>
 #include <Interface_Static.hxx>
+#include <Poly_Triangle.hxx>
 #include <Poly_Triangulation.hxx>
 #include <STEPControl_Reader.hxx>
 #include <TopAbs_Orientation.hxx>
@@ -323,7 +325,8 @@ Java_com_srccad_mobile_NativeCadEngine_nativePickRay(
 extern "C" JNIEXPORT jdoubleArray JNICALL
 Java_com_srccad_mobile_NativeCadEngine_nativeMeasurePoints(
     JNIEnv* env, jobject, jlong handle, jdoubleArray javaA, jdoubleArray javaB) {
-    if (fromHandle(handle) == nullptr || javaA == nullptr || javaB == nullptr ||
+    CadDocument* document = fromHandle(handle);
+    if (document == nullptr || !document->loaded || javaA == nullptr || javaB == nullptr ||
         env->GetArrayLength(javaA) < 3 || env->GetArrayLength(javaB) < 3) return env->NewDoubleArray(0);
     jdouble a[3] = {0, 0, 0};
     jdouble b[3] = {0, 0, 0};
