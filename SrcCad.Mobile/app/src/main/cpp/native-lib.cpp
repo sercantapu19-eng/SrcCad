@@ -26,6 +26,7 @@
 #include <TopoDS.hxx>
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Shape.hxx>
+#include <TopoDS_Vertex.hxx>
 #include <gp_Pnt.hxx>
 #include <gp_Vec.hxx>
 #endif
