@@ -14,10 +14,22 @@ set "SRCCAD_OCCT_ROOT=%~dp0third_party\occt-android\arm64-v8a"
 
 echo.
 echo [2/2] Building SrcCad Mobile debug APK...
+echo.
+echo [2/2] Building SrcCad Mobile debug APK...
 call "%~dp0gradlew.bat" :app:assembleDebug
 if errorlevel 1 (
+  echo [WARN] Gradle failed. Retrying once after a short pause...
+  timeout /t 15 /nobreak >nul
+  call "%~dp0gradlew.bat" :app:assembleDebug
+)
+if errorlevel 1 (
+  echo [WARN] Gradle failed again. Retrying final time...
+  timeout /t 15 /nobreak >nul
+  call "%~dp0gradlew.bat" :app:assembleDebug
+)
+if errorlevel 1 (
   echo.
-  echo [ERROR] Android APK build failed.
+  echo [ERROR] Android APK build failed after 3 attempts.
   exit /b 2
 )
 
