@@ -35,6 +35,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
 import java.util.UUID
+import java.util.Locale
 
 class MainActivity : ComponentActivity() {
     private lateinit var viewer: CadGlSurfaceView
@@ -46,6 +47,9 @@ class MainActivity : ComponentActivity() {
     private var modelSummary by mutableStateOf("Model yüklenmedi")
     private var isBusy by mutableStateOf(false)
     private var hasModel by mutableStateOf(false)
+    private var measurementMode by mutableStateOf(false)
+    private var measurementText by mutableStateOf("İki nokta arası ölçüm için Ölçüm modunu açın.")
+    private var firstMeasurePoint: DoubleArray? = null
 
     private val openDocument = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) importStep(uri)
@@ -55,6 +59,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         nativeHandle = NativeCadEngine.nativeCreate()
         viewer = CadGlSurfaceView(this)
+        viewer.onRayRequested = { ray ->
+            if (ray != null) handleMeasurementRay(ray)
+            else statusText = "Bu konumda model yüzeyi bulunamadı. Yüzeye dokunup tekrar deneyin."
+        }
 
         setContent {
             MaterialTheme {
@@ -118,6 +126,7 @@ class MainActivity : ComponentActivity() {
                             Text(fileName, color = Color.White, style = MaterialTheme.typography.bodyMedium)
                             Text(modelSummary, color = Color(0xFF9EABB9), style = MaterialTheme.typography.bodySmall)
                             Text(statusText, color = Color(0xFFB9C5D2), style = MaterialTheme.typography.bodySmall)
+                            Text(measurementText, color = Color(0xFFB8D7F2), style = MaterialTheme.typography.bodySmall)
                         }
 
                         Row(
@@ -126,7 +135,17 @@ class MainActivity : ComponentActivity() {
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Button(onClick = { viewer.fitModel() }, enabled = hasModel) { Text("İzometrik / Sığdır") }
-                            Button(onClick = { }, enabled = false) { Text("Ölçüm (yakında)") }
+                            Button(
+                                onClick = {
+                                    measurementMode = !measurementMode
+                                    viewer.measurementMode = measurementMode
+                                    firstMeasurePoint = null
+                                    measurementText = if (measurementMode)
+                                        "Ölçüm açık: model üzerinde ilk noktaya dokunun."
+                                    else "Ölçüm kapatıldı."
+                                },
+                                enabled = hasModel && !isBusy
+                            ) { Text(if (measurementMode) "Ölçümü Kapat" else "Mesafe Ölç") }
                             Spacer(Modifier.weight(1f))
                             Text(
                                 "Tek parmak: döndür  •  İki parmak: kaydır / yakınlaştır",
@@ -144,6 +163,10 @@ class MainActivity : ComponentActivity() {
         if (isBusy) return
         isBusy = true
         hasModel = false
+        measurementMode = false
+        viewer.measurementMode = false
+        firstMeasurePoint = null
+        measurementText = "Model yüklendikten sonra ölçüm yapabilirsiniz."
         modelSummary = "Dosya hazırlanıyor…"
         viewer.clearMesh()
 
@@ -186,7 +209,7 @@ class MainActivity : ComponentActivity() {
                 viewer.submitMesh(result.vertices, result.indices, result.bounds)
                 fileName = result.displayName
                 modelSummary = result.faces.toString() + " yüzey • " + result.triangles + " üçgen"
-                statusText = "STEP modeli yüklendi. Geometrik ölçüm henüz etkin değil."
+                statusText = "STEP modeli yüklendi. Tek parmakla döndürün, iki parmakla kaydırıp yakınlaştırın."
                 hasModel = true
             } catch (error: Exception) {
                 statusText = error.message ?: "Beklenmeyen içe aktarma hatası."
@@ -197,6 +220,47 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    private fun handleMeasurementRay(ray: FloatArray) {
+        if (!measurementMode || ray.size < 6 || nativeHandle == 0L) return
+        val origin = doubleArrayOf(ray[0].toDouble(), ray[1].toDouble(), ray[2].toDouble())
+        val direction = doubleArrayOf(ray[3].toDouble(), ray[4].toDouble(), ray[5].toDouble())
+
+        lifecycleScope.launch {
+            try {
+                val point = withContext(Dispatchers.Default) {
+                    NativeCadEngine.nativePickRay(nativeHandle, origin, direction)
+                }
+                if (point.size < 3) {
+                    statusText = "Yüzey yakalanamadı. Modelin görünen bir yüzeyine dokunun."
+                    return@launch
+                }
+
+                val first = firstMeasurePoint
+                if (first == null) {
+                    firstMeasurePoint = point
+                    measurementText = "İlk nokta: X \${formatMm(point[0])}, Y \${formatMm(point[1])}, Z \${formatMm(point[2])} mm. İkinci noktayı seçin."
+                    statusText = "İlk ölçüm noktası alındı."
+                } else {
+                    val values = withContext(Dispatchers.Default) {
+                        NativeCadEngine.nativeMeasurePoints(nativeHandle, first, point)
+                    }
+                    firstMeasurePoint = null
+                    if (values.size >= 4) {
+                        measurementText = "Mesafe: \${formatMm(values[0])} mm   |   ΔX \${formatMm(values[1])}   ΔY \${formatMm(values[2])}   ΔZ \${formatMm(values[3])} mm"
+                        statusText = "Ölçüm tamamlandı. Yeni ölçüm için iki noktaya daha dokunun."
+                    } else {
+                        measurementText = "Ölçüm hesaplanamadı."
+                        statusText = "Native ölçüm motoru geçerli sonuç döndürmedi."
+                    }
+                }
+            } catch (error: Exception) {
+                statusText = error.message ?: "Nokta seçimi sırasında hata oluştu."
+            }
+        }
+    }
+
+    private fun formatMm(value: Double): String = String.format(Locale.US, "%.3f", value)
 
     private fun queryDisplayName(uri: Uri): String? {
         contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
