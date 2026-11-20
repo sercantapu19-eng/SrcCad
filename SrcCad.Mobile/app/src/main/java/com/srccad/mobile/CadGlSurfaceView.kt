@@ -68,9 +68,9 @@ class CadGlSurfaceView(context: Context) : GLSurfaceView(context) {
                 if (event.pointerCount == 1) {
                     val dx = event.x - lastX
                     val dy = event.y - lastY
-                    if (!measurementMode) {
-                        queueEvent { cadRenderer.orbit(dx * 0.55f, dy * 0.55f); requestRender() }
-                    }
+                    // Drag always orbits, including while measurement mode is active.
+                    // A short stationary tap is handled on ACTION_UP below.
+                    queueEvent { cadRenderer.orbit(dx * 0.55f, dy * 0.55f); requestRender() }
                     lastX = event.x
                     lastY = event.y
                 } else if (event.pointerCount >= 2) {
