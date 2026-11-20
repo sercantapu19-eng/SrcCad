@@ -144,7 +144,6 @@ std::string loadStep(CadDocument& document, const std::string& path) {
     std::ostringstream result;
     result << R"({"ok":true,"message":"STEP modeli yüklendi","faces":)" << document.faceCount
            << R"(,"triangles":)" << document.triangleCount << "}";
-           << "\\"triangles\\":" << document.triangleCount << "}";
     return result.str();
 }
 #endif
