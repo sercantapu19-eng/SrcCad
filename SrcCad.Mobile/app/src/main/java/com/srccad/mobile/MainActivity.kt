@@ -393,6 +393,7 @@ class MainActivity : ComponentActivity() {
 
                     val vertices = NativeCadEngine.nativeGetVertices(nativeHandle)
                     val indices = NativeCadEngine.nativeGetIndices(nativeHandle)
+                    val faceIds = NativeCadEngine.nativeGetTriangleFaceIndices(nativeHandle)
                     val bounds = NativeCadEngine.nativeGetBounds(nativeHandle)
                     if (vertices.isEmpty() || indices.isEmpty() || bounds.size != 6) {
                         destination.delete()
