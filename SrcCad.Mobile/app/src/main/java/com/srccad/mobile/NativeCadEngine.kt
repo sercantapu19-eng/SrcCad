@@ -13,4 +13,8 @@ object NativeCadEngine {
     external fun nativeGetIndices(handle: Long): IntArray
     /** xmin, ymin, zmin, xmax, ymax, zmax. */
     external fun nativeGetBounds(handle: Long): DoubleArray
+    /** Cast a model-space ray and return an exact B-rep point, or an empty array. */
+    external fun nativePickRay(handle: Long, origin: DoubleArray, direction: DoubleArray): DoubleArray
+    /** Returns distance, delta-X, delta-Y, delta-Z in model units. */
+    external fun nativeMeasurePoints(handle: Long, pointA: DoubleArray, pointB: DoubleArray): DoubleArray
 }
