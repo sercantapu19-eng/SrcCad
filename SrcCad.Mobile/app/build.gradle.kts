@@ -14,12 +14,8 @@ android {
     compileSdk = 36
     ndkVersion = "28.2.13676358"
 
-    if (occtRoot.isNotBlank()) {
-        sourceSets.getByName("main").jniLibs.srcDirs(
-            file("$occtRoot/lib"),
-            file("$occtRoot/lib64")
-        )
-    }
+    // OCCT shared libraries are imported and linked by CMake below.
+    // Android Gradle Plugin packages CMake-linked imported shared libraries automatically.
 
     defaultConfig {
         applicationId = "com.srccad.mobile"
