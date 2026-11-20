@@ -64,6 +64,7 @@ $cmakeArgs = @(
     "-DANDROID_STL=c++_shared",
     "-DCMAKE_BUILD_TYPE=Release",
     "-DCMAKE_INSTALL_PREFIX=$installDir",
+    "-DINSTALL_DIR_LAYOUT=Unix",
     "-DBUILD_LIBRARY_TYPE=Shared",
     "-DBUILD_CPP_STANDARD=C++17",
     "-DBUILD_ADDITIONAL_TOOLKITS=TKDESTEP;TKMesh;TKTopAlgo",
