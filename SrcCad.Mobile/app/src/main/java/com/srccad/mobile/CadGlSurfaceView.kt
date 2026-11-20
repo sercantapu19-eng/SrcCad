@@ -21,6 +21,10 @@ class CadGlSurfaceView(context: Context) : GLSurfaceView(context) {
     private var lastX = 0f
     private var lastY = 0f
     private var lastSpan = 0f
+    private var downX = 0f
+    private var downY = 0f
+    @Volatile var measurementMode: Boolean = false
+    var onRayRequested: ((FloatArray?) -> Unit)? = null
 
     init {
         setEGLContextClientVersion(3)
@@ -46,6 +50,8 @@ class CadGlSurfaceView(context: Context) : GLSurfaceView(context) {
             MotionEvent.ACTION_DOWN -> {
                 lastX = event.x
                 lastY = event.y
+                downX = event.x
+                downY = event.y
                 lastSpan = 0f
                 return true
             }
@@ -59,7 +65,9 @@ class CadGlSurfaceView(context: Context) : GLSurfaceView(context) {
                 if (event.pointerCount == 1) {
                     val dx = event.x - lastX
                     val dy = event.y - lastY
-                    queueEvent { cadRenderer.orbit(dx * 0.55f, dy * 0.55f); requestRender() }
+                    if (!measurementMode) {
+                        queueEvent { cadRenderer.orbit(dx * 0.55f, dy * 0.55f); requestRender() }
+                    }
                     lastX = event.x
                     lastY = event.y
                 } else if (event.pointerCount >= 2) {
@@ -84,12 +92,28 @@ class CadGlSurfaceView(context: Context) : GLSurfaceView(context) {
                 lastSpan = 0f
                 return true
             }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+            MotionEvent.ACTION_UP -> {
+                if (measurementMode) {
+                    val dx = event.x - downX
+                    val dy = event.y - downY
+                    if (sqrt(dx * dx + dy * dy) <= 18f) requestRay(event.x, event.y)
+                }
+                lastSpan = 0f
+                return true
+            }
+            MotionEvent.ACTION_CANCEL -> {
                 lastSpan = 0f
                 return true
             }
         }
         return true
+    }
+
+    private fun requestRay(x: Float, y: Float) {
+        queueEvent {
+            val ray = cadRenderer.rayForScreen(x, y, width, height)
+            post { onRayRequested?.invoke(ray) }
+        }
     }
 
     private fun pointerSpan(event: MotionEvent): Float {
@@ -122,6 +146,7 @@ private class CadGlRenderer : GLSurfaceView.Renderer {
     private val model = FloatArray(16)
     private val viewModel = FloatArray(16)
     private val mvp = FloatArray(16)
+    @Volatile private var inverseMvpSnapshot: FloatArray? = null
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
         GLES30.glClearColor(0.075f, 0.09f, 0.12f, 1f)
@@ -152,6 +177,8 @@ private class CadGlRenderer : GLSurfaceView.Renderer {
         Matrix.translateM(model, 0, -centerX, -centerY, -centerZ)
         Matrix.multiplyMM(viewModel, 0, view, 0, model, 0)
         Matrix.multiplyMM(mvp, 0, projection, 0, viewModel, 0)
+        val inverse = FloatArray(16)
+        inverseMvpSnapshot = if (Matrix.invertM(inverse, 0, mvp, 0)) inverse else null
 
         GLES30.glUseProgram(program)
         GLES30.glUniformMatrix4fv(GLES30.glGetUniformLocation(program, "uMvp"), 1, false, mvp, 0)
@@ -167,6 +194,32 @@ private class CadGlRenderer : GLSurfaceView.Renderer {
         GLES30.glDrawElements(GLES30.GL_TRIANGLES, indexCount, GLES30.GL_UNSIGNED_INT, indices)
         GLES30.glDisableVertexAttribArray(0)
         GLES30.glDisableVertexAttribArray(1)
+    }
+
+    fun rayForScreen(x: Float, y: Float, viewWidth: Int, viewHeight: Int): FloatArray? {
+        val inverse = inverseMvpSnapshot ?: return null
+        if (viewWidth <= 0 || viewHeight <= 0) return null
+        val ndcX = 2f * x / viewWidth.toFloat() - 1f
+        val ndcY = 1f - 2f * y / viewHeight.toFloat()
+        val nearClip = floatArrayOf(ndcX, ndcY, -1f, 1f)
+        val farClip = floatArrayOf(ndcX, ndcY, 1f, 1f)
+        val nearWorld = FloatArray(4)
+        val farWorld = FloatArray(4)
+        Matrix.multiplyMV(nearWorld, 0, inverse, 0, nearClip, 0)
+        Matrix.multiplyMV(farWorld, 0, inverse, 0, farClip, 0)
+        if (kotlin.math.abs(nearWorld[3]) < 1e-8f || kotlin.math.abs(farWorld[3]) < 1e-8f) return null
+        val ox = nearWorld[0] / nearWorld[3]
+        val oy = nearWorld[1] / nearWorld[3]
+        val oz = nearWorld[2] / nearWorld[3]
+        val fx = farWorld[0] / farWorld[3]
+        val fy = farWorld[1] / farWorld[3]
+        val fz = farWorld[2] / farWorld[3]
+        val dx = fx - ox
+        val dy = fy - oy
+        val dz = fz - oz
+        val length = sqrt(dx * dx + dy * dy + dz * dz)
+        if (length <= 1e-8f) return null
+        return floatArrayOf(ox, oy, oz, dx / length, dy / length, dz / length)
     }
 
     fun setMesh(vertices: FloatArray, indices: IntArray, bounds: DoubleArray) {
