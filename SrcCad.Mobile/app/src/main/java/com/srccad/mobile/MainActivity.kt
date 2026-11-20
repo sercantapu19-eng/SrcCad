@@ -194,12 +194,22 @@ class MainActivity : ComponentActivity() {
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
-                                if (measurementText.startsWith("Mesafe:")) {
+                                val measurementPreview = measurementText.substringBefore("\n").trim()
+                                if (
+                                    measurementPreview.startsWith("Doğru kenar") ||
+                                    measurementPreview.startsWith("Dairesel kenar") ||
+                                    measurementPreview.startsWith("Eğri kenar") ||
+                                    measurementPreview.startsWith("Düzlemsel yüzey") ||
+                                    measurementPreview.startsWith("Silindirik yüzey") ||
+                                    measurementPreview.startsWith("Yüzey") ||
+                                    measurementPreview.startsWith("1)")
+                                ) {
                                     Text(
-                                        measurementText.substringBefore("\n").trim(),
+                                        measurementPreview,
                                         color = Color(0xFFB8D7F2),
                                         style = MaterialTheme.typography.labelMedium,
-                                        maxLines = 1
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
                                 TextButton(onClick = { infoExpanded = !infoExpanded }) {
@@ -442,7 +452,13 @@ class MainActivity : ComponentActivity() {
                             .append(" mm   ΔZ: ").append(formatMm(values[3])).append(" mm")
                     }
 
-                    if (first[9] > 0.5 && picked[9] > 0.5) {
+                    val firstKind = first[0].toInt()
+                    val secondKind = picked[0].toInt()
+                    val comparableDirections =
+                        (firstKind == 1 && secondKind == 1) ||
+                        (firstKind == 4 && secondKind == 4) ||
+                        (firstKind == 5 && secondKind == 5)
+                    if (comparableDirections && first[9] > 0.5 && picked[9] > 0.5) {
                         val dot = first[6] * picked[6] + first[7] * picked[7] + first[8] * picked[8]
                         val angle = Math.toDegrees(kotlin.math.acos(kotlin.math.abs(dot).coerceIn(0.0, 1.0)))
                         output.append("\nEn küçük açı: ").append(String.format(Locale.US, "%.3f", angle)).append("°")
