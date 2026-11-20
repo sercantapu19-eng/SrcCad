@@ -12,12 +12,14 @@ import java.nio.IntBuffer
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
+import kotlin.math.tan
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 
 /** OpenGL ES 3.0 mesh viewer: one-finger orbit, two-finger pan/pinch. */
 class CadGlSurfaceView(context: Context) : GLSurfaceView(context) {
-    private val cadRenderer = CadGlRenderer()
+    private val cadRenderer = CadGlRenderer(context.resources.displayMetrics.density)
+    private val tapSlopPx = 18f * context.resources.displayMetrics.density
     private var lastX = 0f
     private var lastY = 0f
     private var lastSpan = 0f
@@ -106,7 +108,7 @@ class CadGlSurfaceView(context: Context) : GLSurfaceView(context) {
                 if (measurementMode && !multiTouchGesture) {
                     val dx = event.x - downX
                     val dy = event.y - downY
-                    if (sqrt(dx * dx + dy * dy) <= 18f) requestRay(event.x, event.y)
+                    if (sqrt(dx * dx + dy * dy) <= tapSlopPx) requestRay(event.x, event.y)
                 }
                 lastSpan = 0f
                 multiTouchGesture = false
@@ -135,7 +137,7 @@ class CadGlSurfaceView(context: Context) : GLSurfaceView(context) {
     }
 }
 
-private class CadGlRenderer : GLSurfaceView.Renderer {
+private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer {
     private var program = 0
     private var vertexBuffer: FloatBuffer? = null
     private var indexBuffer: IntBuffer? = null
@@ -250,7 +252,16 @@ private class CadGlRenderer : GLSurfaceView.Renderer {
         val dz = fz - oz
         val length = sqrt(dx * dx + dy * dy + dz * dz)
         if (length <= 1e-8f) return null
-        return floatArrayOf(ox, oy, oz, dx / length, dy / length, dz / length)
+
+        // Convert a 12 dp finger-edge hit target to model-space units.
+        // Picking tolerance follows camera zoom and the current viewport height.
+        val distanceToTarget = 4.2f / zoomFactor
+        val halfFovTangent = tan(Math.toRadians(21.0)).toFloat()
+        val worldUnitsPerPixel = (2f * distanceToTarget * halfFovTangent) /
+            (max(1, viewHeight).toFloat() * max(modelScale, 1.0e-8f))
+        val edgeTolerance = worldUnitsPerPixel * 12f * density
+
+        return floatArrayOf(ox, oy, oz, dx / length, dy / length, dz / length, edgeTolerance)
     }
 
     fun setMesh(vertices: FloatArray, indices: IntArray, bounds: DoubleArray) {
