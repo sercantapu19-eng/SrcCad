@@ -311,6 +311,7 @@ class MainActivity : ComponentActivity() {
                     }
                     val vertices = NativeCadEngine.nativeGetVertices(nativeHandle)
                     val indices = NativeCadEngine.nativeGetIndices(nativeHandle)
+                    val faceIds = NativeCadEngine.nativeGetTriangleFaceIndices(nativeHandle)
                     val bounds = NativeCadEngine.nativeGetBounds(nativeHandle)
                     if (vertices.isEmpty() || indices.isEmpty() || bounds.size != 6) {
                         throw IllegalStateException("Demo model görüntüleme ağı oluşturulamadı.")
@@ -322,7 +323,8 @@ class MainActivity : ComponentActivity() {
                         response.optInt("triangles"),
                         vertices,
                         indices,
-                        bounds
+                        bounds,
+                        faceIds
                     )
                 }
                 presentModel(result, enableMeasurement = false)
@@ -341,7 +343,7 @@ class MainActivity : ComponentActivity() {
     private fun presentModel(result: ImportResult, enableMeasurement: Boolean) {
         currentImport?.delete()
         currentImport = result.file
-        viewer.submitMesh(result.vertices, result.indices, result.bounds)
+        viewer.submitMesh(result.vertices, result.indices, result.bounds, result.triangleFaceIds)
         fileName = result.displayName
         modelSummary = result.faces.toString() + " yüzey • " + result.triangles + " üçgen"
         measurementAvailable = enableMeasurement
@@ -403,7 +405,8 @@ class MainActivity : ComponentActivity() {
                         response.optInt("triangles"),
                         vertices,
                         indices,
-                        bounds
+                        bounds,
+                        faceIds
                     )
                 }
 
@@ -440,6 +443,7 @@ class MainActivity : ComponentActivity() {
                 val first = firstMeasurePick
                 if (first == null) {
                     firstMeasurePick = picked
+                    viewer.highlightFaces(intArrayOf(picked.getOrElse(10) { -1.0 }.toInt()))
                     measurementText = describePick(picked) +
                         "\nİkinci kenar/yüzeyi seçin; modeli sürükleyerek döndürebilirsiniz."
                     statusText = "Geometri seçildi. Ölçü otomatik hesaplandı."
@@ -450,6 +454,7 @@ class MainActivity : ComponentActivity() {
                         NativeCadEngine.nativeMeasurePoints(nativeHandle, pointA, pointB)
                     }
                     firstMeasurePick = null
+                    viewer.highlightFaces(intArrayOf(first.getOrElse(10) { -1.0 }.toInt(), picked.getOrElse(10) { -1.0 }.toInt()))
 
                     val output = StringBuilder()
                     output.append("1) ").append(describePick(first))
