@@ -92,6 +92,13 @@ class CadGlSurfaceView(context: Context) : GLSurfaceView(context) {
                 return true
             }
             MotionEvent.ACTION_POINTER_UP -> {
+                // Keep the surviving finger's coordinates so dropping from a pinch
+                // to a one-finger orbit does not cause a camera jump.
+                val remainingIndex = if (event.actionIndex == 0) 1 else 0
+                if (remainingIndex < event.pointerCount) {
+                    lastX = event.getX(remainingIndex)
+                    lastY = event.getY(remainingIndex)
+                }
                 lastSpan = 0f
                 return true
             }
