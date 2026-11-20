@@ -16,6 +16,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: srccad-mobile-full-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-step-enabled-apk:
     runs-on: windows-latest
