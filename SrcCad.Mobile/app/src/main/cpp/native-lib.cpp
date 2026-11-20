@@ -16,6 +16,7 @@
 #include <BRep_Tool.hxx>
 #include <Bnd_Box.hxx>
 #include <IFSelect_ReturnStatus.hxx>
+#include <Interface_Static.hxx>
 #include <Poly_Triangulation.hxx>
 #include <STEPControl_Reader.hxx>
 #include <TopAbs_Orientation.hxx>
@@ -83,6 +84,8 @@ std::string loadError(const std::string& message) {
 #if defined(SRCCAD_WITH_OCCT)
 std::string loadStep(CadDocument& document, const std::string& path) {
     document.clear();
+    // Normalize every STEP source unit to millimetres for predictable CAD measurement.
+    Interface_Static::SetCVal("xstep.cascade.unit", "MM");
     STEPControl_Reader reader;
     if (reader.ReadFile(path.c_str()) != IFSelect_RetDone)
         return loadError("OCCT STEP okuyucusu dosyayı açamadı (ReadFile).");
