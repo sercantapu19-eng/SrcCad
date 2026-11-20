@@ -11,7 +11,13 @@ This checklist is intentionally not marked complete until the APK is installed a
 - [ ] Display stays in landscape and the 3D viewport occupies the available area.
 - [ ] Airplane mode does not prevent application launch.
 
-## B. STEP import
+## B. Renderer smoke test
+
+- [ ] Tap Demo Kutu and confirm the 100 × 50 × 20 mm box appears.
+- [ ] Orbit, pan and pinch-zoom the demo box without jumps.
+- [ ] Confirm measurement stays disabled for the demo model.
+
+## C. STEP import
 
 - [ ] Open a local .step file from Downloads.
 - [ ] Open a local .stp file from device storage.
@@ -21,7 +27,7 @@ This checklist is intentionally not marked complete until the APK is installed a
 - [ ] STEP import works with networking disabled.
 - [ ] Model remains visible after leaving and returning to the app.
 
-## C. View manipulation
+## D. View manipulation
 
 - [ ] One-finger drag orbits the model.
 - [ ] Two-finger drag pans the model.
@@ -30,7 +36,7 @@ This checklist is intentionally not marked complete until the APK is installed a
 - [ ] No unexpected model jumps occur when switching between one- and two-finger gestures.
 - [ ] Faces render without missing triangles, reversed large patches or obvious holes.
 
-## D. Measurement
+## E. Measurement
 
 - [ ] Enable the Mesafe Ölç button.
 - [ ] Tap a visible planar face to set point 1.
@@ -41,7 +47,7 @@ This checklist is intentionally not marked complete until the APK is installed a
 - [ ] Test a STEP file authored in inches or metres and confirm the result is converted to millimetres.
 - [ ] Confirm pinch/pan gestures do not create accidental measurement points.
 
-## E. Stability and performance
+## F. Stability and performance
 
 - [ ] Open a small single-part STEP file.
 - [ ] Open a medium multi-body STEP file.
