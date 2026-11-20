@@ -238,14 +238,15 @@ class MainActivity : ComponentActivity() {
 
                             Row(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    // Keep the action buttons above Android's bottom navigation/gesture area.
-                                    .padding(bottom = 76.dp)
-                                    .navigationBarsPadding(),
+                                    .fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Button(onClick = { viewer.fitModel() }, enabled = hasModel) {
+                                Button(
+                                    onClick = { viewer.fitModel() },
+                                    enabled = hasModel,
+                                    modifier = if (compactLayout) Modifier.weight(1f) else Modifier
+                                ) {
                                     Text(if (compactLayout) "Sığdır" else "İzometrik / Sığdır")
                                 }
                                 Button(
@@ -259,18 +260,20 @@ class MainActivity : ComponentActivity() {
                                             "Ölçüm kapatıldı."
                                         }
                                     },
-                                    enabled = hasModel && measurementAvailable && !isBusy
+                                    enabled = hasModel && measurementAvailable && !isBusy,
+                                    modifier = if (compactLayout) Modifier.weight(1f) else Modifier
                                 ) {
                                     Text(if (measurementMode) "Ölçümü Kapat" else if (compactLayout) "Ölç" else "Otomatik Ölçüm")
                                 }
-                                Spacer(Modifier.weight(1f))
-                                Text(
-                                    if (compactLayout) "Sürükle: döndür • 2 parmak: zoom"
-                                    else "Sürükle: döndür  •  İki parmak: kaydır / yakınlaştır",
-                                    color = Color(0xFF7F8C9B),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    maxLines = 1
-                                )
+                                if (!compactLayout) {
+                                    Spacer(Modifier.weight(1f))
+                                    Text(
+                                        "Sürükle: döndür  •  İki parmak: kaydır / yakınlaştır",
+                                        color = Color(0xFF7F8C9B),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        maxLines = 1
+                                    )
+                                }
                             }
                         }
                     }
