@@ -21,6 +21,7 @@ class CadGlSurfaceView(context: Context) : GLSurfaceView(context) {
     private var lastX = 0f
     private var lastY = 0f
     private var lastSpan = 0f
+    private var multiTouchGesture = false
     private var downX = 0f
     private var downY = 0f
     @Volatile var measurementMode: Boolean = false
@@ -53,9 +54,11 @@ class CadGlSurfaceView(context: Context) : GLSurfaceView(context) {
                 downX = event.x
                 downY = event.y
                 lastSpan = 0f
+                multiTouchGesture = false
                 return true
             }
             MotionEvent.ACTION_POINTER_DOWN -> {
+                multiTouchGesture = true
                 lastSpan = pointerSpan(event)
                 lastX = (event.getX(0) + event.getX(1)) * 0.5f
                 lastY = (event.getY(0) + event.getY(1)) * 0.5f
@@ -93,12 +96,13 @@ class CadGlSurfaceView(context: Context) : GLSurfaceView(context) {
                 return true
             }
             MotionEvent.ACTION_UP -> {
-                if (measurementMode) {
+                if (measurementMode && !multiTouchGesture) {
                     val dx = event.x - downX
                     val dy = event.y - downY
                     if (sqrt(dx * dx + dy * dy) <= 18f) requestRay(event.x, event.y)
                 }
                 lastSpan = 0f
+                multiTouchGesture = false
                 return true
             }
             MotionEvent.ACTION_CANCEL -> {
