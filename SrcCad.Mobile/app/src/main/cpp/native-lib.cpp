@@ -67,7 +67,7 @@ jstring toJavaString(JNIEnv* env, const std::string& value) {
     return env->NewStringUTF(value.c_str());
 }
 std::string loadError(const std::string& message) {
-    return std::string("{\\"ok\\":false,\\"message\\":\\"") + jsonEscape(message) + "\\"}";
+    return std::string(R"({"ok":false,"message":")") + jsonEscape(message) + R"("})";
 }
 
 #if defined(SRCCAD_WITH_OCCT)
@@ -142,8 +142,8 @@ std::string loadStep(CadDocument& document, const std::string& path) {
     document.shape = shape;
     document.loaded = true;
     std::ostringstream result;
-    result << "{\\"ok\\":true,\\"message\\":\\"STEP modeli yüklendi\\","
-           << "\\"faces\\":" << document.faceCount << ","
+    result << R"({"ok":true,"message":"STEP modeli yüklendi","faces":)" << document.faceCount
+           << R"(,"triangles":)" << document.triangleCount << "}";
            << "\\"triangles\\":" << document.triangleCount << "}";
     return result.str();
 }
