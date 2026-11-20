@@ -1,0 +1,45 @@
+name: SrcCad Mobile Android Smoke Build
+
+on:
+  push:
+    branches:
+      - mobile-viewer
+    paths:
+      - "SrcCad.Mobile/**"
+      - ".github/workflows/mobile-android-smoke.yml"
+  pull_request:
+    paths:
+      - "SrcCad.Mobile/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android-smoke-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android build packages
+        run: |
+          sdkmanager --install \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "ndk;28.2.13676358" \
+            "cmake;3.22.1"
+
+      - name: Build Android shell (OCCT intentionally disabled)
+        working-directory: SrcCad.Mobile
+        run: bash ./gradlew :app:assembleDebug --stacktrace
