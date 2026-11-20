@@ -25,6 +25,7 @@ android {
             cmake {
                 cppFlags += listOf("-std=c++17", "-fexceptions", "-frtti")
                 arguments += listOf(
+                    "-DANDROID_STL=c++_shared",
                     "-DSRCCAD_ENABLE_OCCT=" + if (occtRoot.isBlank()) "OFF" else "ON",
                     "-DSRCCAD_OCCT_ROOT=" + occtRoot
                 )
