@@ -8,3 +8,6 @@ local.properties
 /third_party/occt-src/
 /third_party/occt-build/
 /third_party/occt-android/
+
+# Generated Gradle wrapper JAR (reconstructed from committed bootstrap payload)
+/gradle/wrapper/gradle-wrapper.jar
