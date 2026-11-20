@@ -22,24 +22,38 @@ function Require-Command([string]$Name) {
 }
 
 $git = Require-Command "git"
-$cmakeCommand = Get-Command "cmake" -ErrorAction SilentlyContinue
-if ($cmakeCommand) {
-    $cmake = $cmakeCommand.Source
+$sdkCmakeBin = Join-Path $AndroidSdk "cmake\3.22.1\bin"
+$sdkCmake = Join-Path $sdkCmakeBin "cmake.exe"
+$sdkNinja = Join-Path $sdkCmakeBin "ninja.exe"
+
+# Prefer the exact CMake/Ninja pair installed by Android SDK Manager.
+# This avoids accidentally picking a newer host CMake version on Windows.
+if (Test-Path $sdkCmake) {
+    $cmake = $sdkCmake
 } else {
-    $cmakeCandidate = Get-ChildItem (Join-Path $AndroidSdk "cmake") -Filter "cmake.exe" -Recurse -ErrorAction SilentlyContinue |
-        Sort-Object FullName -Descending | Select-Object -First 1
-    if (-not $cmakeCandidate) { throw "CMake was not found. Install CMake from Android Studio SDK Manager or add cmake.exe to PATH." }
-    $cmake = $cmakeCandidate.FullName
+    $cmakeCommand = Get-Command "cmake" -ErrorAction SilentlyContinue
+    if ($cmakeCommand) {
+        $cmake = $cmakeCommand.Source
+    } else {
+        $cmakeCandidate = Get-ChildItem (Join-Path $AndroidSdk "cmake") -Filter "cmake.exe" -Recurse -ErrorAction SilentlyContinue |
+            Sort-Object FullName -Descending | Select-Object -First 1
+        if (-not $cmakeCandidate) { throw "CMake was not found. Install CMake 3.22.1 from Android Studio SDK Manager or add cmake.exe to PATH." }
+        $cmake = $cmakeCandidate.FullName
+    }
 }
 
-$ninja = Get-Command "ninja" -ErrorAction SilentlyContinue
-if (-not $ninja) {
-    $ninjaCandidate = Get-ChildItem (Join-Path $AndroidSdk "cmake") -Filter "ninja.exe" -Recurse -ErrorAction SilentlyContinue |
-        Sort-Object FullName -Descending | Select-Object -First 1
-    if (-not $ninjaCandidate) { throw "Ninja was not found. Install CMake from Android Studio SDK Manager or add ninja.exe to PATH." }
-    $ninjaPath = $ninjaCandidate.FullName
+if (Test-Path $sdkNinja) {
+    $ninjaPath = $sdkNinja
 } else {
-    $ninjaPath = $ninja.Source
+    $ninja = Get-Command "ninja" -ErrorAction SilentlyContinue
+    if ($ninja) {
+        $ninjaPath = $ninja.Source
+    } else {
+        $ninjaCandidate = Get-ChildItem (Join-Path $AndroidSdk "cmake") -Filter "ninja.exe" -Recurse -ErrorAction SilentlyContinue |
+            Sort-Object FullName -Descending | Select-Object -First 1
+        if (-not $ninjaCandidate) { throw "Ninja was not found. Install CMake 3.22.1 from Android Studio SDK Manager or add ninja.exe to PATH." }
+        $ninjaPath = $ninjaCandidate.FullName
+    }
 }
 
 if (-not (Test-Path $toolchain)) {
