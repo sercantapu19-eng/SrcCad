@@ -1,39 +1,38 @@
 # SrcCad Mobile Viewer — Roadmap
 
-## M0 — Android shell
+## M0 — Android shell and native renderer scaffold
 - [x] Isolated Android application module
-- [x] Landscape-first viewer shell
-- [x] Android document picker entry point
-- [x] JNI/CMake native boundary
-- [ ] Verify Gradle build in Android Studio
-- [ ] Install debug APK on Samsung Galaxy S22 Ultra
+- [x] Landscape-first Compose shell
+- [x] Android document picker and cache copy for STEP/STP
+- [x] JNI native document handle API
+- [x] OpenGL ES 3.0 shaded mesh renderer
+- [x] Orbit, pan, pinch zoom and fit-view interaction
+- [x] Optional OCCT CMake integration and 16 KB ELF linker alignment
+- [x] Windows PowerShell OCCT Android build script
+- [ ] Verify Gradle sync/build in Android Studio
+- [ ] Produce and install debug APK on Samsung Galaxy S22 Ultra
 
 ## M1 — STEP viewing (first functional milestone)
-- [ ] Build Open CASCADE for Android arm64-v8a with the Android NDK
-- [ ] Integrate STEPCAFControl / XDE reader for STEP AP203, AP214 and AP242
-- [ ] Preserve assembly hierarchy, names and colors where present
-- [ ] Add an Android OpenGL ES rendering surface backed by OCCT
-- [ ] Fit-all, orbit, pan, zoom and standard views
-- [ ] Validate with small, medium and large real STEP files
+- [x] STEPControl_Reader import path (compiled when OCCT is supplied)
+- [x] B-rep tessellation and bounding-box extraction path
+- [ ] Build OCCT for Android arm64-v8a and link the libraries
+- [ ] Verify import with small, medium and large real STEP files
+- [ ] Verify the rendered mesh and camera interaction on-device
 
 Acceptance:
 1. User selects a local .step/.stp file.
 2. File imports without network access.
 3. Model is visible and can be orbited, panned and zoomed.
-4. Fit-all and isometric view frame the complete model.
+4. Fit-view frames the complete model.
 5. Import errors are reported clearly; no false success state.
+6. Validate geometry against known reference dimensions.
 
 ## M2 — Geometric measurement
-- [ ] Native point/vertex/edge/face picking
-- [ ] Two-point distance in model coordinates
-- [ ] Diameter and radius measurement for circular geometry
+- [ ] Native face/edge/vertex picking
+- [ ] Two-point distance in model coordinates (not screen or mesh-pixel distance)
+- [ ] Circular edge/face diameter and radius measurement
 - [ ] Angle measurement between supported geometric entities
-- [ ] Display units and precision from model/import settings
-
-Acceptance:
-- Distances are computed from exact model geometry, not screen pixels.
-- Results are repeatable across camera zoom levels.
-- Measurement is tested against known dimensions in reference STEP files.
+- [ ] Display source length units and measurement precision
 
 ## M3 — IGES and section inspection
 - [ ] IGES import
@@ -41,13 +40,14 @@ Acceptance:
 - [ ] Section result validation against reference models
 
 ## M4 — Assembly and additional formats
-- [ ] Assembly tree, hide/show and isolate
+- [ ] STEP assembly hierarchy, names and colors through XDE
+- [ ] Hide/show and isolate components
 - [ ] STL/OBJ mesh import
-- [ ] Evaluate licensed readers for SolidWorks native files and DWG/DXF as needed
+- [ ] Evaluate licensed readers for SolidWorks native files and DWG/DXF
 - [ ] Do not advertise a format as supported until real-file tests pass
 
 ## Engineering constraints
-- Keep all Android-specific code inside `SrcCad.Mobile/`.
+- Keep Android-specific code inside `SrcCad.Mobile/`.
 - Do not alter the existing Windows WPF/C++/CLI viewer or OCCT bridge.
 - Do not vendor proprietary CAD readers or binaries without checking redistribution terms.
-- Do not publish a release APK until the relevant acceptance checks pass.
+- Do not publish a release APK until acceptance checks pass.
