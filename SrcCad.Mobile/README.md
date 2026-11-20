@@ -1,6 +1,6 @@
 # SrcCad Mobile Viewer
 
-Android companion viewer for SrcCad. This project is isolated under \`SrcCad.Mobile/\`; the existing Windows WPF/C++/CLI CAD application is not modified.
+Android companion viewer for SrcCad. This project is isolated under `SrcCad.Mobile/`; the existing Windows WPF/C++/CLI CAD application is not modified.
 
 ## Implemented in source
 
@@ -9,18 +9,20 @@ Android companion viewer for SrcCad. This project is isolated under \`SrcCad.Mob
 - JNI document handles; B-rep topology remains on the C++ side
 - Optional OCCT 8.0.0 STEP reader and B-rep tessellation path
 - Bounding-box extraction and triangle/normal buffer transfer
-- OpenGL ES 3.0 shaded mesh renderer
+- OpenGL ES 3.0 shaded mesh renderer using GPU vertex/index buffers
 - One-finger orbit, two-finger pan/pinch zoom, and fit-to-view control
 - Screen-ray selection against the mesh with the selected point projected back to the exact B-rep face
 - Two-point distance and ΔX/ΔY/ΔZ measurement in millimetres
 - Windows PowerShell script to cross-compile OCCT for Android arm64-v8a
-- Gradle 8.13 wrapper
+- Gradle 8.13 wrapper and one-click Windows build script
 
-## Important build status
+## Build status
 
-The OCCT importer and exact-point projection are behind the \`SRCCAD_ENABLE_OCCT\` CMake option. Without an Android-built OCCT installation, the app shell can be built but STEP import and point picking return explicit unavailable/error states.
+The source implementation is in place, but **the APK has not yet been built or tested on a phone**. The OCCT importer and exact-point projection are enabled only after an Android-built OCCT installation is supplied.
 
-The project source has **not yet been built into an APK or tested on a phone**. Follow [docs/BUILD_ANDROID.md](docs/BUILD_ANDROID.md) to build OCCT and the Android app.
+Install the prerequisites in [docs/BUILD_ANDROID.md](docs/BUILD_ANDROID.md), then run `BUILD_ANDROID.bat` from this folder. The script builds OCCT and then the debug APK. A successful build should create:
+
+`app/build/outputs/apk/debug/app-debug.apk`
 
 ## First acceptance target
 
