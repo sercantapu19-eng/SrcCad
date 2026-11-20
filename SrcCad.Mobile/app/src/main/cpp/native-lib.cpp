@@ -432,7 +432,8 @@ std::vector<double> analyzeGeometryPick(
         hasDirection ? directionVector.X() : 0.0,
         hasDirection ? directionVector.Y() : 0.0,
         hasDirection ? directionVector.Z() : 0.0,
-        hasDirection ? 1.0 : 0.0
+        hasDirection ? 1.0 : 0.0,
+        static_cast<double>(nearestFace)
     };
     return result;
 }
@@ -514,6 +515,17 @@ Java_com_srccad_mobile_NativeCadEngine_nativeGetIndices(JNIEnv* env, jobject, jl
     if (result != nullptr)
         env->SetIntArrayRegion(result, 0, static_cast<jsize>(document->indices.size()),
                                reinterpret_cast<const jint*>(document->indices.data()));
+    return result;
+}
+
+extern "C" JNIEXPORT jintArray JNICALL
+Java_com_srccad_mobile_NativeCadEngine_nativeGetTriangleFaceIndices(JNIEnv* env, jobject, jlong handle) {
+    CadDocument* document = fromHandle(handle);
+    if (document == nullptr || document->triangleFaceIndices.empty()) return env->NewIntArray(0);
+    jintArray result = env->NewIntArray(static_cast<jsize>(document->triangleFaceIndices.size()));
+    if (result != nullptr) env->SetIntArrayRegion(result, 0,
+        static_cast<jsize>(document->triangleFaceIndices.size()),
+        reinterpret_cast<const jint*>(document->triangleFaceIndices.data()));
     return result;
 }
 
