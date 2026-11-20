@@ -63,6 +63,32 @@ jobs:
           if (-not (Test-Path $apk)) { throw "Expected STEP-enabled APK was not created: $apk" }
           Get-Item $apk | Format-List FullName,Length,LastWriteTime
 
+      - name: Verify OCCT runtime libraries inside APK
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $apk = "SrcCad.Mobile/app/build/outputs/apk/debug/app-debug.apk"
+          $archive = [IO.Compression.ZipFile]::OpenRead((Resolve-Path $apk))
+          try {
+            $entries = @($archive.Entries | ForEach-Object { $_.FullName })
+            $required = @(
+              "lib/arm64-v8a/libsrccad_mobile.so",
+              "lib/arm64-v8a/libc++_shared.so",
+              "lib/arm64-v8a/libTKDESTEP.so",
+              "lib/arm64-v8a/libTKTopAlgo.so",
+              "lib/arm64-v8a/libTKernel.so",
+              "lib/arm64-v8a/libTKMath.so"
+            )
+            $missing = @($required | Where-Object { $_ -notin $entries })
+            if ($missing.Count -gt 0) {
+              throw "APK is missing required ARM64 libraries: $($missing -join ', ')"
+            }
+            Write-Host "Verified required OCCT and SrcCad ARM64 shared libraries in APK."
+          }
+          finally {
+            $archive.Dispose()
+          }
+
       - name: Upload STEP-enabled APK
         uses: actions/upload-artifact@v4
         with:
