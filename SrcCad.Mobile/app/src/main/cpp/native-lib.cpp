@@ -165,6 +165,7 @@ std::string loadStep(CadDocument& document, const std::string& path) {
            << R"(,"triangles":)" << document.triangleCount << "}";
     return result.str();
 }
+#endif // SRCCAD_WITH_OCCT: STEP import implementation
 
 bool intersectRayTriangle(
     const double origin[3], const double direction[3],
