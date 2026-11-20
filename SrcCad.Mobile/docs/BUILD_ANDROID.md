@@ -34,7 +34,7 @@ cd SrcCad.Mobile
 .\scripts\build_occt_android.ps1
 \`\`\`
 
-The script checks out upstream OCCT tag V8_0_0, configures an arm64-v8a cross-build and installs the selected STEP/mesh toolkits and their dependencies under:
+The script checks out upstream OCCT tag V8_0_0, configures an arm64-v8a cross-build and installs the selected STEP, mesh and topological-algorithm toolkits and their dependencies under:
 
 \`SrcCad.Mobile/third_party/occt-android/arm64-v8a\`
 
