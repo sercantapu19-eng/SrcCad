@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -91,7 +92,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 Surface(Modifier.fillMaxSize(), color = Color(0xFF171B22)) {
-                    BoxWithConstraints(Modifier.fillMaxSize()) {
+                    BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
                         val compactLayout = maxWidth < 620.dp
                         Column(
                             modifier = Modifier.fillMaxSize().padding(if (compactLayout) 8.dp else 14.dp),
