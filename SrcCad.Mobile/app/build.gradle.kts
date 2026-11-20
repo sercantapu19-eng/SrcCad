@@ -14,6 +14,13 @@ android {
     compileSdk = 36
     ndkVersion = "28.2.13676358"
 
+    if (occtRoot.isNotBlank()) {
+        sourceSets.getByName("main").jniLibs.srcDirs(
+            file("$occtRoot/lib"),
+            file("$occtRoot/lib64")
+        )
+    }
+
     defaultConfig {
         applicationId = "com.srccad.mobile"
         minSdk = 26
