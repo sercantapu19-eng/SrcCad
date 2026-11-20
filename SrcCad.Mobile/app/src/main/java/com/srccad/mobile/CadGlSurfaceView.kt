@@ -129,6 +129,9 @@ private class CadGlRenderer : GLSurfaceView.Renderer {
     private var vertexBuffer: FloatBuffer? = null
     private var indexBuffer: IntBuffer? = null
     private var indexCount = 0
+    private var vertexBufferId = 0
+    private var indexBufferId = 0
+    private var meshUploaded = false
     private var surfaceWidth = 1
     private var surfaceHeight = 1
     private var centerX = 0f
@@ -153,6 +156,11 @@ private class CadGlRenderer : GLSurfaceView.Renderer {
         GLES30.glEnable(GLES30.GL_DEPTH_TEST)
         GLES30.glDisable(GLES30.GL_CULL_FACE)
         program = createProgram(VERTEX_SHADER, FRAGMENT_SHADER)
+        val bufferIds = IntArray(2)
+        GLES30.glGenBuffers(2, bufferIds, 0)
+        vertexBufferId = bufferIds[0]
+        indexBufferId = bufferIds[1]
+        meshUploaded = false
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
@@ -184,16 +192,28 @@ private class CadGlRenderer : GLSurfaceView.Renderer {
         GLES30.glUniformMatrix4fv(GLES30.glGetUniformLocation(program, "uMvp"), 1, false, mvp, 0)
         GLES30.glUniformMatrix4fv(GLES30.glGetUniformLocation(program, "uModel"), 1, false, model, 0)
 
-        vertices.position(0)
+        // GLES 3 requires buffer objects for vertex/index data; client-side arrays are not valid.
+        if (!meshUploaded) {
+            vertices.position(0)
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, vertexBufferId)
+            GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, vertices.capacity() * 4, vertices, GLES30.GL_STATIC_DRAW)
+            indices.position(0)
+            GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, indexBufferId)
+            GLES30.glBufferData(GLES30.GL_ELEMENT_ARRAY_BUFFER, indices.capacity() * 4, indices, GLES30.GL_STATIC_DRAW)
+            meshUploaded = true
+        }
+
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, vertexBufferId)
         GLES30.glEnableVertexAttribArray(0)
-        GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 24, vertices)
-        vertices.position(3)
+        GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 24, 0)
         GLES30.glEnableVertexAttribArray(1)
-        GLES30.glVertexAttribPointer(1, 3, GLES30.GL_FLOAT, false, 24, vertices)
-        indices.position(0)
-        GLES30.glDrawElements(GLES30.GL_TRIANGLES, indexCount, GLES30.GL_UNSIGNED_INT, indices)
+        GLES30.glVertexAttribPointer(1, 3, GLES30.GL_FLOAT, false, 24, 12)
+        GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, indexBufferId)
+        GLES30.glDrawElements(GLES30.GL_TRIANGLES, indexCount, GLES30.GL_UNSIGNED_INT, 0)
         GLES30.glDisableVertexAttribArray(0)
         GLES30.glDisableVertexAttribArray(1)
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
+        GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, 0)
     }
 
     fun rayForScreen(x: Float, y: Float, viewWidth: Int, viewHeight: Int): FloatArray? {
@@ -232,6 +252,7 @@ private class CadGlRenderer : GLSurfaceView.Renderer {
         indexBuffer = ByteBuffer.allocateDirect(indices.size * 4)
             .order(ByteOrder.nativeOrder()).asIntBuffer().apply { put(indices); position(0) }
         indexCount = indices.size
+        meshUploaded = false
         centerX = ((bounds[0] + bounds[3]) * 0.5).toFloat()
         centerY = ((bounds[1] + bounds[4]) * 0.5).toFloat()
         centerZ = ((bounds[2] + bounds[5]) * 0.5).toFloat()
@@ -247,6 +268,7 @@ private class CadGlRenderer : GLSurfaceView.Renderer {
         vertexBuffer = null
         indexBuffer = null
         indexCount = 0
+        meshUploaded = false
         resetCamera()
     }
 
