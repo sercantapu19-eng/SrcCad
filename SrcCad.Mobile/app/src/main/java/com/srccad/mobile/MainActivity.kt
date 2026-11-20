@@ -60,7 +60,7 @@ class MainActivity : ComponentActivity() {
     private var measurementAvailable by mutableStateOf(false)
     private var measurementText by mutableStateOf("İki nokta arası ölçüm için önce bir STEP modeli açın.")
     private var infoExpanded by mutableStateOf(false)
-    private var firstMeasurePoint: DoubleArray? = null
+    private var firstMeasurePick: DoubleArray? = null
 
     private val openDocument = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) importStep(uri)
@@ -196,7 +196,7 @@ class MainActivity : ComponentActivity() {
                                 )
                                 if (measurementText.startsWith("Mesafe:")) {
                                     Text(
-                                        measurementText.substringBefore("|").trim(),
+                                        measurementText.substringBefore("\n").trim(),
                                         color = Color(0xFFB8D7F2),
                                         style = MaterialTheme.typography.labelMedium,
                                         maxLines = 1
@@ -236,16 +236,16 @@ class MainActivity : ComponentActivity() {
                                     onClick = {
                                         measurementMode = !measurementMode
                                         viewer.measurementMode = measurementMode
-                                        firstMeasurePoint = null
+                                        firstMeasurePick = null
                                         measurementText = if (measurementMode) {
-                                            "Ölçüm açık: kısa dokunuşla nokta seçin; sürükleyerek modeli döndürün."
+                                            "Otomatik ölçüm açık: kenara/yüzeye dokunun; sürükleyerek modeli döndürün."
                                         } else {
                                             "Ölçüm kapatıldı."
                                         }
                                     },
                                     enabled = hasModel && measurementAvailable && !isBusy
                                 ) {
-                                    Text(if (measurementMode) "Ölçümü Kapat" else if (compactLayout) "Ölç" else "Mesafe Ölç")
+                                    Text(if (measurementMode) "Ölçümü Kapat" else if (compactLayout) "Ölç" else "Otomatik Ölçüm")
                                 }
                                 Spacer(Modifier.weight(1f))
                                 Text(
@@ -278,7 +278,7 @@ class MainActivity : ComponentActivity() {
         measurementAvailable = false
         measurementMode = false
         viewer.measurementMode = false
-        firstMeasurePoint = null
+        firstMeasurePick = null
         measurementText = "Demo geometri: 100 × 50 × 20 mm."
         modelSummary = "Demo model hazırlanıyor…"
         viewer.clearMesh()
@@ -328,7 +328,7 @@ class MainActivity : ComponentActivity() {
         measurementAvailable = enableMeasurement
         measurementMode = false
         viewer.measurementMode = false
-        firstMeasurePoint = null
+        firstMeasurePick = null
         hasModel = true
         measurementText = if (enableMeasurement) {
             "İki yüzey noktasını seçerek mesafe ölçebilirsiniz."
@@ -344,7 +344,7 @@ class MainActivity : ComponentActivity() {
         measurementAvailable = false
         measurementMode = false
         viewer.measurementMode = false
-        firstMeasurePoint = null
+        firstMeasurePick = null
         measurementText = "Model içe aktarılıyor…"
         modelSummary = "Dosya hazırlanıyor…"
         viewer.clearMesh()
@@ -402,44 +402,71 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleMeasurementRay(ray: FloatArray) {
-        if (!measurementMode || !measurementAvailable || ray.size < 6 || nativeHandle == 0L) return
+        if (!measurementMode || !measurementAvailable || ray.size < 7 || nativeHandle == 0L) return
+
         val origin = doubleArrayOf(ray[0].toDouble(), ray[1].toDouble(), ray[2].toDouble())
         val direction = doubleArrayOf(ray[3].toDouble(), ray[4].toDouble(), ray[5].toDouble())
+        val edgeTolerance = ray[6].toDouble()
 
         lifecycleScope.launch {
             try {
-                val point = withContext(Dispatchers.Default) {
-                    NativeCadEngine.nativePickRay(nativeHandle, origin, direction)
+                val picked = withContext(Dispatchers.Default) {
+                    NativeCadEngine.nativePickGeometry(nativeHandle, origin, direction, edgeTolerance)
                 }
-                if (point.size < 3) {
-                    statusText = "Yüzey yakalanamadı. Modelin görünen bir yüzeyine dokunun."
+                if (picked.size < 10) {
+                    statusText = "Geometri seçilemedi. Kenara veya yüzeyin içine kısa dokunun."
                     return@launch
                 }
 
-                val first = firstMeasurePoint
+                val first = firstMeasurePick
                 if (first == null) {
-                    firstMeasurePoint = point
-                    measurementText = "İlk nokta: X " + formatMm(point[0]) + ", Y " +
-                        formatMm(point[1]) + ", Z " + formatMm(point[2]) + " mm. İkinci noktayı seçin."
-                    statusText = "İlk ölçüm noktası alındı."
+                    firstMeasurePick = picked
+                    measurementText = describePick(picked) +
+                        "\nİkinci kenar/yüzeyi seçin; modeli sürükleyerek döndürebilirsiniz."
+                    statusText = "Geometri seçildi. Ölçü otomatik hesaplandı."
                 } else {
+                    val pointA = first.copyOfRange(1, 4)
+                    val pointB = picked.copyOfRange(1, 4)
                     val values = withContext(Dispatchers.Default) {
-                        NativeCadEngine.nativeMeasurePoints(nativeHandle, first, point)
+                        NativeCadEngine.nativeMeasurePoints(nativeHandle, pointA, pointB)
                     }
-                    firstMeasurePoint = null
+                    firstMeasurePick = null
+
+                    val output = StringBuilder()
+                    output.append("1) ").append(describePick(first))
+                    output.append("\n2) ").append(describePick(picked))
                     if (values.size >= 4) {
-                        measurementText = "Mesafe: " + formatMm(values[0]) + " mm | ΔX " +
-                            formatMm(values[1]) + " ΔY " + formatMm(values[2]) +
-                            " ΔZ " + formatMm(values[3]) + " mm"
-                        statusText = "Ölçüm tamamlandı."
-                    } else {
-                        measurementText = "Ölçüm hesaplanamadı."
-                        statusText = "Native ölçüm motoru geçerli sonuç döndürmedi."
+                        output.append("\nNoktalar arası uzaklık: ").append(formatMm(values[0])).append(" mm")
+                        output.append("\nΔX: ").append(formatMm(values[1]))
+                            .append(" mm   ΔY: ").append(formatMm(values[2]))
+                            .append(" mm   ΔZ: ").append(formatMm(values[3])).append(" mm")
                     }
+
+                    if (first[9] > 0.5 && picked[9] > 0.5) {
+                        val dot = first[6] * picked[6] + first[7] * picked[7] + first[8] * picked[8]
+                        val angle = Math.toDegrees(kotlin.math.acos(kotlin.math.abs(dot).coerceIn(0.0, 1.0)))
+                        output.append("\nEn küçük açı: ").append(String.format(Locale.US, "%.3f", angle)).append("°")
+                    }
+
+                    measurementText = output.toString()
+                    statusText = "Ölçü tamamlandı. Yeni ölçüm için başka bir kenar/yüzeye dokunun."
                 }
             } catch (error: Exception) {
-                statusText = error.message ?: "Nokta seçimi sırasında hata oluştu."
+                statusText = error.message ?: "Geometri ölçümü sırasında hata oluştu."
             }
+        }
+    }
+
+    private fun describePick(pick: DoubleArray): String {
+        if (pick.size < 10) return "Geometri ölçümü yok."
+        return when (pick[0].toInt()) {
+            1 -> "Doğru kenar • Uzunluk: " + formatMm(pick[4]) + " mm"
+            2 -> "Dairesel kenar • Çap: " + formatMm(pick[4]) + " mm • Yarıçap: " + formatMm(pick[5]) + " mm"
+            3 -> "Eğri kenar • Uzunluk: " + formatMm(pick[4]) + " mm"
+            4 -> "Düzlemsel yüzey • Alan: " + formatMm(pick[4]) + " mm²"
+            5 -> "Silindirik yüzey • Çap: " + formatMm(pick[4]) + " mm • Derinlik: " + formatMm(pick[5]) + " mm"
+            6 -> "Yüzey • Alan: " + formatMm(pick[4]) + " mm²"
+            else -> "Geometri seçildi."
         }
     }
 
