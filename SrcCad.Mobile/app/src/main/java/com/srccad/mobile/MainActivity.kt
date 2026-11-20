@@ -40,6 +40,7 @@ import java.util.Locale
 class MainActivity : ComponentActivity() {
     private lateinit var viewer: CadGlSurfaceView
     private var nativeHandle = 0L
+    private var stepReaderAvailable = false
     private var currentImport: File? = null
 
     private var fileName by mutableStateOf("Henüz dosya açılmadı")
@@ -62,6 +63,14 @@ class MainActivity : ComponentActivity() {
         viewer = CadGlSurfaceView(this)
         if (nativeHandle == 0L) {
             statusText = "Native CAD motoru için bellek ayrılamadı."
+        } else {
+            val engineStatus = NativeCadEngine.nativeEngineStatus()
+            stepReaderAvailable = engineStatus.contains("OCCT STEP çekirdeği bağlı")
+            statusText = if (stepReaderAvailable) {
+                "STEP okuyucu hazır. Yerel STEP dosyası açabilirsiniz."
+            } else {
+                "Bu APK demo sürümüdür; STEP motoru henüz bağlanmadığı için STEP açma kapalı."
+            }
         }
         viewer.onRayRequested = { ray ->
             if (ray != null) handleMeasurementRay(ray)
@@ -85,8 +94,14 @@ class MainActivity : ComponentActivity() {
                                 Text("CAD Viewer • Android", color = Color(0xFF9EABB9), style = MaterialTheme.typography.labelMedium)
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(onClick = { openDocument.launch(arrayOf("*/*")) }, enabled = !isBusy) {
-                                    Text("STEP Aç")
+                                Button(
+                                    onClick = {
+                                        if (stepReaderAvailable) openDocument.launch(arrayOf("*/*"))
+                                        else statusText = "STEP okuyucu bu demo APK'da bulunmuyor. STEP destekli APK henüz derlenmedi."
+                                    },
+                                    enabled = !isBusy && stepReaderAvailable
+                                ) {
+                                    Text(if (stepReaderAvailable) "STEP Aç" else "STEP Motoru Bekleniyor")
                                 }
                                 Button(onClick = { loadDemoBox() }, enabled = !isBusy) {
                                     Text("Demo Kutu")
@@ -163,7 +178,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-        if (nativeHandle != 0L) statusText = NativeCadEngine.nativeEngineStatus()
     }
 
     private fun loadDemoBox() {
