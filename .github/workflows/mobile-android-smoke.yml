@@ -15,6 +15,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: srccad-mobile-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   android-smoke-build:
     runs-on: ubuntu-latest
