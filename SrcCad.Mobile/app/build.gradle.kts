@@ -2,6 +2,12 @@ import java.awt.RenderingHints
 import java.awt.image.BufferedImage
 import javax.imageio.ImageIO
 
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
+}
+
 val generatedSrcCadResources = layout.buildDirectory.dir("generated/srccad-branding/res")
 val generateSrcCadBranding by tasks.registering {
     val sourceImage = rootProject.file("branding/SrcCadWorks.jpg")
@@ -14,25 +20,46 @@ val generateSrcCadBranding by tasks.registering {
         }
         val original = ImageIO.read(sourceImage)
             ?: throw GradleException("SrcCad brand image could not be decoded.")
-
         val outputRoot = generatedSrcCadResources.get().asFile
-        fun writeIcon(directory: String, name: String, size: Int) {
+
+        fun renderImage(image: BufferedImage, directory: String, name: String, width: Int, height: Int) {
             val outputDirectory = File(outputRoot, directory)
             outputDirectory.mkdirs()
-            val output = File(outputDirectory, name)
-            val resized = BufferedImage(size, size, BufferedImage.TYPE_INT_RGB)
+            val resized = BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
             val graphics = resized.createGraphics()
             graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC)
             graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY)
-            graphics.drawImage(original, 0, 0, size, size, null)
+            graphics.drawImage(image, 0, 0, width, height, null)
             graphics.dispose()
-            ImageIO.write(resized, "png", output)
+            ImageIO.write(resized, "png", File(outputDirectory, name))
         }
 
-        // In-app brand mark.
-        writeIcon("drawable-nodpi", "srccad_brand.png", 256)
+        // Crop the white padding for a legible horizontal brand mark inside the app.
+        var minX = original.width
+        var minY = original.height
+        var maxX = -1
+        var maxY = -1
+        for (y in 0 until original.height) {
+            for (x in 0 until original.width) {
+                val rgb = original.getRGB(x, y)
+                val red = (rgb shr 16) and 0xFF
+                val green = (rgb shr 8) and 0xFF
+                val blue = rgb and 0xFF
+                if (red < 247 || green < 247 || blue < 247) {
+                    minX = minOf(minX, x)
+                    minY = minOf(minY, y)
+                    maxX = maxOf(maxX, x)
+                    maxY = maxOf(maxY, y)
+                }
+            }
+        }
+        if (maxX < minX || maxY < minY) {
+            throw GradleException("SrcCad logo artwork was not found in the source image.")
+        }
+        val croppedLogo = original.getSubimage(minX, minY, maxX - minX + 1, maxY - minY + 1)
+        renderImage(croppedLogo, "drawable-nodpi", "srccad_brand.png", 480, 148)
 
-        // Standard and round launcher icons for all Android density buckets.
+        // Keep the square master image for launcher icons.
         val densities = listOf(
             "mipmap-mdpi" to 48,
             "mipmap-hdpi" to 72,
@@ -41,16 +68,10 @@ val generateSrcCadBranding by tasks.registering {
             "mipmap-xxxhdpi" to 192
         )
         densities.forEach { (directory, size) ->
-            writeIcon(directory, "ic_launcher.png", size)
-            writeIcon(directory, "ic_launcher_round.png", size)
+            renderImage(original, directory, "ic_launcher.png", size, size)
+            renderImage(original, directory, "ic_launcher_round.png", size, size)
         }
     }
-}
-
-plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 val defaultOcctRoot = rootProject.file("third_party/occt-android/arm64-v8a")
