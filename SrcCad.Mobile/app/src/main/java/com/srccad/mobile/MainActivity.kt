@@ -59,6 +59,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         nativeHandle = NativeCadEngine.nativeCreate()
         viewer = CadGlSurfaceView(this)
+        if (nativeHandle == 0L) {
+            statusText = "Native CAD motoru için bellek ayrılamadı."
+        }
         viewer.onRayRequested = { ray ->
             if (ray != null) handleMeasurementRay(ray)
             else statusText = "Bu konumda model yüzeyi bulunamadı. Yüzeye dokunup tekrar deneyin."
@@ -156,7 +159,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-        statusText = NativeCadEngine.nativeEngineStatus()
+        if (nativeHandle != 0L) statusText = NativeCadEngine.nativeEngineStatus()
     }
 
     private fun importStep(uri: Uri) {
