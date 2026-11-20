@@ -1,5 +1,9 @@
 # Android build guide
 
+## One-click Windows build
+
+After installing the prerequisites below, open this folder in Windows Explorer and run `BUILD_ANDROID.bat`. It builds OCCT for Android ARM64 and then assembles the debug APK. You can still run the OCCT and Gradle steps separately when troubleshooting.
+
 ## Target
 
 The first device target is Android arm64-v8a. The app uses:
@@ -46,7 +50,7 @@ Open \`SrcCad.Mobile\` as the Android Studio project and run Gradle sync. The pr
 .\gradlew.bat :app:assembleDebug
 \`\`\`
 
-The app uses Android Gradle Plugin 8.11.1 with Kotlin 2.2.20 and Gradle 8.13. The app module pins Android NDK r28c. When the OCCT install path is the default location above, Gradle detects it automatically. To use a different location, set:
+The app uses Android Gradle Plugin 8.11.1 with Kotlin 2.2.20 and Gradle 8.13. The app uses Android Gradle Plugin 8.11.1 with Kotlin 2.2.20 and Gradle 8.13. The app module pins Android NDK r28c. When the OCCT install path is the default location above, Gradle detects it automatically. To use a different location, set:
 
 \`\`\`powershell
 $env:SRCCAD_OCCT_ROOT = "D:\path\to\occt-android\arm64-v8a"
