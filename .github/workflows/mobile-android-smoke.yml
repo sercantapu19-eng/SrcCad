@@ -49,7 +49,16 @@ jobs:
 
       - name: Build Android shell (OCCT intentionally disabled)
         working-directory: SrcCad.Mobile
-        run: bash ./gradlew :app:assembleDebug --stacktrace
+        shell: bash
+        run: |
+          for attempt in 1 2 3; do
+            if bash ./gradlew :app:assembleDebug --stacktrace; then
+              exit 0
+            fi
+            echo "Gradle build failed on attempt $attempt."
+            if [ "$attempt" -lt 3 ]; then sleep 15; fi
+          done
+          exit 1
 
       - name: Upload installable shell APK
         uses: actions/upload-artifact@v4
