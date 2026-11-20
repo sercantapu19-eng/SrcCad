@@ -87,9 +87,11 @@ std::string loadError(const std::string& message) {
 #if defined(SRCCAD_WITH_OCCT)
 std::string loadStep(CadDocument& document, const std::string& path) {
     document.clear();
+    STEPControl_Reader reader; // initializes the STEP controller and its Interface_Static parameters
     // Normalize every STEP source unit to millimetres for predictable CAD measurement.
-    Interface_Static::SetCVal("xstep.cascade.unit", "MM");
-    STEPControl_Reader reader;
+    if (!Interface_Static::SetCVal("xstep.cascade.unit", "MM")) {
+        return loadError("OCCT STEP unit parameter xstep.cascade.unit is unavailable.");
+    }
     if (reader.ReadFile(path.c_str()) != IFSelect_RetDone)
         return loadError("OCCT STEP okuyucusu dosyayı açamadı (ReadFile).");
     if (reader.TransferRoots() <= 0)
