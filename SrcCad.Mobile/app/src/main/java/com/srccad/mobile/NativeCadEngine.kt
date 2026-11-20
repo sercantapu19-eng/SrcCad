@@ -8,6 +8,8 @@ object NativeCadEngine {
     external fun nativeEngineStatus(): String
     /** JSON: { ok, message, faces, triangles }. */
     external fun nativeLoadStep(handle: Long, absolutePath: String): String
+    /** Loads a self-contained 100 x 50 x 20 mm display-only sample box. */
+    external fun nativeLoadDemoBox(handle: Long): String
     /** Interleaved XYZ + normal data (6 floats per vertex). */
     external fun nativeGetVertices(handle: Long): FloatArray
     external fun nativeGetIndices(handle: Long): IntArray
