@@ -239,7 +239,7 @@ class MainActivity : ComponentActivity() {
                 val first = firstMeasurePoint
                 if (first == null) {
                     firstMeasurePoint = point
-                    measurementText = "İlk nokta: X \${formatMm(point[0])}, Y \${formatMm(point[1])}, Z \${formatMm(point[2])} mm. İkinci noktayı seçin."
+                    measurementText = "İlk nokta: X ${formatMm(point[0])}, Y ${formatMm(point[1])}, Z ${formatMm(point[2])} mm. İkinci noktayı seçin."
                     statusText = "İlk ölçüm noktası alındı."
                 } else {
                     val values = withContext(Dispatchers.Default) {
@@ -247,7 +247,7 @@ class MainActivity : ComponentActivity() {
                     }
                     firstMeasurePoint = null
                     if (values.size >= 4) {
-                        measurementText = "Mesafe: \${formatMm(values[0])} mm   |   ΔX \${formatMm(values[1])}   ΔY \${formatMm(values[2])}   ΔZ \${formatMm(values[3])} mm"
+                        measurementText = "Mesafe: ${formatMm(values[0])} mm   |   ΔX ${formatMm(values[1])}   ΔY ${formatMm(values[2])}   ΔZ ${formatMm(values[3])} mm"
                         statusText = "Ölçüm tamamlandı. Yeni ölçüm için iki noktaya daha dokunun."
                     } else {
                         measurementText = "Ölçüm hesaplanamadı."
