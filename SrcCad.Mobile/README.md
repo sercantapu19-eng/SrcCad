@@ -20,9 +20,9 @@ Android companion viewer for SrcCad. This project is isolated under `SrcCad.Mobi
 
 ## Build status
 
-The source implementation is in place, but **the APK has not yet been built or tested on a phone**. The OCCT importer and exact-point projection are enabled only after an Android-built OCCT installation is supplied.
+A **demo-box debug APK has been built successfully** with OCCT disabled. It exercises the Android UI and OpenGL ES renderer, but it cannot import STEP files yet. The STEP importer and exact B-rep point projection are enabled only after an Android-built OCCT installation is supplied. The OCCT-enabled APK is a separate build and has not yet passed its package/runtime checks. No physical phone test has been completed.
 
-Install the prerequisites in [docs/BUILD_ANDROID.md](docs/BUILD_ANDROID.md), then run `BUILD_ANDROID.bat` from this folder. The script builds OCCT and then the debug APK. A successful build should create:
+Install the prerequisites in [docs/BUILD_ANDROID.md](docs/BUILD_ANDROID.md), then run `BUILD_ANDROID.bat` from this folder. The script builds OCCT and then the STEP-enabled debug APK. A successful full build should create:
 
 `app/build/outputs/apk/debug/app-debug.apk`
 
