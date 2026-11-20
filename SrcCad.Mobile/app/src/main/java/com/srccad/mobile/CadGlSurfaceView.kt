@@ -36,8 +36,12 @@ class CadGlSurfaceView(context: Context) : GLSurfaceView(context) {
         renderMode = RENDERMODE_WHEN_DIRTY
     }
 
-    fun submitMesh(vertices: FloatArray, indices: IntArray, bounds: DoubleArray) {
-        queueEvent { cadRenderer.setMesh(vertices, indices, bounds); requestRender() }
+    fun submitMesh(vertices: FloatArray, indices: IntArray, bounds: DoubleArray, triangleFaceIds: IntArray) {
+        queueEvent { cadRenderer.setMesh(vertices, indices, bounds, triangleFaceIds); requestRender() }
+    }
+
+    fun highlightFaces(faceIds: IntArray) {
+        queueEvent { cadRenderer.setHighlightedFaces(faceIds); requestRender() }
     }
 
     fun clearMesh() {
@@ -142,6 +146,10 @@ private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer
     private var vertexBuffer: FloatBuffer? = null
     private var indexBuffer: IntBuffer? = null
     private var indexCount = 0
+    private var triangleFaceIds = IntArray(0)
+    private var selectedFaceIds = IntArray(0)
+    private var highlightIndexBufferId = 0
+    private var highlightIndexCount = 0
     private var vertexBufferId = 0
     private var indexBufferId = 0
     private var meshUploaded = false
@@ -171,6 +179,9 @@ private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer
         program = createProgram(VERTEX_SHADER, FRAGMENT_SHADER)
         val bufferIds = IntArray(2)
         GLES30.glGenBuffers(2, bufferIds, 0)
+        val highlightIds = IntArray(1)
+        GLES30.glGenBuffers(1, highlightIds, 0)
+        highlightIndexBufferId = highlightIds[0]
         vertexBufferId = bufferIds[0]
         indexBufferId = bufferIds[1]
         meshUploaded = false
@@ -204,6 +215,7 @@ private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer
         GLES30.glUseProgram(program)
         GLES30.glUniformMatrix4fv(GLES30.glGetUniformLocation(program, "uMvp"), 1, false, mvp, 0)
         GLES30.glUniformMatrix4fv(GLES30.glGetUniformLocation(program, "uModel"), 1, false, model, 0)
+        GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uHighlight"), 0)
 
         // GLES 3 requires buffer objects for vertex/index data; client-side arrays are not valid.
         if (!meshUploaded) {
@@ -223,6 +235,12 @@ private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer
         GLES30.glVertexAttribPointer(1, 3, GLES30.GL_FLOAT, false, 24, 12)
         GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, indexBufferId)
         GLES30.glDrawElements(GLES30.GL_TRIANGLES, indexCount, GLES30.GL_UNSIGNED_INT, 0)
+        if (highlightIndexCount > 0) {
+            GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uHighlight"), 1)
+            GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, highlightIndexBufferId)
+            GLES30.glDrawElements(GLES30.GL_TRIANGLES, highlightIndexCount, GLES30.GL_UNSIGNED_INT, 0)
+            GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uHighlight"), 0)
+        }
         GLES30.glDisableVertexAttribArray(0)
         GLES30.glDisableVertexAttribArray(1)
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
@@ -264,7 +282,7 @@ private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer
         return floatArrayOf(ox, oy, oz, dx / length, dy / length, dz / length, edgeTolerance)
     }
 
-    fun setMesh(vertices: FloatArray, indices: IntArray, bounds: DoubleArray) {
+    fun setMesh(vertices: FloatArray, indices: IntArray, bounds: DoubleArray, faceIds: IntArray) {
         if (vertices.size < 18 || vertices.size % 6 != 0 || indices.isEmpty() || bounds.size != 6) {
             clearMesh()
             return
@@ -274,6 +292,9 @@ private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer
         indexBuffer = ByteBuffer.allocateDirect(indices.size * 4)
             .order(ByteOrder.nativeOrder()).asIntBuffer().apply { put(indices); position(0) }
         indexCount = indices.size
+        triangleFaceIds = faceIds.copyOf()
+        selectedFaceIds = IntArray(0)
+        highlightIndexCount = 0
         meshUploaded = false
         centerX = ((bounds[0] + bounds[3]) * 0.5).toFloat()
         centerY = ((bounds[1] + bounds[4]) * 0.5).toFloat()
@@ -286,7 +307,31 @@ private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer
         resetCamera()
     }
 
+    fun setHighlightedFaces(faceIds: IntArray) {
+        selectedFaceIds = faceIds.distinct().filter { it >= 0 }.toIntArray()
+        val source = indexBuffer ?: return
+        val selected = ArrayList<Int>()
+        for (triangle in triangleFaceIds.indices) {
+            if (selectedFaceIds.contains(triangleFaceIds[triangle])) {
+                val offset = triangle * 3
+                selected.add(source.get(offset)); selected.add(source.get(offset + 1)); selected.add(source.get(offset + 2))
+            }
+        }
+        val data = selected.toIntArray()
+        highlightIndexCount = data.size
+        if (data.isNotEmpty()) {
+            val buffer = ByteBuffer.allocateDirect(data.size * 4).order(ByteOrder.nativeOrder()).asIntBuffer()
+            buffer.put(data).position(0)
+            GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, highlightIndexBufferId)
+            GLES30.glBufferData(GLES30.GL_ELEMENT_ARRAY_BUFFER, data.size * 4, buffer, GLES30.GL_DYNAMIC_DRAW)
+            GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, 0)
+        }
+    }
+
     fun clearMesh() {
+        triangleFaceIds = IntArray(0)
+        selectedFaceIds = IntArray(0)
+        highlightIndexCount = 0
         vertexBuffer = null
         indexBuffer = null
         indexCount = 0
@@ -368,13 +413,15 @@ private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer
             #version 300 es
             precision highp float;
             in vec3 vNormal;
+            uniform int uHighlight;
             out vec4 outColor;
             void main() {
                 vec3 n = normalize(vNormal);
                 vec3 lightDirection = normalize(vec3(-0.45, 0.75, 0.55));
                 float diffuse = max(dot(n, lightDirection), 0.0);
                 float light = 0.28 + diffuse * 0.72;
-                outColor = vec4(vec3(0.55, 0.68, 0.82) * light, 1.0);
+                vec3 baseColor = (uHighlight == 1) ? vec3(1.0, 0.12, 0.035) : vec3(0.55, 0.68, 0.82);
+                outColor = vec4(baseColor * (uHighlight == 1 ? 1.0 : light), 1.0);
             }
         """
     }
