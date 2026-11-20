@@ -81,4 +81,4 @@ Not implemented or not yet validated:
 
 The screen ray identifies the hit face using its triangulation, then the picked point is projected to the exact trimmed B-rep face with OCCT. The distance is calculated from those B-rep points, not from screen pixels. Accuracy and picking behavior still require validation with known-size test files.
 
-No APK has been built or device-tested in this development environment. Run the build and device acceptance checks before treating this as a working release.
+A demo-box APK has been built successfully with OCCT disabled; it validates the Android app shell and renderer build only. The STEP-enabled APK still requires a successful OCCT Android build plus package verification. No physical Android device test has been completed. Run the full build and device acceptance checks before treating this as a working CAD viewer release.
