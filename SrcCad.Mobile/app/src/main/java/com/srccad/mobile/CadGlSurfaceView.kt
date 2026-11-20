@@ -66,10 +66,11 @@ class CadGlSurfaceView(context: Context) : GLSurfaceView(context) {
                     val x = (event.getX(0) + event.getX(1)) * 0.5f
                     val y = (event.getY(0) + event.getY(1)) * 0.5f
                     val span = pointerSpan(event)
+                    val zoomRatio = if (lastSpan > 0f && span > 0f) span / lastSpan else 1f
                     val dx = x - lastX
                     val dy = y - lastY
                     queueEvent {
-                        if (lastSpan > 0f && span > 0f) cadRenderer.zoom(span / lastSpan)
+                        cadRenderer.zoom(zoomRatio)
                         cadRenderer.pan(dx / max(1, width).toFloat(), -dy / max(1, height).toFloat())
                         requestRender()
                     }
