@@ -11,11 +11,17 @@
 
 #if defined(SRCCAD_WITH_OCCT)
 #include <BRepBndLib.hxx>
+#include <BRepAdaptor_Curve.hxx>
+#include <BRepAdaptor_Surface.hxx>
 #include <BRepBuilderAPI_MakeVertex.hxx>
 #include <BRepExtrema_DistShapeShape.hxx>
+#include <BRepGProp.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
 #include <BRep_Tool.hxx>
 #include <Bnd_Box.hxx>
+#include <GProp_GProps.hxx>
+#include <GeomAbs_CurveType.hxx>
+#include <GeomAbs_SurfaceType.hxx>
 #include <IFSelect_ReturnStatus.hxx>
 #include <Interface_Static.hxx>
 #include <Poly_Triangle.hxx>
@@ -29,8 +35,11 @@
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Shape.hxx>
 #include <TopoDS_Vertex.hxx>
+#include <gp_Cylinder.hxx>
+#include <gp_Pln.hxx>
 #include <gp_Pnt.hxx>
 #include <gp_Vec.hxx>
+#include <TopoDS_Edge.hxx>
 #endif
 
 namespace {
@@ -300,6 +309,132 @@ bool pickExactBrepPoint(
     exactPoint = projection.PointOnShape2(1);
     return true;
 }
+
+// Result layout:
+// [kind, X, Y, Z, primary, secondary, directionX, directionY, directionZ, hasDirection]
+// kind: 1 line edge, 2 circular edge, 3 other edge, 4 planar face, 5 cylindrical face, 6 other face.
+std::vector<double> analyzeGeometryPick(
+    CadDocument& document,
+    const double origin[3],
+    const double direction[3],
+    const double edgeTolerance) {
+    std::vector<double> result;
+    if (!document.loaded || document.indices.size() < 3) return result;
+
+    double nearest = std::numeric_limits<double>::max();
+    std::int32_t nearestFace = -1;
+    for (std::size_t triangle = 0; triangle < document.triangleFaceIndices.size(); ++triangle) {
+        const std::size_t offset = triangle * 3;
+        const std::int32_t ia = document.indices[offset];
+        const std::int32_t ib = document.indices[offset + 1];
+        const std::int32_t ic = document.indices[offset + 2];
+        const float* a = document.vertices.data() + static_cast<std::size_t>(ia) * 6;
+        const float* b = document.vertices.data() + static_cast<std::size_t>(ib) * 6;
+        const float* c = document.vertices.data() + static_cast<std::size_t>(ic) * 6;
+        double rayDistance = 0.0;
+        if (intersectRayTriangle(origin, direction, a, b, c, rayDistance) && rayDistance < nearest) {
+            nearest = rayDistance;
+            nearestFace = document.triangleFaceIndices[triangle];
+        }
+    }
+    if (nearestFace < 0 || static_cast<std::size_t>(nearestFace) >= document.faces.size()) return result;
+
+    const gp_Pnt approximate(
+        origin[0] + direction[0] * nearest,
+        origin[1] + direction[1] * nearest,
+        origin[2] + direction[2] * nearest);
+    const TopoDS_Vertex pickedVertex = BRepBuilderAPI_MakeVertex(approximate).Vertex();
+
+    const TopoDS_Face& face = document.faces[static_cast<std::size_t>(nearestFace)];
+    BRepExtrema_DistShapeShape faceProjection(pickedVertex, face);
+    faceProjection.Perform();
+    if (!faceProjection.IsDone() || faceProjection.NbSolution() < 1) return result;
+    const gp_Pnt pickedPoint = faceProjection.PointOnShape2(1);
+
+    int kind = 6;
+    double primary = 0.0;
+    double secondary = 0.0;
+    gp_Dir directionVector(0.0, 0.0, 1.0);
+    bool hasDirection = false;
+
+    // Prefer a topological edge only when the finger landed close enough to it.
+    // This avoids turning a tap in the middle of a face into a random edge selection.
+    TopoDS_Edge closestEdge;
+    double closestEdgeDistance = std::numeric_limits<double>::max();
+    const TopoDS_Vertex exactPickVertex = BRepBuilderAPI_MakeVertex(pickedPoint).Vertex();
+    for (TopExp_Explorer edgeExplorer(face, TopAbs_EDGE); edgeExplorer.More(); edgeExplorer.Next()) {
+        const TopoDS_Edge edge = TopoDS::Edge(edgeExplorer.Current());
+        BRepExtrema_DistShapeShape edgeDistance(exactPickVertex, edge);
+        edgeDistance.Perform();
+        if (edgeDistance.IsDone() && edgeDistance.NbSolution() > 0 &&
+            edgeDistance.Value() < closestEdgeDistance) {
+            closestEdgeDistance = edgeDistance.Value();
+            closestEdge = edge;
+        }
+    }
+
+    if (!closestEdge.IsNull() && closestEdgeDistance <= std::max(edgeTolerance, 0.001)) {
+        BRepAdaptor_Curve curve(closestEdge);
+        GProp_GProps linearProperties;
+        BRepGProp::LinearProperties(closestEdge, linearProperties);
+        primary = linearProperties.Mass();
+
+        if (curve.GetType() == GeomAbs_Line) {
+            kind = 1;
+            directionVector = curve.Line().Direction();
+            hasDirection = true;
+        } else if (curve.GetType() == GeomAbs_Circle) {
+            kind = 2;
+            const double radius = curve.Circle().Radius();
+            primary = radius * 2.0;
+            secondary = radius;
+        } else {
+            kind = 3;
+        }
+    } else {
+        BRepAdaptor_Surface surface(face, true);
+        GProp_GProps surfaceProperties;
+        BRepGProp::SurfaceProperties(face, surfaceProperties);
+        primary = surfaceProperties.Mass();
+
+        if (surface.GetType() == GeomAbs_Plane) {
+            kind = 4;
+            directionVector = surface.Plane().Axis().Direction();
+            hasDirection = true;
+        } else if (surface.GetType() == GeomAbs_Cylinder) {
+            kind = 5;
+            const gp_Cylinder cylinder = surface.Cylinder();
+            const gp_Ax1 axis = cylinder.Axis();
+            primary = cylinder.Radius() * 2.0;
+            double minAxial = std::numeric_limits<double>::max();
+            double maxAxial = -std::numeric_limits<double>::max();
+            for (TopExp_Explorer vertexExplorer(face, TopAbs_VERTEX);
+                 vertexExplorer.More(); vertexExplorer.Next()) {
+                const TopoDS_Vertex vertex = TopoDS::Vertex(vertexExplorer.Current());
+                const gp_Pnt point = BRep_Tool::Pnt(vertex);
+                const double axial = gp_Vec(axis.Location(), point).Dot(gp_Vec(axis.Direction()));
+                minAxial = std::min(minAxial, axial);
+                maxAxial = std::max(maxAxial, axial);
+            }
+            secondary = (maxAxial >= minAxial) ? (maxAxial - minAxial) : 0.0;
+            directionVector = axis.Direction();
+            hasDirection = true;
+        } else {
+            kind = 6;
+        }
+    }
+
+    result = {
+        static_cast<double>(kind),
+        pickedPoint.X(), pickedPoint.Y(), pickedPoint.Z(),
+        primary, secondary,
+        hasDirection ? directionVector.X() : 0.0,
+        hasDirection ? directionVector.Y() : 0.0,
+        hasDirection ? directionVector.Z() : 0.0,
+        hasDirection ? 1.0 : 0.0
+    };
+    return result;
+}
 #endif
 } // namespace
 
@@ -404,6 +539,46 @@ Java_com_srccad_mobile_NativeCadEngine_nativePickRay(
         return result;
     } catch (...) { return env->NewDoubleArray(0); }
 #else
+    return env->NewDoubleArray(0);
+#endif
+}
+
+extern "C" JNIEXPORT jdoubleArray JNICALL
+Java_com_srccad_mobile_NativeCadEngine_nativePickGeometry(
+    JNIEnv* env, jobject, jlong handle,
+    jdoubleArray javaOrigin, jdoubleArray javaDirection, jdouble tolerance) {
+    CadDocument* document = fromHandle(handle);
+    if (document == nullptr || javaOrigin == nullptr || javaDirection == nullptr ||
+        env->GetArrayLength(javaOrigin) < 3 || env->GetArrayLength(javaDirection) < 3) {
+        return env->NewDoubleArray(0);
+    }
+
+    double origin[3] = {0.0, 0.0, 0.0};
+    double direction[3] = {0.0, 0.0, 0.0};
+    env->GetDoubleArrayRegion(javaOrigin, 0, 3, origin);
+    env->GetDoubleArrayRegion(javaDirection, 0, 3, direction);
+    const double length = std::sqrt(
+        direction[0] * direction[0] + direction[1] * direction[1] + direction[2] * direction[2]);
+    if (length <= 1.0e-12) return env->NewDoubleArray(0);
+    direction[0] /= length;
+    direction[1] /= length;
+    direction[2] /= length;
+
+#if defined(SRCCAD_WITH_OCCT)
+    try {
+        const std::vector<double> values =
+            analyzeGeometryPick(*document, origin, direction, std::max(0.0, static_cast<double>(tolerance)));
+        if (values.empty()) return env->NewDoubleArray(0);
+        jdoubleArray result = env->NewDoubleArray(static_cast<jsize>(values.size()));
+        if (result != nullptr) {
+            env->SetDoubleArrayRegion(result, 0, static_cast<jsize>(values.size()), values.data());
+        }
+        return result;
+    } catch (...) {
+        return env->NewDoubleArray(0);
+    }
+#else
+    (void)tolerance;
     return env->NewDoubleArray(0);
 #endif
 }
