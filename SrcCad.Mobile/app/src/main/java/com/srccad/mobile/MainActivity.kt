@@ -538,7 +538,8 @@ class MainActivity : ComponentActivity() {
         val triangles: Int,
         val vertices: FloatArray,
         val indices: IntArray,
-        val bounds: DoubleArray
+        val bounds: DoubleArray,
+        val triangleFaceIds: IntArray
     )
 }
 
