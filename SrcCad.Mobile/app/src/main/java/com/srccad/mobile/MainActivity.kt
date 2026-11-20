@@ -48,7 +48,8 @@ class MainActivity : ComponentActivity() {
     private var isBusy by mutableStateOf(false)
     private var hasModel by mutableStateOf(false)
     private var measurementMode by mutableStateOf(false)
-    private var measurementText by mutableStateOf("İki nokta arası ölçüm için Ölçüm modunu açın.")
+    private var measurementAvailable by mutableStateOf(false)
+    private var measurementText by mutableStateOf("İki nokta arası ölçüm için önce bir STEP modeli açın.")
     private var firstMeasurePoint: DoubleArray? = null
 
     private val openDocument = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -87,6 +88,9 @@ class MainActivity : ComponentActivity() {
                                 Button(onClick = { openDocument.launch(arrayOf("*/*")) }, enabled = !isBusy) {
                                     Text("STEP Aç")
                                 }
+                                Button(onClick = { loadDemoBox() }, enabled = !isBusy) {
+                                    Text("Demo Kutu")
+                                }
                                 Button(onClick = { viewer.fitModel() }, enabled = hasModel && !isBusy) {
                                     Text("Ekrana Sığdır")
                                 }
@@ -103,7 +107,7 @@ class MainActivity : ComponentActivity() {
                                 ) {
                                     Text("3D GÖRÜNTÜLEME ALANI", color = Color(0xFFD5DEE8), style = MaterialTheme.typography.titleMedium)
                                     Text(
-                                        "STEP dosyası açıldığında model burada görüntülenecek.",
+                                        "Demo Kutu ile görüntüleyiciyi deneyebilir veya STEP dosyası açabilirsiniz.",
                                         color = Color(0xFF9EABB9), style = MaterialTheme.typography.bodySmall
                                     )
                                 }
@@ -119,7 +123,7 @@ class MainActivity : ComponentActivity() {
                                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                                     ) {
                                         CircularProgressIndicator()
-                                        Text("STEP içe aktarılıyor…", color = Color.White)
+                                        Text("Model hazırlanıyor…", color = Color.White)
                                     }
                                 }
                             }
@@ -147,8 +151,8 @@ class MainActivity : ComponentActivity() {
                                         "Ölçüm açık: model üzerinde ilk noktaya dokunun."
                                     else "Ölçüm kapatıldı."
                                 },
-                                enabled = hasModel && !isBusy
-                            ) { Text(if (measurementMode) "Ölçümü Kapat" else "Mesafe Ölç") }
+                                enabled = hasModel && measurementAvailable && !isBusy
+                            ) { Text(if (measurementMode) "Ölçümü Kapat" else if (measurementAvailable) "Mesafe Ölç" else "Ölçüm (STEP)") }
                             Spacer(Modifier.weight(1f))
                             Text(
                                 "Tek parmak: döndür  •  İki parmak: kaydır / yakınlaştır",
@@ -162,10 +166,77 @@ class MainActivity : ComponentActivity() {
         if (nativeHandle != 0L) statusText = NativeCadEngine.nativeEngineStatus()
     }
 
+    private fun loadDemoBox() {
+        if (isBusy || nativeHandle == 0L) return
+        isBusy = true
+        hasModel = false
+        measurementAvailable = false
+        measurementMode = false
+        viewer.measurementMode = false
+        firstMeasurePoint = null
+        measurementText = "Bu örnek 100 × 50 × 20 mm demo geometrisidir. Ölçüm için STEP dosyası açın."
+        modelSummary = "Demo model hazırlanıyor…"
+        viewer.clearMesh()
+
+        lifecycleScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    val response = JSONObject(NativeCadEngine.nativeLoadDemoBox(nativeHandle))
+                    if (!response.optBoolean("ok")) {
+                        throw IllegalStateException(response.optString("message", "Demo model oluşturulamadı."))
+                    }
+                    val vertices = NativeCadEngine.nativeGetVertices(nativeHandle)
+                    val indices = NativeCadEngine.nativeGetIndices(nativeHandle)
+                    val bounds = NativeCadEngine.nativeGetBounds(nativeHandle)
+                    if (vertices.isEmpty() || indices.isEmpty() || bounds.size != 6) {
+                        throw IllegalStateException("Demo model görüntüleme ağı oluşturulamadı.")
+                    }
+                    ImportResult(
+                        "Demo Kutu • 100 × 50 × 20 mm",
+                        null,
+                        response.optInt("faces"),
+                        response.optInt("triangles"),
+                        vertices,
+                        indices,
+                        bounds
+                    )
+                }
+                presentModel(result, enableMeasurement = false)
+                statusText = "Demo model yüklendi. Döndürme, kaydırma ve yakınlaştırmayı deneyebilirsiniz."
+            } catch (error: Exception) {
+                statusText = error.message ?: "Demo model oluşturulurken hata oluştu."
+                modelSummary = "Demo model yüklenemedi"
+                hasModel = false
+                measurementAvailable = false
+            } finally {
+                isBusy = false
+            }
+        }
+    }
+
+    private fun presentModel(result: ImportResult, enableMeasurement: Boolean) {
+        currentImport?.delete()
+        currentImport = result.file
+        viewer.submitMesh(result.vertices, result.indices, result.bounds)
+        fileName = result.displayName
+        modelSummary = result.faces.toString() + " yüzey • " + result.triangles + " üçgen"
+        measurementAvailable = enableMeasurement
+        measurementMode = false
+        viewer.measurementMode = false
+        firstMeasurePoint = null
+        hasModel = true
+        if (enableMeasurement) {
+            measurementText = "İki yüzey noktasını seçerek gerçek geometrik mesafeyi ölçebilirsiniz."
+        } else {
+            measurementText = "Demo geometri: 100 × 50 × 20 mm • Ölçüm için STEP dosyası açın."
+        }
+    }
+
     private fun importStep(uri: Uri) {
         if (isBusy) return
         isBusy = true
         hasModel = false
+        measurementAvailable = false
         measurementMode = false
         viewer.measurementMode = false
         firstMeasurePoint = null
@@ -207,17 +278,13 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                currentImport?.delete()
-                currentImport = result.file
-                viewer.submitMesh(result.vertices, result.indices, result.bounds)
-                fileName = result.displayName
-                modelSummary = result.faces.toString() + " yüzey • " + result.triangles + " üçgen"
+                presentModel(result, enableMeasurement = true)
                 statusText = "STEP modeli yüklendi. Tek parmakla döndürün, iki parmakla kaydırıp yakınlaştırın."
-                hasModel = true
             } catch (error: Exception) {
                 statusText = error.message ?: "Beklenmeyen içe aktarma hatası."
                 modelSummary = "Model yüklenemedi"
                 hasModel = false
+                measurementAvailable = false
             } finally {
                 isBusy = false
             }
@@ -225,7 +292,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleMeasurementRay(ray: FloatArray) {
-        if (!measurementMode || ray.size < 6 || nativeHandle == 0L) return
+        if (!measurementMode || !measurementAvailable || ray.size < 6 || nativeHandle == 0L) return
         val origin = doubleArrayOf(ray[0].toDouble(), ray[1].toDouble(), ray[2].toDouble())
         val direction = doubleArrayOf(ray[3].toDouble(), ray[4].toDouble(), ray[5].toDouble())
 
@@ -295,7 +362,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private data class ImportResult(
-        val displayName: String, val file: File, val faces: Int, val triangles: Int,
+        val displayName: String, val file: File?, val faces: Int, val triangles: Int,
         val vertices: FloatArray, val indices: IntArray, val bounds: DoubleArray
     )
 }
