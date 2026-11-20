@@ -166,6 +166,78 @@ std::string loadStep(CadDocument& document, const std::string& path) {
 }
 #endif // SRCCAD_WITH_OCCT: STEP import implementation
 
+void appendDemoTriangle(
+    CadDocument& document, const double* p1, const double* p2, const double* p3, int faceIndex) {
+    const double e1[3] = {p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]};
+    const double e2[3] = {p3[0] - p1[0], p3[1] - p1[1], p3[2] - p1[2]};
+    double normal[3] = {
+        e1[1] * e2[2] - e1[2] * e2[1],
+        e1[2] * e2[0] - e1[0] * e2[2],
+        e1[0] * e2[1] - e1[1] * e2[0]
+    };
+    const double length = std::sqrt(
+        normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]);
+    if (length <= 1.0e-12) return;
+    normal[0] /= length;
+    normal[1] /= length;
+    normal[2] /= length;
+
+    const std::int32_t base = static_cast<std::int32_t>(document.vertices.size() / 6);
+    const double points[3][3] = {
+        {p1[0], p1[1], p1[2]},
+        {p2[0], p2[1], p2[2]},
+        {p3[0], p3[1], p3[2]}
+    };
+    for (const auto& point : points) {
+        document.vertices.push_back(static_cast<float>(point[0]));
+        document.vertices.push_back(static_cast<float>(point[1]));
+        document.vertices.push_back(static_cast<float>(point[2]));
+        document.vertices.push_back(static_cast<float>(normal[0]));
+        document.vertices.push_back(static_cast<float>(normal[1]));
+        document.vertices.push_back(static_cast<float>(normal[2]));
+    }
+    document.indices.push_back(base);
+    document.indices.push_back(base + 1);
+    document.indices.push_back(base + 2);
+    document.triangleFaceIndices.push_back(faceIndex);
+    ++document.triangleCount;
+}
+
+std::string loadDemoBox(CadDocument& document) {
+    document.clear();
+
+    // Six outward-facing quads for a 100 x 50 x 20 mm demonstration solid.
+    const double faces[6][4][3] = {
+        {{0, 0, 0},   {0, 50, 0},   {100, 50, 0}, {100, 0, 0}},   // -Z
+        {{0, 0, 20},  {100, 0, 20}, {100, 50, 20}, {0, 50, 20}}, // +Z
+        {{0, 0, 0},   {0, 0, 20},  {0, 50, 20},  {0, 50, 0}},   // -X
+        {{100, 0, 0}, {100, 50, 0},{100, 50, 20},{100, 0, 20}}, // +X
+        {{0, 0, 0},   {100, 0, 0}, {100, 0, 20}, {0, 0, 20}},   // -Y
+        {{0, 50, 0},  {0, 50, 20}, {100, 50, 20},{100, 50, 0}}  // +Y
+    };
+
+    for (int face = 0; face < 6; ++face) {
+        appendDemoTriangle(document, faces[face][0], faces[face][1], faces[face][2], face);
+        appendDemoTriangle(document, faces[face][0], faces[face][2], faces[face][3], face);
+    }
+
+    document.bounds[0] = 0.0;
+    document.bounds[1] = 0.0;
+    document.bounds[2] = 0.0;
+    document.bounds[3] = 100.0;
+    document.bounds[4] = 50.0;
+    document.bounds[5] = 20.0;
+    document.faceCount = 6;
+    document.loaded = document.triangleCount == 12;
+
+    if (!document.loaded) {
+        document.clear();
+        return loadError("Demo geometri ağı oluşturulamadı.");
+    }
+
+    return R"({"ok":true,"message":"100 x 50 x 20 mm demo kutu yüklendi","faces":6,"triangles":12})";
+}
+
 bool intersectRayTriangle(
     const double origin[3], const double direction[3],
     const float* a, const float* b, const float* c,
@@ -275,6 +347,20 @@ Java_com_srccad_mobile_NativeCadEngine_nativeLoadStep(JNIEnv* env, jobject, jlon
         "kütüphanelerini üretin ve uygulamayı SRCCAD_OCCT_ROOT ile derleyin."));
 #endif
 }
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_srccad_mobile_NativeCadEngine_nativeLoadDemoBox(JNIEnv* env, jobject, jlong handle) {
+    CadDocument* document = fromHandle(handle);
+    if (document == nullptr) {
+        return toJavaString(env, loadError("Geçersiz native model tutamacı."));
+    }
+    try {
+        return toJavaString(env, loadDemoBox(*document));
+    } catch (...) {
+        document->clear();
+        return toJavaString(env, loadError("Demo geometri hazırlanırken hata oluştu."));
+    }
+}
+
 extern "C" JNIEXPORT jfloatArray JNICALL
 Java_com_srccad_mobile_NativeCadEngine_nativeGetVertices(JNIEnv* env, jobject, jlong handle) {
     CadDocument* document = fromHandle(handle);
