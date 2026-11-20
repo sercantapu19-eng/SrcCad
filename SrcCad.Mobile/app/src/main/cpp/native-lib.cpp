@@ -120,17 +120,14 @@ std::string loadStep(CadDocument& document, const std::string& path) {
         ++document.faceCount;
         const std::int32_t faceIndex = static_cast<std::int32_t>(document.faces.size());
         document.faces.push_back(face);
-        const auto& nodes = triangulation->Nodes();
-        const auto& triangles = triangulation->Triangles();
-
-        for (int index = triangles.Lower(); index <= triangles.Upper(); ++index) {
+        for (int index = 1; index <= triangulation->NbTriangles(); ++index) {
             int n1 = 0, n2 = 0, n3 = 0;
-            triangles(index).Get(n1, n2, n3);
+            triangulation->Triangle(index).Get(n1, n2, n3);
             if (face.Orientation() == TopAbs_REVERSED) std::swap(n2, n3);
 
-            const gp_Pnt p1 = nodes(n1).Transformed(location.Transformation());
-            const gp_Pnt p2 = nodes(n2).Transformed(location.Transformation());
-            const gp_Pnt p3 = nodes(n3).Transformed(location.Transformation());
+            const gp_Pnt p1 = triangulation->Node(n1).Transformed(location.Transformation());
+            const gp_Pnt p2 = triangulation->Node(n2).Transformed(location.Transformation());
+            const gp_Pnt p3 = triangulation->Node(n3).Transformed(location.Transformation());
             gp_Vec normal = gp_Vec(p1, p2).Crossed(gp_Vec(p1, p3));
             if (normal.SquareMagnitude() <= 1.0e-24) continue;
             normal.Normalize();
