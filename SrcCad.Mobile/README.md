@@ -10,9 +10,11 @@ Android companion viewer for SrcCad. This project is isolated under `SrcCad.Mobi
 - Optional OCCT 8.0.0 STEP reader and B-rep tessellation path
 - Bounding-box extraction and triangle/normal buffer transfer
 - OpenGL ES 3.0 shaded mesh renderer using GPU vertex/index buffers
+- Built-in 100 × 50 × 20 mm demo box to exercise the renderer without STEP support
 - One-finger orbit, two-finger pan/pinch zoom, and fit-to-view control
 - Screen-ray selection against the mesh with the selected point projected back to the exact B-rep face
-- Two-point distance and ΔX/ΔY/ΔZ measurement in millimetres
+- Two-point distance and ΔX/ΔY/ΔZ measurement in millimetres on imported STEP B-rep models
+- Demo geometry is display-only; measurement stays disabled for the demo
 - Windows PowerShell script to cross-compile OCCT for Android arm64-v8a
 - Gradle 8.13 wrapper and one-click Windows build script
 
