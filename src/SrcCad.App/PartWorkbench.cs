@@ -2425,10 +2425,13 @@ public partial class MainWindow
                 var pairCompact=pairMeasure.Length>=3
                     ?$"Mesafe = {pairMeasure[1]:0.###} mm   Açı = {pairMeasure[2]:0.###}°"
                     :$"Mesafe = {pairMeasure[1]:0.###} mm";
-                MeasureStatusText.Text="ÖLÇ  "+pairCompact;
-                MeasureDetailsText.Text=pairMeasure.Length>=3
+                PropertyTitle.Text="Ölç";
+                PropertyInfo.Text=pairMeasure.Length>=3
                     ?$"İki geometri arası minimum mesafe: {pairMeasure[1]:0.###} mm\nGeometri yönleri arasındaki dar açı: {pairMeasure[2]:0.###}°"
                     :$"İki geometri arası minimum mesafe: {pairMeasure[1]:0.###} mm\nAçı: Bu geometri türleri için tanımlı değil.";
+                MeasureStatusText.Text="ÖLÇ  "+pairCompact;
+                ManagerTabs.SelectedItem=PropertyManagerTab;
+                Status(pairCompact);
                 return;
             }
         }
