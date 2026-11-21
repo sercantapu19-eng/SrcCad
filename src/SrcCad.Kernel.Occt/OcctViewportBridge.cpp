@@ -971,8 +971,11 @@ namespace SrcCad::Kernel::Occt
             if(curve.GetType()==GeomAbs_Circle)
             {
                 gp_Circ circle=curve.Circle();
+                // The curve's center of mass is not the circle center for a trimmed arc.
+                // Use the analytic circle's axis location for a stable geometric center.
+                const gp_Pnt center=circle.Location();
                 return gcnew array<double>{3.0,props.Mass(),circle.Radius(),
-                    props.CentreOfMass().X(),props.CentreOfMass().Y(),props.CentreOfMass().Z()};
+                    center.X(),center.Y(),center.Z()};
             }
             return gcnew array<double>{2.0,props.Mass(),props.CentreOfMass().X(),props.CentreOfMass().Y(),props.CentreOfMass().Z()};
         }
