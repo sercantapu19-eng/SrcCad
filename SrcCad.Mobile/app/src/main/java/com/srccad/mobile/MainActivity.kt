@@ -461,6 +461,7 @@ class MainActivity : ComponentActivity() {
                     firstMeasurePick = picked
                     hasFirstMeasurePick = true
                     viewer.highlightFaces(intArrayOf(picked.getOrElse(10) { -1.0 }.toInt()))
+                    viewer.highlightEdges(picked)
                     measurementText = describePick(picked) +
                         "\nİkinci kenar/yüzeyi seçin; modeli sürükleyerek döndürebilirsiniz."
                     statusText = "Geometri seçildi. Ölçü otomatik hesaplandı."
@@ -473,6 +474,7 @@ class MainActivity : ComponentActivity() {
                     firstMeasurePick = null
                     hasFirstMeasurePick = false
                     viewer.highlightFaces(intArrayOf(first.getOrElse(10) { -1.0 }.toInt(), picked.getOrElse(10) { -1.0 }.toInt()))
+                    viewer.highlightEdges(first, picked)
 
                     val output = StringBuilder()
                     output.append("1) ").append(describePick(first))
