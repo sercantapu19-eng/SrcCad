@@ -128,9 +128,12 @@ namespace SrcCad::Kernel::Occt
         bool Initialized = false;
     };
 
+    // UI color constants are authored as conventional sRGB values (0..1).
+    // OCCT 7.5+ expects linear RGB by default, so explicitly tag sRGB here
+    // to avoid dim/muddy hover and selection colors.
     static Quantity_Color rgb(double r, double g, double b)
     {
-        return Quantity_Color(r, g, b, Quantity_TOC_RGB);
+        return Quantity_Color(r, g, b, Quantity_TOC_sRGB);
     }
 
     static gp_Pnt planePoint(double u, double v,
@@ -560,10 +563,10 @@ namespace SrcCad::Kernel::Occt
             myState->Context = new AIS_InteractiveContext(myState->Viewer);
             myState->Context->SetToHilightSelected(true);
             myState->Context->SetAutoActivateSelection(true);
-            myState->Context->HighlightStyle(Prs3d_TypeOfHighlight_Dynamic)->SetColor(rgb(1.00, 0.82, 0.10));
-            myState->Context->HighlightStyle(Prs3d_TypeOfHighlight_LocalDynamic)->SetColor(rgb(1.00, 0.82, 0.10));
-            myState->Context->HighlightStyle(Prs3d_TypeOfHighlight_Selected)->SetColor(rgb(1.00, 0.45, 0.00));
-            myState->Context->HighlightStyle(Prs3d_TypeOfHighlight_LocalSelected)->SetColor(rgb(1.00, 0.45, 0.00));
+            myState->Context->HighlightStyle(Prs3d_TypeOfHighlight_Dynamic)->SetColor(rgb(0.00, 0.78, 1.00));
+            myState->Context->HighlightStyle(Prs3d_TypeOfHighlight_LocalDynamic)->SetColor(rgb(0.00, 0.78, 1.00));
+            myState->Context->HighlightStyle(Prs3d_TypeOfHighlight_Selected)->SetColor(rgb(1.00, 0.22, 0.02));
+            myState->Context->HighlightStyle(Prs3d_TypeOfHighlight_LocalSelected)->SetColor(rgb(1.00, 0.22, 0.02));
             myState->Initialized = true;
             SetIsoView();
             myState->View->MustBeResized();
