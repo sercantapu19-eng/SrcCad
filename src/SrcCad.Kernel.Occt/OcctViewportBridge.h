@@ -75,6 +75,7 @@ namespace SrcCad::Kernel::Occt
         System::String^ SelectedAssemblyComponentId();
         System::String^ SelectedAssemblyFaceReference();
         cli::array<double>^ SelectedTopologyMeasure();
+        cli::array<double>^ SelectedTopologyPairMeasure();
         cli::array<double>^ DetectedTopologyMeasure();
         bool TryGetSelectedPlanarFace([System::Runtime::InteropServices::Out] CadPlane3D% plane);
         void SetCommittedSolidTransparency(double transparency);
