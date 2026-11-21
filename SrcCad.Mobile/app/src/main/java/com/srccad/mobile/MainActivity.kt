@@ -397,6 +397,13 @@ class MainActivity : ComponentActivity() {
 
     private fun importStep(uri: Uri) {
         if (isBusy) return
+        // Update the selected filename immediately so a failed import cannot leave
+        // the previous model name beside the new file's error message.
+        val selectedName = queryDisplayName(uri)
+            ?: uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
+            ?: "model.step"
+        fileName = selectedName
+        statusText = "$selectedName seçildi. Dosya biçimi doğrulanıyor…"
         isBusy = true
         hasModel = false
         measurementAvailable = false
@@ -410,10 +417,11 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             try {
                 val result = withContext(Dispatchers.IO) {
-                    val displayName = queryDisplayName(uri) ?: "model.step"
-                    val extension = displayName.substringAfterLast('.', "").lowercase()
+                    val extension = selectedName.substringAfterLast('.', "").lowercase(Locale.ROOT)
                     if (extension != "step" && extension != "stp") {
-                        throw IllegalArgumentException("Bu sürüm STEP/STP dosyalarını kabul ediyor. Seçilen: " + displayName)
+                        throw IllegalArgumentException(
+                            "$selectedName açılamadı. Bu sürüm yalnızca STEP/STP dosyalarını destekliyor."
+                        )
                     }
 
                     val directory = File(cacheDir, "step-imports").apply { mkdirs() }
@@ -437,7 +445,7 @@ class MainActivity : ComponentActivity() {
                         throw IllegalStateException("Geometri okundu ancak görüntülenebilir üçgen ağı üretilemedi.")
                     }
                     ImportResult(
-                        displayName,
+                        selectedName,
                         destination,
                         response.optInt("faces"),
                         response.optInt("triangles"),
@@ -449,10 +457,10 @@ class MainActivity : ComponentActivity() {
                 }
 
                 presentModel(result, enableMeasurement = true)
-                statusText = "STEP modeli yüklendi. Modeli sürükleyerek döndürebilirsiniz."
+                statusText = "$selectedName başarıyla açıldı. Modeli sürükleyerek döndürebilirsiniz."
             } catch (error: Exception) {
-                statusText = error.message ?: "Beklenmeyen içe aktarma hatası."
-                modelSummary = "Model yüklenemedi"
+                statusText = error.message ?: "$selectedName içe aktarılamadı."
+                modelSummary = "$selectedName yüklenemedi"
                 hasModel = false
                 measurementAvailable = false
             } finally {
