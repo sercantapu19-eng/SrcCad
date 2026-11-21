@@ -41,6 +41,7 @@
 #include <BRepPrimAPI_MakeRevol.hxx>
 #include <BRepCheck_Analyzer.hxx>
 #include <BRepGProp.hxx>
+#include <BRepExtrema_DistShapeShape.hxx>
 #include <GProp_GProps.hxx>
 #include <Geom_Circle.hxx>
 #include <Geom_Surface.hxx>
@@ -1016,6 +1017,71 @@ namespace SrcCad::Kernel::Occt
             myState->Context->InitSelected();
             if(!myState->Context->MoreSelected()||!myState->Context->HasSelectedShape())return gcnew array<double>(0);
             return topologyMeasure(myState->Context->SelectedShape());
+        }
+        catch(const Standard_Failure&){return gcnew array<double>(0);}
+    }
+
+    static bool topologyDirection(const TopoDS_Shape& shape,gp_Dir& direction,int& kind)
+    {
+        if(shape.IsNull())return false;
+        if(shape.ShapeType()==TopAbs_EDGE)
+        {
+            BRepAdaptor_Curve curve(TopoDS::Edge(shape));
+            if(curve.GetType()!=GeomAbs_Line)return false;
+            direction=curve.Line().Direction();
+            kind=1;
+            return true;
+        }
+        if(shape.ShapeType()==TopAbs_FACE)
+        {
+            TopoDS_Face face=TopoDS::Face(shape);
+            gp_Pnt origin;gp_Dir u,v,normal;
+            if(planarFaceFrame(face,origin,u,v,normal))
+            {
+                direction=normal;kind=2;return true;
+            }
+            BRepAdaptor_Surface surface(face,true);
+            if(surface.GetType()==GeomAbs_Cylinder)
+            {
+                direction=surface.Cylinder().Axis().Direction();kind=2;return true;
+            }
+        }
+        return false;
+    }
+
+    array<double>^ OcctViewportBridge::SelectedTopologyPairMeasure()
+    {
+        if(!IsInitialized()||myState->Context->NbSelected()!=2)return gcnew array<double>(0);
+        try
+        {
+            TopoDS_Shape first,second;
+            int count=0;
+            for(myState->Context->InitSelected();myState->Context->MoreSelected();myState->Context->NextSelected())
+            {
+                if(!myState->Context->HasSelectedShape())return gcnew array<double>(0);
+                TopoDS_Shape current=myState->Context->SelectedShape();
+                if(current.IsNull())return gcnew array<double>(0);
+                if(count++==0)first=current;
+                else second=current;
+            }
+            if(count!=2||first.IsNull()||second.IsNull())return gcnew array<double>(0);
+
+            BRepExtrema_DistShapeShape distance(first,second);
+            distance.Perform();
+            if(!distance.IsDone()||distance.NbSolution()<1)return gcnew array<double>(0);
+            const double minimumDistance=distance.Value();
+            if(!std::isfinite(minimumDistance))return gcnew array<double>(0);
+
+            gp_Dir firstDirection,secondDirection;
+            int firstKind=0,secondKind=0;
+            if(topologyDirection(first,firstDirection,firstKind)&&
+               topologyDirection(second,secondDirection,secondKind)&&firstKind==secondKind)
+            {
+                const double dot=std::clamp(std::abs(firstDirection.Dot(secondDirection)),0.0,1.0);
+                const double angle=std::acos(dot)*180.0/3.14159265358979323846;
+                return gcnew array<double>{7.0,minimumDistance,angle};
+            }
+            return gcnew array<double>{7.0,minimumDistance};
         }
         catch(const Standard_Failure&){return gcnew array<double>(0);}
     }
