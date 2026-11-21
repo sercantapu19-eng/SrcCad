@@ -64,6 +64,7 @@ class MainActivity : ComponentActivity() {
     private var infoExpanded by mutableStateOf(false)
     private var firstMeasurePick: DoubleArray? = null
     private var hasFirstMeasurePick by mutableStateOf(false)
+    private var measurementHistory by mutableStateOf(emptyList<String>())
 
     private val openDocument = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) importStep(uri)
@@ -233,6 +234,15 @@ class MainActivity : ComponentActivity() {
                                         Text(modelSummary, color = Color(0xFF9EABB9), style = MaterialTheme.typography.labelSmall)
                                         Text(statusText, color = Color(0xFFB9C5D2), style = MaterialTheme.typography.labelSmall)
                                         Text(measurementText, color = Color(0xFFB8D7F2), style = MaterialTheme.typography.labelSmall)
+                                        if (measurementHistory.isNotEmpty()) {
+                                            Text("ÖLÇÜ GEÇMİŞİ", color = Color(0xFF9EABB9), style = MaterialTheme.typography.labelSmall)
+                                            measurementHistory.take(5).forEachIndexed { index, item ->
+                                                Text("${index + 1}. $item", color = Color(0xFFD5DEE8), style = MaterialTheme.typography.labelSmall)
+                                            }
+                                            TextButton(onClick = { measurementHistory = emptyList() }) {
+                                                Text("Ölçü Geçmişini Temizle")
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -500,6 +510,9 @@ class MainActivity : ComponentActivity() {
                     }
 
                     measurementText = output.toString()
+                    measurementHistory = (listOf(
+                        fileName + " • " + output.toString().replace("\n", " | ")
+                    ) + measurementHistory).take(20)
                     statusText = "Ölçü tamamlandı. Yeni ölçüm için başka bir kenar/yüzeye dokunun."
                 }
             } catch (error: Exception) {
