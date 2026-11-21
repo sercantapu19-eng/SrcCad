@@ -502,8 +502,10 @@ private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer
                 vec3 lightDirection = normalize(vec3(-0.45, 0.75, 0.55));
                 float diffuse = max(dot(n, lightDirection), 0.0);
                 float light = 0.28 + diffuse * 0.72;
-                vec3 baseColor = (uEdgeHighlight == 1) ? vec3(1.0, 0.82, 0.05) :
-                    ((uHighlight == 1) ? vec3(0.02, 0.92, 1.0) : vec3(0.55, 0.68, 0.82));
+                // Selected faces use a saturated orange fill, clearly distinct from
+                // the yellow selected-edge overlay and the normal blue-grey model.
+                vec3 baseColor = (uEdgeHighlight == 1) ? vec3(1.0, 0.86, 0.02) :
+                    ((uHighlight == 1) ? vec3(1.0, 0.24, 0.035) : vec3(0.55, 0.68, 0.82));
                 outColor = vec4(baseColor * (uHighlight == 1 ? 1.0 : light), 1.0);
             }
         """
