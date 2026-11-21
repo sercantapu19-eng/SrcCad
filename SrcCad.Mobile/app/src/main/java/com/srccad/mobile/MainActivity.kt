@@ -63,6 +63,7 @@ class MainActivity : ComponentActivity() {
     private var measurementText by mutableStateOf("İki nokta arası ölçüm için önce bir STEP modeli açın.")
     private var infoExpanded by mutableStateOf(false)
     private var firstMeasurePick: DoubleArray? = null
+    private var hasFirstMeasurePick by mutableStateOf(false)
 
     private val openDocument = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) importStep(uri)
@@ -265,6 +266,20 @@ class MainActivity : ComponentActivity() {
                                 ) {
                                     Text(if (measurementMode) "Ölçümü Kapat" else if (compactLayout) "Ölç" else "Otomatik Ölçüm")
                                 }
+                                if (measurementMode) {
+                                    TextButton(
+                                        onClick = {
+                                            firstMeasurePick = null
+                                            hasFirstMeasurePick = false
+                                            viewer.highlightFaces(intArrayOf())
+                                            measurementText = "İlk seçim temizlendi. Yeni ölçüm için bir kenara veya yüzeye dokunun."
+                                            statusText = "Ölçüm seçimi temizlendi."
+                                        },
+                                        enabled = hasFirstMeasurePick
+                                    ) {
+                                        Text("İlk Seçimi Temizle")
+                                    }
+                                }
                                 if (!compactLayout) {
                                     Spacer(Modifier.weight(1f))
                                     Text(
@@ -444,6 +459,7 @@ class MainActivity : ComponentActivity() {
                 val first = firstMeasurePick
                 if (first == null) {
                     firstMeasurePick = picked
+                    hasFirstMeasurePick = true
                     viewer.highlightFaces(intArrayOf(picked.getOrElse(10) { -1.0 }.toInt()))
                     measurementText = describePick(picked) +
                         "\nİkinci kenar/yüzeyi seçin; modeli sürükleyerek döndürebilirsiniz."
@@ -455,6 +471,7 @@ class MainActivity : ComponentActivity() {
                         NativeCadEngine.nativeMeasurePoints(nativeHandle, pointA, pointB)
                     }
                     firstMeasurePick = null
+                    hasFirstMeasurePick = false
                     viewer.highlightFaces(intArrayOf(first.getOrElse(10) { -1.0 }.toInt(), picked.getOrElse(10) { -1.0 }.toInt()))
 
                     val output = StringBuilder()
