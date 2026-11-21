@@ -2417,6 +2417,21 @@ public partial class MainWindow
     private void UpdateInspectMeasureFromSelection(bool hoverPreview=false)
     {
         if(!_inspectMeasureMode)return;
+        if(!hoverPreview)
+        {
+            var pairMeasure=_viewer.SelectedTopologyPairMeasure();
+            if(pairMeasure.Length>=2&&Math.Abs(pairMeasure[0]-7)<0.5)
+            {
+                var pairCompact=pairMeasure.Length>=3
+                    ?$"Mesafe = {pairMeasure[1]:0.###} mm   Açı = {pairMeasure[2]:0.###}°"
+                    :$"Mesafe = {pairMeasure[1]:0.###} mm";
+                MeasureStatusText.Text="ÖLÇ  "+pairCompact;
+                MeasureDetailsText.Text=pairMeasure.Length>=3
+                    ?$"İki geometri arası minimum mesafe: {pairMeasure[1]:0.###} mm\nGeometri yönleri arasındaki dar açı: {pairMeasure[2]:0.###}°"
+                    :$"İki geometri arası minimum mesafe: {pairMeasure[1]:0.###} mm\nAçı: Bu geometri türleri için tanımlı değil.";
+                return;
+            }
+        }
 
         // SOLIDWORKS-like behavior:
         // - while moving the mouse, preview the topology currently under the cursor;
