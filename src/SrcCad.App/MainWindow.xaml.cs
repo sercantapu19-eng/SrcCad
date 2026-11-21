@@ -404,10 +404,15 @@ public partial class MainWindow : Window
             // active fillet/flange/shell multi-selection rules consume the pick.
             if(_inspectMeasureMode)
             {
-                var selected=_viewer.SelectDetected(false);
+                // Match CAD multi-selection: first pick replaces; Ctrl+pick adds/removes
+                // the second topology so pairwise distance/angle can be evaluated.
+                var ctrl=(WinForms.Control.ModifierKeys&WinForms.Keys.Control)==WinForms.Keys.Control;
+                var selected=_viewer.SelectDetected(ctrl);
                 UpdateInspectMeasureFromSelection();
                 if(!selected)
-                    Status("Ölç aktif • imleci gerçek bir kenar, yüz veya köşe üzerine getirip tıklayın.");
+                    Status("Ölç aktif • geometriyi tıklayın; ikinci geometriyi eklemek için Ctrl+tıklayın.");
+                else if(!ctrl&&_viewer.SelectionSummary()!="Seçim yok")
+                    Status("Ölç aktif • ikinci geometriyi eklemek için Ctrl+tıklayın.");
                 return;
             }
 
