@@ -350,7 +350,11 @@ std::vector<double> analyzeGeometryPick(
     BRepExtrema_DistShapeShape faceProjection(pickedVertex, face);
     faceProjection.Perform();
     if (!faceProjection.IsDone() || faceProjection.NbSolution() < 1) return result;
-    const gp_Pnt pickedPoint = faceProjection.PointOnShape2(1);
+    const gp_Pnt facePoint = faceProjection.PointOnShape2(1);
+    // Keep the measurement point on the selected topology. When a tap resolves
+    // to an edge, using the face projection here would report a point slightly
+    // off the edge and distort point-to-point measurements.
+    gp_Pnt measurementPoint = facePoint;
 
     int kind = 6;
     double primary = 0.0;
@@ -362,7 +366,8 @@ std::vector<double> analyzeGeometryPick(
     // This avoids turning a tap in the middle of a face into a random edge selection.
     TopoDS_Edge closestEdge;
     double closestEdgeDistance = std::numeric_limits<double>::max();
-    const TopoDS_Vertex exactPickVertex = BRepBuilderAPI_MakeVertex(pickedPoint).Vertex();
+    const TopoDS_Vertex exactPickVertex = BRepBuilderAPI_MakeVertex(facePoint).Vertex();
+    gp_Pnt closestEdgePoint = facePoint;
     for (TopExp_Explorer edgeExplorer(face, TopAbs_EDGE); edgeExplorer.More(); edgeExplorer.Next()) {
         const TopoDS_Edge edge = TopoDS::Edge(edgeExplorer.Current());
         BRepExtrema_DistShapeShape edgeDistance(exactPickVertex, edge);
@@ -371,10 +376,12 @@ std::vector<double> analyzeGeometryPick(
             edgeDistance.Value() < closestEdgeDistance) {
             closestEdgeDistance = edgeDistance.Value();
             closestEdge = edge;
+            closestEdgePoint = edgeDistance.PointOnShape2(1);
         }
     }
 
     if (!closestEdge.IsNull() && closestEdgeDistance <= std::max(edgeTolerance, 0.001)) {
+        measurementPoint = closestEdgePoint;
         BRepAdaptor_Curve curve(closestEdge);
         GProp_GProps linearProperties;
         BRepGProp::LinearProperties(closestEdge, linearProperties);
@@ -427,7 +434,7 @@ std::vector<double> analyzeGeometryPick(
 
     result = {
         static_cast<double>(kind),
-        pickedPoint.X(), pickedPoint.Y(), pickedPoint.Z(),
+        measurementPoint.X(), measurementPoint.Y(), measurementPoint.Z(),
         primary, secondary,
         hasDirection ? directionVector.X() : 0.0,
         hasDirection ? directionVector.Y() : 0.0,
