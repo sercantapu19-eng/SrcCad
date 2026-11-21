@@ -244,6 +244,7 @@ namespace SrcCad::Kernel::Occt
 
             int bestIndex=0;
             double bestScore=std::numeric_limits<double>::infinity();
+            double secondBestScore=std::numeric_limits<double>::infinity();
             for(int i=1;i<=edgeMap.Extent();++i)
             {
                 if(used.contains(i))continue;
@@ -255,10 +256,21 @@ namespace SrcCad::Kernel::Occt
                 gp_Pnt wantedCenter(wanted.X,wanted.Y,wanted.Z);
                 const double centerScore=currentCenter.Distance(wantedCenter)/std::max(1.0,wanted.Length);
                 const double score=lengthScore+centerScore;
-                if(score<bestScore){bestScore=score;bestIndex=i;}
+                if(score<bestScore)
+                {
+                    secondBestScore=bestScore;
+                    bestScore=score;
+                    bestIndex=i;
+                }
+                else if(score<secondBestScore) secondBestScore=score;
             }
             if(bestIndex==0||!std::isfinite(bestScore)||bestScore>3.5)
                 throw gcnew InvalidOperationException("Referenced edge changed too much and can no longer be resolved safely.");
+            // Never silently bind a persistent reference to one of several
+            // geometrically indistinguishable edges (common in symmetric parts).
+            const double ambiguityTolerance=std::max(1e-8,std::abs(bestScore)*1e-6);
+            if(std::isfinite(secondBestScore)&&secondBestScore-bestScore<=ambiguityTolerance)
+                throw gcnew InvalidOperationException("Referenced edge is ambiguous: multiple edges have the same geometric signature. Re-select the edge.");
             used.insert(bestIndex);
             resolved.push_back(TopoDS::Edge(edgeMap(bestIndex)));
         }
@@ -450,7 +462,9 @@ namespace SrcCad::Kernel::Occt
 
         TopTools_IndexedMapOfShape faces;
         TopExp::MapShapes(shape,TopAbs_FACE,faces);
-        int bestIndex=0;double bestScore=std::numeric_limits<double>::infinity();
+        int bestIndex=0;
+        double bestScore=std::numeric_limits<double>::infinity();
+        double secondBestScore=std::numeric_limits<double>::infinity();
         gp_Dir wantedNormal(wanted.NX,wanted.NY,wanted.NZ);
         for(int i=1;i<=faces.Extent();++i)
         {
@@ -465,10 +479,21 @@ namespace SrcCad::Kernel::Occt
             const double normalScore=(wanted.Type==1?1.0-std::abs(directionDot):1.0-directionDot)*4.0;
             const double radiusScore=wanted.Type==1?std::abs(std::log(current.Radius/wanted.Radius))*2.0:0.0;
             const double score=areaScore+centerScore+normalScore+radiusScore;
-            if(score<bestScore){bestScore=score;bestIndex=i;}
+            if(score<bestScore)
+            {
+                secondBestScore=bestScore;
+                bestScore=score;
+                bestIndex=i;
+            }
+            else if(score<secondBestScore) secondBestScore=score;
         }
         if(bestIndex==0||!std::isfinite(bestScore)||bestScore>4.5)
             throw gcnew InvalidOperationException("Referenced face changed too much and can no longer be resolved safely.");
+        // Symmetric/equal faces must fail explicitly rather than resolve to
+        // whichever candidate happens to appear first in OCCT's topology map.
+        const double ambiguityTolerance=std::max(1e-8,std::abs(bestScore)*1e-6);
+        if(std::isfinite(secondBestScore)&&secondBestScore-bestScore<=ambiguityTolerance)
+            throw gcnew InvalidOperationException("Referenced face is ambiguous: multiple faces have the same geometric signature. Re-select the face.");
         return TopoDS::Face(faces(bestIndex));
     }
 
