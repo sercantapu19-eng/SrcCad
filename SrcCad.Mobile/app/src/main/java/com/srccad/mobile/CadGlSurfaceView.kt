@@ -56,6 +56,10 @@ class CadGlSurfaceView(context: Context) : GLSurfaceView(context) {
         queueEvent { cadRenderer.resetCamera(); requestRender() }
     }
 
+    fun setStandardView(view: String) {
+        queueEvent { cadRenderer.setStandardView(view); requestRender() }
+    }
+
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
@@ -399,6 +403,21 @@ private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer
     fun resetCamera() {
         rotationX = -20f
         rotationY = 35f
+        panX = 0f
+        panY = 0f
+        zoomFactor = 1f
+    }
+
+    fun setStandardView(view: String) {
+        when (view) {
+            "front" -> { rotationX = 0f; rotationY = 0f }
+            "back" -> { rotationX = 0f; rotationY = 180f }
+            "right" -> { rotationX = 0f; rotationY = 90f }
+            "left" -> { rotationX = 0f; rotationY = -90f }
+            "top" -> { rotationX = -89f; rotationY = 0f }
+            "bottom" -> { rotationX = 89f; rotationY = 0f }
+            else -> { rotationX = -20f; rotationY = 35f }
+        }
         panX = 0f
         panY = 0f
         zoomFactor = 1f
