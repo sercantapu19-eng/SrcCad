@@ -244,12 +244,14 @@ private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer
         GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, indexBufferId)
         GLES30.glDrawElements(GLES30.GL_TRIANGLES, indexCount, GLES30.GL_UNSIGNED_INT, 0)
         if (highlightIndexCount > 0) {
+            GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uEdgeHighlight"), 0)
             GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uHighlight"), 1)
             GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, highlightIndexBufferId)
             GLES30.glDrawElements(GLES30.GL_TRIANGLES, highlightIndexCount, GLES30.GL_UNSIGNED_INT, 0)
             GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uHighlight"), 0)
         }
         if (edgeVertexCount > 0) {
+            GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uEdgeHighlight"), 1)
             GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uHighlight"), 1)
             GLES30.glLineWidth(4f)
             GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, edgeVertexBufferId)
@@ -261,6 +263,7 @@ private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer
                 GLES30.glDrawArrays(GLES30.GL_LINE_STRIP, first, count)
             }
             GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uHighlight"), 0)
+            GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uEdgeHighlight"), 0)
         }
         GLES30.glDisableVertexAttribArray(0)
         GLES30.glDisableVertexAttribArray(1)
@@ -468,13 +471,15 @@ private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer
             precision highp float;
             in vec3 vNormal;
             uniform int uHighlight;
+            uniform int uEdgeHighlight;
             out vec4 outColor;
             void main() {
                 vec3 n = normalize(vNormal);
                 vec3 lightDirection = normalize(vec3(-0.45, 0.75, 0.55));
                 float diffuse = max(dot(n, lightDirection), 0.0);
                 float light = 0.28 + diffuse * 0.72;
-                vec3 baseColor = (uHighlight == 1) ? vec3(1.0, 0.12, 0.035) : vec3(0.55, 0.68, 0.82);
+                vec3 baseColor = (uEdgeHighlight == 1) ? vec3(1.0, 0.82, 0.05) :
+                    ((uHighlight == 1) ? vec3(1.0, 0.12, 0.035) : vec3(0.55, 0.68, 0.82));
                 outColor = vec4(baseColor * (uHighlight == 1 ? 1.0 : light), 1.0);
             }
         """
