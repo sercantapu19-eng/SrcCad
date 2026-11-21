@@ -250,8 +250,13 @@ private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer
         if (highlightIndexCount > 0) {
             GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uEdgeHighlight"), 0)
             GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uHighlight"), 1)
+            // The overlay uses the exact same triangles as the model surface. Pull it
+            // slightly toward the camera so the depth buffer does not hide the highlight.
+            GLES30.glEnable(GLES30.GL_POLYGON_OFFSET_FILL)
+            GLES30.glPolygonOffset(-1.5f, -2.0f)
             GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, highlightIndexBufferId)
             GLES30.glDrawElements(GLES30.GL_TRIANGLES, highlightIndexCount, GLES30.GL_UNSIGNED_INT, 0)
+            GLES30.glDisable(GLES30.GL_POLYGON_OFFSET_FILL)
             GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uHighlight"), 0)
         }
         if (edgeVertexCount > 0) {
@@ -498,7 +503,7 @@ private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer
                 float diffuse = max(dot(n, lightDirection), 0.0);
                 float light = 0.28 + diffuse * 0.72;
                 vec3 baseColor = (uEdgeHighlight == 1) ? vec3(1.0, 0.82, 0.05) :
-                    ((uHighlight == 1) ? vec3(1.0, 0.12, 0.035) : vec3(0.55, 0.68, 0.82));
+                    ((uHighlight == 1) ? vec3(0.02, 0.92, 1.0) : vec3(0.55, 0.68, 0.82));
                 outColor = vec4(baseColor * (uHighlight == 1 ? 1.0 : light), 1.0);
             }
         """
