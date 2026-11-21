@@ -44,6 +44,10 @@ class CadGlSurfaceView(context: Context) : GLSurfaceView(context) {
         queueEvent { cadRenderer.setHighlightedFaces(faceIds); requestRender() }
     }
 
+    fun highlightEdges(vararg picks: DoubleArray) {
+        queueEvent { cadRenderer.setHighlightedEdges(picks.toList()); requestRender() }
+    }
+
     fun clearMesh() {
         queueEvent { cadRenderer.clearMesh(); requestRender() }
     }
@@ -150,6 +154,9 @@ private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer
     private var selectedFaceIds = IntArray(0)
     private var highlightIndexBufferId = 0
     private var highlightIndexCount = 0
+    private var edgeVertexBufferId = 0
+    private var edgeVertexCount = 0
+    private var edgeRanges = emptyList<Pair<Int, Int>>()
     private var vertexBufferId = 0
     private var indexBufferId = 0
     private var meshUploaded = false
@@ -179,9 +186,10 @@ private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer
         program = createProgram(VERTEX_SHADER, FRAGMENT_SHADER)
         val bufferIds = IntArray(2)
         GLES30.glGenBuffers(2, bufferIds, 0)
-        val highlightIds = IntArray(1)
-        GLES30.glGenBuffers(1, highlightIds, 0)
+        val highlightIds = IntArray(2)
+        GLES30.glGenBuffers(2, highlightIds, 0)
         highlightIndexBufferId = highlightIds[0]
+        edgeVertexBufferId = highlightIds[1]
         vertexBufferId = bufferIds[0]
         indexBufferId = bufferIds[1]
         meshUploaded = false
@@ -241,6 +249,19 @@ private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer
             GLES30.glDrawElements(GLES30.GL_TRIANGLES, highlightIndexCount, GLES30.GL_UNSIGNED_INT, 0)
             GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uHighlight"), 0)
         }
+        if (edgeVertexCount > 0) {
+            GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uHighlight"), 1)
+            GLES30.glLineWidth(4f)
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, edgeVertexBufferId)
+            GLES30.glEnableVertexAttribArray(0)
+            GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 24, 0)
+            GLES30.glEnableVertexAttribArray(1)
+            GLES30.glVertexAttribPointer(1, 3, GLES30.GL_FLOAT, false, 24, 12)
+            for ((first, count) in edgeRanges) {
+                GLES30.glDrawArrays(GLES30.GL_LINE_STRIP, first, count)
+            }
+            GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uHighlight"), 0)
+        }
         GLES30.glDisableVertexAttribArray(0)
         GLES30.glDisableVertexAttribArray(1)
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
@@ -295,6 +316,8 @@ private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer
         triangleFaceIds = faceIds.copyOf()
         selectedFaceIds = IntArray(0)
         highlightIndexCount = 0
+        edgeVertexCount = 0
+        edgeRanges = emptyList()
         meshUploaded = false
         centerX = ((bounds[0] + bounds[3]) * 0.5).toFloat()
         centerY = ((bounds[1] + bounds[4]) * 0.5).toFloat()
@@ -328,10 +351,41 @@ private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer
         }
     }
 
+    fun setHighlightedEdges(picks: List<DoubleArray>) {
+        val vertices = ArrayList<Float>()
+        val ranges = ArrayList<Pair<Int, Int>>()
+        for (pick in picks) {
+            if (pick.size < 12) continue
+            val pointCount = pick[11].toInt().coerceIn(0, 512)
+            if (pointCount < 2 || pick.size < 12 + pointCount * 3) continue
+            val first = vertices.size / 6
+            for (i in 0 until pointCount) {
+                val offset = 12 + i * 3
+                vertices.add(pick[offset].toFloat())
+                vertices.add(pick[offset + 1].toFloat())
+                vertices.add(pick[offset + 2].toFloat())
+                vertices.add(0f); vertices.add(0f); vertices.add(1f)
+            }
+            ranges.add(first to pointCount)
+        }
+        edgeRanges = ranges
+        edgeVertexCount = vertices.size / 6
+        if (edgeVertexCount == 0) return
+        val data = FloatArray(vertices.size) { vertices[it] }
+        val buffer = ByteBuffer.allocateDirect(data.size * 4)
+            .order(ByteOrder.nativeOrder()).asFloatBuffer()
+        buffer.put(data).position(0)
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, edgeVertexBufferId)
+        GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, data.size * 4, buffer, GLES30.GL_DYNAMIC_DRAW)
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
+    }
+
     fun clearMesh() {
         triangleFaceIds = IntArray(0)
         selectedFaceIds = IntArray(0)
         highlightIndexCount = 0
+        edgeVertexCount = 0
+        edgeRanges = emptyList()
         vertexBuffer = null
         indexBuffer = null
         indexCount = 0
