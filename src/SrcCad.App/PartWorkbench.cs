@@ -2420,15 +2420,17 @@ public partial class MainWindow
         if(!hoverPreview)
         {
             var pairMeasure=_viewer.SelectedTopologyPairMeasure();
-            if(pairMeasure.Length>=2&&Math.Abs(pairMeasure[0]-7)<0.5)
+            if(pairMeasure.Length>=10&&Math.Abs(pairMeasure[0]-7)<0.5)
             {
-                var pairCompact=pairMeasure.Length>=3
-                    ?$"Mesafe = {pairMeasure[1]:0.###} mm   Açı = {pairMeasure[2]:0.###}°"
+                var hasAngle=pairMeasure[2]>0.5;
+                var pairCompact=hasAngle
+                    ?$"Mesafe = {pairMeasure[1]:0.###} mm   Açı = {pairMeasure[3]:0.###}°"
                     :$"Mesafe = {pairMeasure[1]:0.###} mm";
                 PropertyTitle.Text="Ölç";
-                PropertyInfo.Text=pairMeasure.Length>=3
-                    ?$"İki geometri arası minimum mesafe: {pairMeasure[1]:0.###} mm\nGeometri yönleri arasındaki dar açı: {pairMeasure[2]:0.###}°"
-                    :$"İki geometri arası minimum mesafe: {pairMeasure[1]:0.###} mm\nAçı: Bu geometri türleri için tanımlı değil.";
+                var angleDetails=hasAngle
+                    ?$"Geometri yönleri arasındaki dar açı: {pairMeasure[3]:0.###}°"
+                    :"Açı: Bu geometri türleri için tanımlı değil.";
+                PropertyInfo.Text=$"İki geometri arası minimum mesafe: {pairMeasure[1]:0.###} mm\n{angleDetails}\n\nEn yakın nokta 1: X={pairMeasure[4]:0.###}, Y={pairMeasure[5]:0.###}, Z={pairMeasure[6]:0.###} mm\nEn yakın nokta 2: X={pairMeasure[7]:0.###}, Y={pairMeasure[8]:0.###}, Z={pairMeasure[9]:0.###} mm";
                 MeasureStatusText.Text="ÖLÇ  "+pairCompact;
                 ManagerTabs.SelectedItem=PropertyManagerTab;
                 Status(pairCompact);
