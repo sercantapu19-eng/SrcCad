@@ -982,6 +982,16 @@ namespace SrcCad::Kernel::Occt
         if(selected.ShapeType()==TopAbs_FACE)
         {
             BRepGProp::SurfaceProperties(selected,props);
+            BRepAdaptor_Surface surface(TopoDS::Face(selected),true);
+            if(surface.GetType()==GeomAbs_Cylinder)
+            {
+                const gp_Cylinder cylinder=surface.Cylinder();
+                const gp_Pnt axisOrigin=cylinder.Axis().Location();
+                const gp_Dir axisDirection=cylinder.Axis().Direction();
+                return gcnew array<double>{5.0,props.Mass(),cylinder.Radius(),cylinder.Radius()*2.0,
+                    axisOrigin.X(),axisOrigin.Y(),axisOrigin.Z(),
+                    axisDirection.X(),axisDirection.Y(),axisDirection.Z()};
+            }
             return gcnew array<double>{4.0,props.Mass(),props.CentreOfMass().X(),props.CentreOfMass().Y(),props.CentreOfMass().Z()};
         }
         if(selected.ShapeType()==TopAbs_VERTEX)
