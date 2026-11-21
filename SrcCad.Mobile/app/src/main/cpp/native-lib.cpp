@@ -361,6 +361,7 @@ std::vector<double> analyzeGeometryPick(
     double secondary = 0.0;
     gp_Dir directionVector(0.0, 0.0, 1.0);
     bool hasDirection = false;
+    std::vector<gp_Pnt> selectedEdgePolyline;
 
     // Prefer a topological edge only when the finger landed close enough to it.
     // This avoids turning a tap in the middle of a face into a random edge selection.
@@ -383,6 +384,18 @@ std::vector<double> analyzeGeometryPick(
     if (!closestEdge.IsNull() && closestEdgeDistance <= std::max(edgeTolerance, 0.001)) {
         measurementPoint = closestEdgePoint;
         BRepAdaptor_Curve curve(closestEdge);
+        const double firstParameter = curve.FirstParameter();
+        const double lastParameter = curve.LastParameter();
+        if (std::isfinite(firstParameter) && std::isfinite(lastParameter) &&
+            lastParameter > firstParameter) {
+            constexpr int kEdgeSegments = 48;
+            selectedEdgePolyline.reserve(kEdgeSegments + 1);
+            for (int sample = 0; sample <= kEdgeSegments; ++sample) {
+                const double ratio = static_cast<double>(sample) / kEdgeSegments;
+                selectedEdgePolyline.push_back(
+                    curve.Value(firstParameter + (lastParameter - firstParameter) * ratio));
+            }
+        }
         GProp_GProps linearProperties;
         BRepGProp::LinearProperties(closestEdge, linearProperties);
         primary = linearProperties.Mass();
@@ -440,8 +453,14 @@ std::vector<double> analyzeGeometryPick(
         hasDirection ? directionVector.Y() : 0.0,
         hasDirection ? directionVector.Z() : 0.0,
         hasDirection ? 1.0 : 0.0,
-        static_cast<double>(nearestFace)
+        static_cast<double>(nearestFace),
+        static_cast<double>(selectedEdgePolyline.size())
     };
+    for (const gp_Pnt& point : selectedEdgePolyline) {
+        result.push_back(point.X());
+        result.push_back(point.Y());
+        result.push_back(point.Z());
+    }
     return result;
 }
 #endif
