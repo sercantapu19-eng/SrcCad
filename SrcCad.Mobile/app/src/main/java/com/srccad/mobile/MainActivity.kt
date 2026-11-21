@@ -301,6 +301,17 @@ class MainActivity : ComponentActivity() {
                                     )
                                 }
                             }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                TextButton(onClick = { viewer.setStandardView("front") }, enabled = hasModel) { Text("Ön") }
+                                TextButton(onClick = { viewer.setStandardView("top") }, enabled = hasModel) { Text("Üst") }
+                                TextButton(onClick = { viewer.setStandardView("right") }, enabled = hasModel) { Text("Sağ") }
+                                TextButton(onClick = { viewer.setStandardView("left") }, enabled = hasModel) { Text("Sol") }
+                                TextButton(onClick = { viewer.setStandardView("isometric") }, enabled = hasModel) { Text("İzometrik") }
+                            }
                         }
                     }
                 }
