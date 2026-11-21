@@ -272,6 +272,7 @@ class MainActivity : ComponentActivity() {
                                             firstMeasurePick = null
                                             hasFirstMeasurePick = false
                                             viewer.highlightFaces(intArrayOf())
+                                            viewer.highlightEdges()
                                             measurementText = "İlk seçim temizlendi. Yeni ölçüm için bir kenara veya yüzeye dokunun."
                                             statusText = "Ölçüm seçimi temizlendi."
                                         },
