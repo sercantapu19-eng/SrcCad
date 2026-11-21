@@ -1072,16 +1072,24 @@ namespace SrcCad::Kernel::Occt
             const double minimumDistance=distance.Value();
             if(!std::isfinite(minimumDistance))return gcnew array<double>(0);
 
+            if(distance.NbSolution()<1)return gcnew array<double>(0);
+            const gp_Pnt pointOnFirst=distance.PointOnShape1(1);
+            const gp_Pnt pointOnSecond=distance.PointOnShape2(1);
+
+            double angle=0.0;
+            bool hasAngle=false;
             gp_Dir firstDirection,secondDirection;
             int firstKind=0,secondKind=0;
             if(topologyDirection(first,firstDirection,firstKind)&&
                topologyDirection(second,secondDirection,secondKind)&&firstKind==secondKind)
             {
                 const double dot=std::clamp(std::abs(firstDirection.Dot(secondDirection)),0.0,1.0);
-                const double angle=std::acos(dot)*180.0/3.14159265358979323846;
-                return gcnew array<double>{7.0,minimumDistance,angle};
+                angle=std::acos(dot)*180.0/3.14159265358979323846;
+                hasAngle=true;
             }
-            return gcnew array<double>{7.0,minimumDistance};
+            return gcnew array<double>{7.0,minimumDistance,hasAngle?1.0:0.0,angle,
+                pointOnFirst.X(),pointOnFirst.Y(),pointOnFirst.Z(),
+                pointOnSecond.X(),pointOnSecond.Y(),pointOnSecond.Z()};
         }
         catch(const Standard_Failure&){return gcnew array<double>(0);}
     }
