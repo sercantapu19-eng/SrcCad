@@ -2401,6 +2401,9 @@ public partial class MainWindow
             case 4:
                 compact=$"A = {measure[1]:0.###} mm²";
                 return $"Yüz Alanı: {measure[1]:0.###} mm²\nAğırlık Merkezi: X={measure[2]:0.###}, Y={measure[3]:0.###}, Z={measure[4]:0.###}";
+            case 5 when measure.Length>=10:
+                compact=$"Ø = {measure[3]:0.###} mm   R = {measure[2]:0.###} mm";
+                return $"Silindirik Yüzey\nYüz Alanı: {measure[1]:0.###} mm²\nYarıçap: {measure[2]:0.###} mm\nÇap: {measure[3]:0.###} mm\nEksen noktası: X={measure[4]:0.###}, Y={measure[5]:0.###}, Z={measure[6]:0.###}\nEksen yönü: X={measure[7]:0.###}, Y={measure[8]:0.###}, Z={measure[9]:0.###}";
             case 1:
                 compact=$"X {measure[2]:0.###}   Y {measure[3]:0.###}   Z {measure[4]:0.###} mm";
                 return $"Köşe Koordinatı: X={measure[2]:0.###}, Y={measure[3]:0.###}, Z={measure[4]:0.###}";
