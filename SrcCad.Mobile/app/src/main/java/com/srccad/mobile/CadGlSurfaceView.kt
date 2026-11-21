@@ -160,6 +160,8 @@ private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer
     private var highlightIndexCount = 0
     private var edgeVertexBufferId = 0
     private var edgeVertexCount = 0
+    private var modelEdgeBufferId = 0
+    private var modelEdgeVertexCount = 0
     private var edgeRanges = emptyList<Pair<Int, Int>>()
     private var vertexBufferId = 0
     private var indexBufferId = 0
@@ -190,10 +192,11 @@ private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer
         program = createProgram(VERTEX_SHADER, FRAGMENT_SHADER)
         val bufferIds = IntArray(2)
         GLES30.glGenBuffers(2, bufferIds, 0)
-        val highlightIds = IntArray(2)
-        GLES30.glGenBuffers(2, highlightIds, 0)
+        val highlightIds = IntArray(3)
+        GLES30.glGenBuffers(3, highlightIds, 0)
         highlightIndexBufferId = highlightIds[0]
         edgeVertexBufferId = highlightIds[1]
+        modelEdgeBufferId = highlightIds[2]
         vertexBufferId = bufferIds[0]
         indexBufferId = bufferIds[1]
         meshUploaded = false
@@ -247,6 +250,17 @@ private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer
         GLES30.glVertexAttribPointer(1, 3, GLES30.GL_FLOAT, false, 24, 12)
         GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, indexBufferId)
         GLES30.glDrawElements(GLES30.GL_TRIANGLES, indexCount, GLES30.GL_UNSIGNED_INT, 0)
+        if (modelEdgeVertexCount > 0) {
+            GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uModelEdge"), 1)
+            GLES30.glLineWidth(1.35f)
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, modelEdgeBufferId)
+            GLES30.glEnableVertexAttribArray(0)
+            GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 24, 0)
+            GLES30.glEnableVertexAttribArray(1)
+            GLES30.glVertexAttribPointer(1, 3, GLES30.GL_FLOAT, false, 24, 12)
+            GLES30.glDrawArrays(GLES30.GL_LINES, 0, modelEdgeVertexCount)
+            GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uModelEdge"), 0)
+        }
         if (highlightIndexCount > 0) {
             GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uEdgeHighlight"), 0)
             GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uHighlight"), 1)
@@ -331,6 +345,7 @@ private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer
         edgeVertexCount = 0
         edgeRanges = emptyList()
         meshUploaded = false
+        buildVisibleModelEdges(vertices, indices)
         centerX = ((bounds[0] + bounds[3]) * 0.5).toFloat()
         centerY = ((bounds[1] + bounds[4]) * 0.5).toFloat()
         centerZ = ((bounds[2] + bounds[5]) * 0.5).toFloat()
@@ -342,6 +357,62 @@ private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer
         resetCamera()
     }
 
+    // Build a clean CAD edge overlay from the tessellated surface mesh.
+    // Shared triangle edges are welded; coplanar tessellation diagonals are hidden.
+    private fun buildVisibleModelEdges(vertices: FloatArray, indices: IntArray) {
+        data class Edge(val a: FloatArray, val b: FloatArray, val nx: Float, val ny: Float, val nz: Float, var count: Int = 1, var crease: Boolean = false)
+        val minValue = vertices.minOrNull() ?: 0f
+        val maxValue = vertices.maxOrNull() ?: 1f
+        val quantum = max(1.0e-5, (maxValue - minValue).toDouble() * 1.0e-6)
+        fun vertexKey(index: Int): String {
+            val p = index * 6
+            return "${kotlin.math.round(vertices[p] / quantum)}:${kotlin.math.round(vertices[p + 1] / quantum)}:${kotlin.math.round(vertices[p + 2] / quantum)}"
+        }
+        val edges = LinkedHashMap<String, Edge>()
+        var t = 0
+        while (t + 2 < indices.size) {
+            val ia = indices[t]; val ib = indices[t + 1]; val ic = indices[t + 2]
+            val a = ia * 6; val b = ib * 6; val c = ic * 6
+            val ux = vertices[b] - vertices[a]; val uy = vertices[b + 1] - vertices[a + 1]; val uz = vertices[b + 2] - vertices[a + 2]
+            val vx = vertices[c] - vertices[a]; val vy = vertices[c + 1] - vertices[a + 1]; val vz = vertices[c + 2] - vertices[a + 2]
+            var nx = uy * vz - uz * vy; var ny = uz * vx - ux * vz; var nz = ux * vy - uy * vx
+            val length = sqrt(nx * nx + ny * ny + nz * nz)
+            if (length > 1.0e-10f) {
+                nx /= length; ny /= length; nz /= length
+                val tri = intArrayOf(ia, ib, ic)
+                for (e in 0..2) {
+                    val i0 = tri[e]; val i1 = tri[(e + 1) % 3]
+                    val k0 = vertexKey(i0); val k1 = vertexKey(i1)
+                    val edgeKey = if (k0 < k1) "$k0|$k1" else "$k1|$k0"
+                    val old = edges[edgeKey]
+                    if (old == null) {
+                        val p0 = i0 * 6; val p1 = i1 * 6
+                        edges[edgeKey] = Edge(floatArrayOf(vertices[p0], vertices[p0 + 1], vertices[p0 + 2]), floatArrayOf(vertices[p1], vertices[p1 + 1], vertices[p1 + 2]), nx, ny, nz)
+                    } else {
+                        old.count++
+                        if (old.nx * nx + old.ny * ny + old.nz * nz < 0.985f) old.crease = true
+                    }
+                }
+            }
+            t += 3
+        }
+        val output = ArrayList<Float>()
+        for (edge in edges.values) if (edge.count == 1 || edge.crease) {
+            for (point in listOf(edge.a, edge.b)) {
+                output.add(point[0]); output.add(point[1]); output.add(point[2])
+                output.add(edge.nx); output.add(edge.ny); output.add(edge.nz)
+            }
+        }
+        modelEdgeVertexCount = output.size / 6
+        if (output.isNotEmpty()) {
+            val data = FloatArray(output.size) { output[it] }
+            val buffer = ByteBuffer.allocateDirect(data.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer()
+            buffer.put(data).position(0)
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, modelEdgeBufferId)
+            GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, data.size * 4, buffer, GLES30.GL_STATIC_DRAW)
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
+        }
+    }
     fun setHighlightedFaces(faceIds: IntArray) {
         selectedFaceIds = faceIds.distinct().filter { it >= 0 }.toIntArray()
         val source = indexBuffer ?: return
@@ -397,6 +468,7 @@ private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer
         selectedFaceIds = IntArray(0)
         highlightIndexCount = 0
         edgeVertexCount = 0
+        modelEdgeVertexCount = 0
         edgeRanges = emptyList()
         vertexBuffer = null
         indexBuffer = null
@@ -496,6 +568,7 @@ private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer
             in vec3 vNormal;
             uniform int uHighlight;
             uniform int uEdgeHighlight;
+            uniform int uModelEdge;
             out vec4 outColor;
             void main() {
                 vec3 n = normalize(vNormal);
@@ -505,8 +578,9 @@ private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer
                 // Selected faces use a saturated orange fill, clearly distinct from
                 // the yellow selected-edge overlay and the normal blue-grey model.
                 vec3 baseColor = (uEdgeHighlight == 1) ? vec3(1.0, 0.86, 0.02) :
-                    ((uHighlight == 1) ? vec3(1.0, 0.24, 0.035) : vec3(0.55, 0.68, 0.82));
-                outColor = vec4(baseColor * (uHighlight == 1 ? 1.0 : light), 1.0);
+                    ((uHighlight == 1) ? vec3(1.0, 0.24, 0.035) :
+                    ((uModelEdge == 1) ? vec3(0.075, 0.095, 0.12) : vec3(0.55, 0.68, 0.82)));
+                outColor = vec4(baseColor * ((uHighlight == 1 || uModelEdge == 1) ? 1.0 : light), 1.0);
             }
         """
     }
