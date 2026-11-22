@@ -117,9 +117,11 @@ class CadGlSurfaceView(context: Context) : GLSurfaceView(context) {
                 return true
             }
             MotionEvent.ACTION_UP -> {
-                if (measurementMode && !multiTouchGesture) {
+                if (!multiTouchGesture) {
                     val dx = event.x - downX
                     val dy = event.y - downY
+                    // A short tap always performs CAD entity selection. Measurement
+                    // mode changes what happens after the same ray-pick operation.
                     if (sqrt(dx * dx + dy * dy) <= tapSlopPx) requestRay(event.x, event.y)
                 }
                 lastSpan = 0f
