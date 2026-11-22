@@ -16,7 +16,10 @@
 #include <BRepBuilderAPI_MakeVertex.hxx>
 #include <BRepTools.hxx>
 #include <BRep_Builder.hxx>
+#if __has_include(<IGESControl_Reader.hxx>)
 #include <IGESControl_Reader.hxx>
+#define SRCCAD_HAS_IGES_READER 1
+#endif
 #include <BRepExtrema_DistShapeShape.hxx>
 #include <BRepGProp.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
@@ -106,6 +109,7 @@ std::string loadStep(CadDocument& document, const std::string& path, const std::
         if (!BRepTools::Read(shape, path.c_str(), builder) || shape.IsNull())
             return loadError("OCCT BREP okuyucusu dosyayı açamadı (BRepTools::Read).");
     } else if (format == "iges") {
+#if defined(SRCCAD_HAS_IGES_READER)
         IGESControl_Reader igesReader;
         if (!Interface_Static::SetCVal("xstep.cascade.unit", "MM")) {
             return loadError("OCCT birim parametresi xstep.cascade.unit kullanılamıyor.");
@@ -116,6 +120,9 @@ std::string loadStep(CadDocument& document, const std::string& path, const std::
             return loadError("IGES dosyasında aktarılabilir geometrik kök bulunamadı.");
         shape = igesReader.OneShape();
         if (shape.IsNull()) return loadError("IGES dosyasından geçerli B-rep şekli üretilemedi.");
+#else
+        return loadError("Bu Android OCCT paketinde IGESControl_Reader.hxx bulunmadığı için IGES desteği derlenemiyor.");
+#endif
     } else {
         STEPControl_Reader reader; // initializes the STEP controller and its Interface_Static parameters
         // Normalize every STEP source unit to millimetres for predictable CAD measurement.
