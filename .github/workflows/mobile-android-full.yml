@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - mobile-viewer
+      - mobile-multiformat
     paths:
       - "SrcCad.Mobile/app/src/main/cpp/**"
       - "SrcCad.Mobile/app/src/main/java/**"
