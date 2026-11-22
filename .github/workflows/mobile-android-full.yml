@@ -11,6 +11,14 @@ on:
       - "SrcCad.Mobile/scripts/**"
       - "SrcCad.Mobile/BUILD_ANDROID.bat"
       - ".github/workflows/mobile-android-full.yml"
+  pull_request:
+    paths:
+      - "SrcCad.Mobile/app/src/main/cpp/**"
+      - "SrcCad.Mobile/app/src/main/java/**"
+      - "SrcCad.Mobile/app/build.gradle.kts"
+      - "SrcCad.Mobile/scripts/**"
+      - "SrcCad.Mobile/BUILD_ANDROID.bat"
+      - ".github/workflows/mobile-android-full.yml"
   workflow_dispatch:
 
 permissions:
