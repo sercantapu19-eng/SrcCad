@@ -270,6 +270,14 @@ private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer
             // slightly toward the camera so the depth buffer does not hide the highlight.
             GLES30.glEnable(GLES30.GL_POLYGON_OFFSET_FILL)
             GLES30.glPolygonOffset(-1.5f, -2.0f)
+            // The model-edge pass above leaves GL_ARRAY_BUFFER and the attribute pointers
+            // on the edge buffer (no VAO is used). The highlight indices refer to the MODEL
+            // vertex buffer, so it must be restored or the wrong vertices are drawn.
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, vertexBufferId)
+            GLES30.glEnableVertexAttribArray(0)
+            GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 24, 0)
+            GLES30.glEnableVertexAttribArray(1)
+            GLES30.glVertexAttribPointer(1, 3, GLES30.GL_FLOAT, false, 24, 12)
             GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, highlightIndexBufferId)
             GLES30.glDrawElements(GLES30.GL_TRIANGLES, highlightIndexCount, GLES30.GL_UNSIGNED_INT, 0)
             GLES30.glDisable(GLES30.GL_POLYGON_OFFSET_FILL)
