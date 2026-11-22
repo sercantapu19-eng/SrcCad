@@ -280,6 +280,8 @@ class MainActivity : ComponentActivity() {
                                         measurementMode = !measurementMode
                                         viewer.measurementMode = measurementMode
                                         firstMeasurePick = null
+                                        hasFirstMeasurePick = false
+                                        viewer.setMeasurementDimension(null, null)
                                         measurementText = if (measurementMode) {
                                             "Otomatik ölçüm açık: kenara/yüzeye dokunun; sürükleyerek modeli döndürün."
                                         } else {
@@ -614,6 +616,7 @@ class MainActivity : ComponentActivity() {
                 if (first == null) {
                     firstMeasurePick = picked
                     hasFirstMeasurePick = true
+                    viewer.setMeasurementDimension(null, null)
                     viewer.highlightFaces(intArrayOf(picked.getOrElse(10) { -1.0 }.toInt()))
                     viewer.highlightEdges(picked)
                     measurementText = describePick(picked) +
@@ -629,6 +632,7 @@ class MainActivity : ComponentActivity() {
                     hasFirstMeasurePick = false
                     viewer.highlightFaces(intArrayOf(first.getOrElse(10) { -1.0 }.toInt(), picked.getOrElse(10) { -1.0 }.toInt()))
                     viewer.highlightEdges(first, picked)
+                    viewer.setMeasurementDimension(first.copyOfRange(1, 4), picked.copyOfRange(1, 4))
 
                     val output = StringBuilder()
                     output.append("1) ").append(describePick(first))
