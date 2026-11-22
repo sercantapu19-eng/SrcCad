@@ -53,48 +53,6 @@ class CadGlSurfaceView(context: Context) : GLSurfaceView(context) {
         queueEvent { cadRenderer.setMeasurementDimension(pointA, pointB); requestRender() }
     }
 
-    fun setMeasurementDimension(pointA: DoubleArray?, pointB: DoubleArray?) {
-        if (pointA == null || pointB == null || pointA.size < 3 || pointB.size < 3) {
-            dimensionVertexCount = 0
-            return
-        }
-        val ax = pointA[0].toFloat(); val ay = pointA[1].toFloat(); val az = pointA[2].toFloat()
-        val bx = pointB[0].toFloat(); val by = pointB[1].toFloat(); val bz = pointB[2].toFloat()
-        val dx = bx - ax; val dy = by - ay; val dz = bz - az
-        val length = sqrt(dx * dx + dy * dy + dz * dz)
-        if (!length.isFinite() || length < 1.0e-6f) {
-            dimensionVertexCount = 0
-            return
-        }
-        val ux = dx / length; val uy = dy / length; val uz = dz / length
-        val hx = if (kotlin.math.abs(uz) < 0.85f) 0f else 0f
-        val hy = if (kotlin.math.abs(uz) < 0.85f) 0f else 1f
-        val hz = if (kotlin.math.abs(uz) < 0.85f) 1f else 0f
-        var sx = uy * hz - uz * hy
-        var sy = uz * hx - ux * hz
-        var sz = ux * hy - uy * hx
-        val sideLength = sqrt(sx * sx + sy * sy + sz * sz).coerceAtLeast(1.0e-6f)
-        sx /= sideLength; sy /= sideLength; sz /= sideLength
-        val arrow = (length * 0.045f).coerceIn(0.8f, 8f)
-        val vertices = floatArrayOf(
-            ax, ay, az, 0f, 0f, 1f, bx, by, bz, 0f, 0f, 1f,
-            ax + ux * arrow + sx * arrow * 0.45f, ay + uy * arrow + sy * arrow * 0.45f, az + uz * arrow + sz * arrow * 0.45f, 0f, 0f, 1f,
-            ax, ay, az, 0f, 0f, 1f,
-            ax + ux * arrow - sx * arrow * 0.45f, ay + uy * arrow - sy * arrow * 0.45f, az + uz * arrow - sz * arrow * 0.45f, 0f, 0f, 1f,
-            ax, ay, az, 0f, 0f, 1f,
-            bx - ux * arrow + sx * arrow * 0.45f, by - uy * arrow + sy * arrow * 0.45f, bz - uz * arrow + sz * arrow * 0.45f, 0f, 0f, 1f,
-            bx, by, bz, 0f, 0f, 1f,
-            bx - ux * arrow - sx * arrow * 0.45f, by - uy * arrow - sy * arrow * 0.45f, bz - uz * arrow - sz * arrow * 0.45f, 0f, 0f, 1f,
-            bx, by, bz, 0f, 0f, 1f
-        )
-        val buffer = ByteBuffer.allocateDirect(vertices.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer()
-        buffer.put(vertices).position(0)
-        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, dimensionBufferId)
-        GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, vertices.size * 4, buffer, GLES30.GL_DYNAMIC_DRAW)
-        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
-        dimensionVertexCount = vertices.size / 6
-    }
-
     fun clearMesh() {
         queueEvent { cadRenderer.clearMesh(); requestRender() }
     }
@@ -532,6 +490,48 @@ private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, edgeVertexBufferId)
         GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, data.size * 4, buffer, GLES30.GL_DYNAMIC_DRAW)
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
+    }
+
+    fun setMeasurementDimension(pointA: DoubleArray?, pointB: DoubleArray?) {
+        if (pointA == null || pointB == null || pointA.size < 3 || pointB.size < 3) {
+            dimensionVertexCount = 0
+            return
+        }
+        val ax = pointA[0].toFloat(); val ay = pointA[1].toFloat(); val az = pointA[2].toFloat()
+        val bx = pointB[0].toFloat(); val by = pointB[1].toFloat(); val bz = pointB[2].toFloat()
+        val dx = bx - ax; val dy = by - ay; val dz = bz - az
+        val length = sqrt(dx * dx + dy * dy + dz * dz)
+        if (!length.isFinite() || length < 1.0e-6f) {
+            dimensionVertexCount = 0
+            return
+        }
+        val ux = dx / length; val uy = dy / length; val uz = dz / length
+        val hx = if (kotlin.math.abs(uz) < 0.85f) 0f else 0f
+        val hy = if (kotlin.math.abs(uz) < 0.85f) 0f else 1f
+        val hz = if (kotlin.math.abs(uz) < 0.85f) 1f else 0f
+        var sx = uy * hz - uz * hy
+        var sy = uz * hx - ux * hz
+        var sz = ux * hy - uy * hx
+        val sideLength = sqrt(sx * sx + sy * sy + sz * sz).coerceAtLeast(1.0e-6f)
+        sx /= sideLength; sy /= sideLength; sz /= sideLength
+        val arrow = (length * 0.045f).coerceIn(0.8f, 8f)
+        val vertices = floatArrayOf(
+            ax, ay, az, 0f, 0f, 1f, bx, by, bz, 0f, 0f, 1f,
+            ax + ux * arrow + sx * arrow * 0.45f, ay + uy * arrow + sy * arrow * 0.45f, az + uz * arrow + sz * arrow * 0.45f, 0f, 0f, 1f,
+            ax, ay, az, 0f, 0f, 1f,
+            ax + ux * arrow - sx * arrow * 0.45f, ay + uy * arrow - sy * arrow * 0.45f, az + uz * arrow - sz * arrow * 0.45f, 0f, 0f, 1f,
+            ax, ay, az, 0f, 0f, 1f,
+            bx - ux * arrow + sx * arrow * 0.45f, by - uy * arrow + sy * arrow * 0.45f, bz - uz * arrow + sz * arrow * 0.45f, 0f, 0f, 1f,
+            bx, by, bz, 0f, 0f, 1f,
+            bx - ux * arrow - sx * arrow * 0.45f, by - uy * arrow - sy * arrow * 0.45f, bz - uz * arrow - sz * arrow * 0.45f, 0f, 0f, 1f,
+            bx, by, bz, 0f, 0f, 1f
+        )
+        val buffer = ByteBuffer.allocateDirect(vertices.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer()
+        buffer.put(vertices).position(0)
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, dimensionBufferId)
+        GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, vertices.size * 4, buffer, GLES30.GL_DYNAMIC_DRAW)
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
+        dimensionVertexCount = vertices.size / 6
     }
 
     fun clearMesh() {
