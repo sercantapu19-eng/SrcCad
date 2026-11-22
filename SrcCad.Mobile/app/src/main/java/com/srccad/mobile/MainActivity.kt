@@ -88,8 +88,17 @@ class MainActivity : ComponentActivity() {
         }
 
         viewer.onRayRequested = { ray ->
-            if (ray != null) handleMeasurementRay(ray)
-            else statusText = "Bu konumda model yüzeyi bulunamadı. Yüzeye dokunup tekrar deneyin."
+            if (ray == null) {
+                if (!measurementMode) {
+                    viewer.highlightFaces(intArrayOf())
+                    viewer.highlightEdges()
+                }
+                statusText = "Bu konumda model yüzeyi bulunamadı. Yüzeye dokunup tekrar deneyin."
+            } else if (measurementMode) {
+                handleMeasurementRay(ray)
+            } else {
+                handleModelSelectionRay(ray)
+            }
         }
 
         setContent {
@@ -465,6 +474,33 @@ class MainActivity : ComponentActivity() {
                 measurementAvailable = false
             } finally {
                 isBusy = false
+            }
+        }
+    }
+
+    /** Normal CAD selection: a tap picks the B-rep face and paints its full tessellated face. */
+    private fun handleModelSelectionRay(ray: FloatArray) {
+        if (!hasModel || !measurementAvailable || ray.size < 7 || nativeHandle == 0L) return
+        val origin = doubleArrayOf(ray[0].toDouble(), ray[1].toDouble(), ray[2].toDouble())
+        val direction = doubleArrayOf(ray[3].toDouble(), ray[4].toDouble(), ray[5].toDouble())
+        val tolerance = ray[6].toDouble()
+        lifecycleScope.launch {
+            try {
+                val picked = withContext(Dispatchers.Default) {
+                    NativeCadEngine.nativePickGeometry(nativeHandle, origin, direction, tolerance)
+                }
+                val faceId = picked.getOrElse(10) { -1.0 }.toInt()
+                if (picked.size >= 10 && faceId >= 0) {
+                    viewer.highlightEdges()
+                    viewer.highlightFaces(intArrayOf(faceId))
+                    statusText = "Yüzey seçildi. Seçili yüzey turuncu renkle vurgulandı."
+                } else {
+                    viewer.highlightFaces(intArrayOf())
+                    viewer.highlightEdges()
+                    statusText = "Bu noktada seçilebilir yüzey bulunamadı."
+                }
+            } catch (error: Exception) {
+                statusText = error.message ?: "Yüzey seçimi başarısız."
             }
         }
     }
