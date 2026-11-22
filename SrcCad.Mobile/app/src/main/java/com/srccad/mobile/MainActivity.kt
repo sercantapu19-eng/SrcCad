@@ -60,6 +60,8 @@ class MainActivity : ComponentActivity() {
     private var hasModel by mutableStateOf(false)
     private var measurementMode by mutableStateOf(false)
     private var measurementAvailable by mutableStateOf(false)
+    private var dxfDrawing by mutableStateOf<DxfDrawing?>(null)
+    private var dxfFitToken by mutableStateOf(0)
     private var measurementText by mutableStateOf("İki nokta arası ölçüm için önce bir STEP modeli açın.")
     private var infoExpanded by mutableStateOf(false)
     private var firstMeasurePick: DoubleArray? = null
@@ -140,7 +142,7 @@ class MainActivity : ComponentActivity() {
                                         hasModel = hasModel,
                                         onOpen = { openStepPicker() },
                                         onDemo = { loadDemoBox() },
-                                        onFit = { viewer.fitModel() }
+                                        onFit = { if (dxfDrawing != null) dxfFitToken++ else viewer.fitModel() }
                                     )
                                 }
                             }
@@ -153,7 +155,7 @@ class MainActivity : ComponentActivity() {
                                     hasModel = hasModel,
                                     onOpen = { openStepPicker() },
                                     onDemo = { loadDemoBox() },
-                                    onFit = { viewer.fitModel() }
+                                    onFit = { if (dxfDrawing != null) dxfFitToken++ else viewer.fitModel() }
                                 )
                             }
 
@@ -161,6 +163,10 @@ class MainActivity : ComponentActivity() {
                                 Modifier.weight(1f).fillMaxWidth().background(Color(0xFF202833))
                             ) {
                                 AndroidView(factory = { viewer }, modifier = Modifier.fillMaxSize())
+                                val dxf = dxfDrawing
+                                if (dxf != null) {
+                                    DxfCanvasView(dxf, dxfFitToken, Modifier.fillMaxSize())
+                                }
                                 if (!hasModel) {
                                     Column(
                                         modifier = Modifier.align(Alignment.Center).padding(20.dp),
@@ -329,10 +335,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun openStepPicker() {
-        if (stepReaderAvailable && !isBusy) {
+        if (!isBusy) {
             openDocument.launch(arrayOf("*/*"))
         } else {
-            statusText = "STEP okuyucu bu APK'da bulunmuyor."
+            statusText = "Devam eden bir içe aktarma var, lütfen bekleyin."
         }
     }
 
@@ -347,6 +353,7 @@ class MainActivity : ComponentActivity() {
         measurementText = "Demo geometri: 100 × 50 × 20 mm."
         modelSummary = "Demo model hazırlanıyor…"
         viewer.clearMesh()
+        dxfDrawing = null
 
         lifecycleScope.launch {
             try {
@@ -387,11 +394,13 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun presentModel(result: ImportResult, enableMeasurement: Boolean) {
+        dxfDrawing = null
         currentImport?.delete()
         currentImport = result.file
         viewer.submitMesh(result.vertices, result.indices, result.bounds, result.triangleFaceIds)
         fileName = result.displayName
-        modelSummary = result.faces.toString() + " yüzey • " + result.triangles + " üçgen"
+        modelSummary = if (result.faces > 0) result.faces.toString() + " yüzey • " + result.triangles + " üçgen"
+            else "Ağ (mesh) modeli • " + result.triangles + " üçgen"
         measurementAvailable = enableMeasurement
         measurementMode = false
         viewer.measurementMode = false
@@ -400,8 +409,41 @@ class MainActivity : ComponentActivity() {
         measurementText = if (enableMeasurement) {
             "İki yüzey noktasını seçerek mesafe ölçebilirsiniz."
         } else {
-            "Demo geometri: 100 × 50 × 20 mm • Ölçüm için STEP dosyası açın."
+            if (result.faces == 0) "Ağ (mesh) modeli: yüzey seçimi ve hassas ölçüm yalnızca STEP/IGES/BREP B-Rep modellerinde çalışır."
+            else "Demo geometri: 100 × 50 × 20 mm • Ölçüm için STEP dosyası açın."
         }
+    }
+
+    private fun unsupportedFormatMessage(name: String, ext: String): String = when (ext) {
+        "sldprt", "sldasm", "slddrw", "easm", "eprt", "edrw" ->
+            "$name açılamadı: SolidWorks/eDrawings biçimleri kapalıdır ve ücretsiz bir okuyucusu yoktur. Ticari SDK gerekir veya dosyayı kaynak programdan STEP olarak dışa aktarın."
+        "ipt", "iam", "idw" ->
+            "$name açılamadı: Inventor biçimleri kapalıdır. Ticari SDK gerekir veya STEP olarak dışa aktarın."
+        "x_t", "x_b" ->
+            "$name açılamadı: Parasolid ücretsiz okunamaz. Ticari SDK gerekir veya STEP olarak dışa aktarın."
+        "sat", "sab" ->
+            "$name açılamadı: ACIS ücretsiz okunamaz. Ticari SDK gerekir veya STEP olarak dışa aktarın."
+        "dwg" ->
+            "$name açılamadı: DWG kapalı bir formattır. Dosyayı DXF'e dönüştürüp (ör. ODA File Converter) açın."
+        else ->
+            "$name açılamadı. Desteklenenler: STEP/STP, IGES/IGS, BREP, STL, OBJ, 3MF (3B) ve DXF (2B)."
+    }
+
+    private fun presentDxf(name: String, drawing: DxfDrawing) {
+        currentImport?.delete()
+        currentImport = null
+        viewer.clearMesh()
+        dxfDrawing = drawing
+        dxfFitToken++
+        fileName = name
+        modelSummary = "2B çizim • " + drawing.entityCount + " nesne • " + drawing.layerCount + " katman"
+        measurementAvailable = false
+        measurementMode = false
+        viewer.measurementMode = false
+        firstMeasurePick = null
+        hasModel = true
+        measurementText = "2B çizim görüntüleniyor (kaydır / iki parmakla yakınlaştır). Ölçüm yalnızca 3B modellerde çalışır." +
+            if (drawing.skipped.isEmpty()) "" else "\nÇizilmeyen nesneler: " + drawing.skippedSummary()
     }
 
     private fun importStep(uri: Uri) {
@@ -422,15 +464,19 @@ class MainActivity : ComponentActivity() {
         measurementText = "Model içe aktarılıyor…"
         modelSummary = "Dosya hazırlanıyor…"
         viewer.clearMesh()
+        dxfDrawing = null
 
         lifecycleScope.launch {
             try {
-                val result = withContext(Dispatchers.IO) {
+                val loaded = withContext(Dispatchers.IO) {
                     val extension = selectedName.substringAfterLast('.', "").lowercase(Locale.ROOT)
-                    if (extension != "step" && extension != "stp") {
-                        throw IllegalArgumentException(
-                            "$selectedName açılamadı. Bu sürüm yalnızca STEP/STP dosyalarını destekliyor."
-                        )
+                    val kind = when (extension) {
+                        "step", "stp" -> "step"
+                        "iges", "igs" -> "iges"
+                        "brep", "brp" -> "brep"
+                        "stl", "obj", "3mf" -> "mesh"
+                        "dxf" -> "dxf"
+                        else -> throw IllegalArgumentException(unsupportedFormatMessage(selectedName, extension))
                     }
 
                     val directory = File(cacheDir, "step-imports").apply { mkdirs() }
@@ -439,34 +485,76 @@ class MainActivity : ComponentActivity() {
                         ?: throw IllegalStateException("Seçilen dosya okunamadı.")
                     input.use { source -> destination.outputStream().use { target -> source.copyTo(target) } }
 
-                    val response = JSONObject(NativeCadEngine.nativeLoadStep(nativeHandle, destination.absolutePath))
-                    if (!response.optBoolean("ok")) {
+                    try {
+                        when (kind) {
+                            "dxf" -> {
+                                val drawing = DxfReader.read(destination)
+                                destination.delete()
+                                Loaded(null, drawing, false)
+                            }
+                            "mesh" -> {
+                                val mesh = when (extension) {
+                                    "stl" -> MeshFileReaders.readStl(destination)
+                                    "obj" -> MeshFileReaders.readObj(destination)
+                                    else -> MeshFileReaders.read3mf(destination)
+                                }
+                                destination.delete()
+                                Loaded(
+                                    ImportResult(
+                                        selectedName, null, 0, mesh.triangles,
+                                        mesh.vertices, mesh.indices, mesh.bounds, IntArray(mesh.triangles) { -1 }
+                                    ),
+                                    null, false
+                                )
+                            }
+                            else -> {
+                                if (!stepReaderAvailable) {
+                                    throw IllegalStateException("Bu APK'da OCCT B-Rep okuyucusu yok; $selectedName açılamaz.")
+                                }
+                                val response = JSONObject(
+                                    NativeCadEngine.nativeLoadCad(nativeHandle, destination.absolutePath, kind)
+                                )
+                                if (!response.optBoolean("ok")) {
+                                    throw IllegalStateException(response.optString("message", "İçe aktarma başarısız."))
+                                }
+                                val vertices = NativeCadEngine.nativeGetVertices(nativeHandle)
+                                val indices = NativeCadEngine.nativeGetIndices(nativeHandle)
+                                val faceIds = NativeCadEngine.nativeGetTriangleFaceIndices(nativeHandle)
+                                val bounds = NativeCadEngine.nativeGetBounds(nativeHandle)
+                                if (vertices.isEmpty() || indices.isEmpty() || bounds.size != 6) {
+                                    throw IllegalStateException("Geometri okundu ancak görüntülenebilir üçgen ağı üretilemedi.")
+                                }
+                                Loaded(
+                                    ImportResult(
+                                        selectedName, destination,
+                                        response.optInt("faces"), response.optInt("triangles"),
+                                        vertices, indices, bounds, faceIds
+                                    ),
+                                    null, true
+                                )
+                            }
+                        }
+                    } catch (oom: OutOfMemoryError) {
                         destination.delete()
-                        throw IllegalStateException(response.optString("message", "STEP içe aktarma başarısız."))
-                    }
-
-                    val vertices = NativeCadEngine.nativeGetVertices(nativeHandle)
-                    val indices = NativeCadEngine.nativeGetIndices(nativeHandle)
-                    val faceIds = NativeCadEngine.nativeGetTriangleFaceIndices(nativeHandle)
-                    val bounds = NativeCadEngine.nativeGetBounds(nativeHandle)
-                    if (vertices.isEmpty() || indices.isEmpty() || bounds.size != 6) {
+                        throw IllegalStateException("Bellek yetersiz: $selectedName bu cihaz için çok büyük.")
+                    } catch (error: Exception) {
                         destination.delete()
-                        throw IllegalStateException("Geometri okundu ancak görüntülenebilir üçgen ağı üretilemedi.")
+                        throw error
                     }
-                    ImportResult(
-                        selectedName,
-                        destination,
-                        response.optInt("faces"),
-                        response.optInt("triangles"),
-                        vertices,
-                        indices,
-                        bounds,
-                        faceIds
-                    )
                 }
 
-                presentModel(result, enableMeasurement = true)
-                statusText = "$selectedName başarıyla açıldı. Modeli sürükleyerek döndürebilirsiniz."
+                val dxf = loaded.dxf
+                if (dxf != null) {
+                    presentDxf(selectedName, dxf)
+                    statusText = "$selectedName 2B çizim olarak açıldı. Kaydırın ve iki parmakla yakınlaştırın."
+                } else {
+                    presentModel(loaded.model!!, enableMeasurement = loaded.measurable)
+                    statusText = if (loaded.measurable) {
+                        "$selectedName başarıyla açıldı. Yüzeye dokunarak seçebilirsiniz."
+                    } else {
+                        "$selectedName açıldı (ağ modeli). Yüzey seçimi ve ölçüm bu formatta kullanılamaz."
+                    }
+                }
             } catch (error: Exception) {
                 statusText = error.message ?: "$selectedName içe aktarılamadı."
                 modelSummary = "$selectedName yüklenemedi"
@@ -619,6 +707,8 @@ class MainActivity : ComponentActivity() {
         currentImport?.delete()
         super.onDestroy()
     }
+    private class Loaded(val model: ImportResult?, val dxf: DxfDrawing?, val measurable: Boolean)
+
 
     private data class ImportResult(
         val displayName: String,
@@ -646,7 +736,7 @@ private fun FileActionButtons(
         horizontalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Button(onClick = onOpen, enabled = !isBusy && stepReaderAvailable) {
+        Button(onClick = onOpen, enabled = !isBusy) {
             Text("Aç")
         }
         Button(onClick = onDemo, enabled = !isBusy) {
