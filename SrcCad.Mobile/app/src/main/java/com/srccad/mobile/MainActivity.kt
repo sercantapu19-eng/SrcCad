@@ -63,6 +63,7 @@ class MainActivity : ComponentActivity() {
     private var measurementAvailable by mutableStateOf(false)
     private var dxfDrawing by mutableStateOf<DxfDrawing?>(null)
     private var dxfFitToken by mutableStateOf(0)
+    private var dxfMeasurePoints by mutableStateOf(emptyList<Pair<Double, Double>>())
     private var measurementText by mutableStateOf("İki nokta arası ölçüm için önce bir STEP modeli açın.")
     private var infoExpanded by mutableStateOf(false)
     private var firstMeasurePick: DoubleArray? = null
@@ -166,7 +167,7 @@ class MainActivity : ComponentActivity() {
                                 AndroidView(factory = { viewer }, modifier = Modifier.fillMaxSize())
                                 val dxf = dxfDrawing
                                 if (dxf != null) {
-                                    DxfCanvasView(dxf, dxfFitToken, Modifier.fillMaxSize())
+                                    DxfCanvasView(dxf, dxfFitToken, Modifier.fillMaxSize(), measurementMode, dxfMeasurePoints) { x, y -> handleDxfMeasurePoint(x, y) }
                                 }
                                 if (!hasModel) {
                                     Column(
@@ -282,14 +283,17 @@ class MainActivity : ComponentActivity() {
                                         viewer.measurementMode = measurementMode
                                         firstMeasurePick = null
                                         hasFirstMeasurePick = false
+                                        dxfMeasurePoints = emptyList()
                                         viewer.setMeasurementDimension(null, null)
-                                        measurementText = if (measurementMode) {
+                                        measurementText = if (measurementMode && dxfDrawing != null) {
+                                            "DXF ölçümü açık: çizimde iki noktaya dokunun."
+                                        } else if (measurementMode) {
                                             "Otomatik ölçüm açık: kenara/yüzeye dokunun; sürükleyerek modeli döndürün."
                                         } else {
                                             "Ölçüm kapatıldı."
                                         }
                                     },
-                                    enabled = hasModel && measurementAvailable && !isBusy,
+                                    enabled = hasModel && (measurementAvailable || dxfDrawing != null) && !isBusy,
                                     modifier = if (compactLayout) Modifier.weight(1f) else Modifier
                                 ) {
                                     Text(if (measurementMode) "Ölçümü Kapat" else if (compactLayout) "Ölç" else "Otomatik Ölçüm")
@@ -437,6 +441,7 @@ class MainActivity : ComponentActivity() {
         currentImport = null
         viewer.clearMesh()
         dxfDrawing = drawing
+        dxfMeasurePoints = emptyList()
         dxfFitToken++
         fileName = name
         modelSummary = "2B çizim • " + drawing.entityCount + " nesne • " + drawing.layerCount + " katman"
@@ -640,6 +645,26 @@ class MainActivity : ComponentActivity() {
     }
 
     /** Normal CAD selection: a tap picks the B-rep face and paints its full tessellated face. */
+    private fun handleDxfMeasurePoint(x: Double, y: Double) {
+        if (!measurementMode || dxfDrawing == null) return
+        val previous = dxfMeasurePoints
+        if (previous.isEmpty() || previous.size >= 2) {
+            dxfMeasurePoints = listOf(x to y)
+            measurementText = "İlk nokta: X ${formatMm(x)}, Y ${formatMm(y)}\nİkinci noktayı seçin."
+            statusText = "DXF ölçümü: ilk nokta seçildi."
+            return
+        }
+        val first = previous.first()
+        val dx = x - first.first
+        val dy = y - first.second
+        val distance = kotlin.math.hypot(dx, dy)
+        dxfMeasurePoints = listOf(first, x to y)
+        val result = "Mesafe: ${formatMm(distance)} çizim birimi\nΔX: ${formatMm(dx)}   ΔY: ${formatMm(dy)}"
+        measurementText = result
+        measurementHistory = (listOf(fileName + " • " + result.replace("\n", " | ")) + measurementHistory).take(20)
+        statusText = "DXF ölçümü tamamlandı. Yeni ölçüm için iki noktaya dokunun."
+    }
+
     private fun handleModelSelectionRay(ray: FloatArray) {
         if (!hasModel || !measurementAvailable || ray.size < 7 || nativeHandle == 0L) return
         val origin = doubleArrayOf(ray[0].toDouble(), ray[1].toDouble(), ray[2].toDouble())
