@@ -93,7 +93,7 @@ Java_com_srccad_mobile_NativeCadEngine_nativeSolidWorksToStepSelected(
         std::string config=str(e,jc);
         if(config.empty()||output.empty()) return js(e,"{\"ok\":false,\"message\":\"Konfigürasyon ve çıktı yolu zorunludur.\"}");
         auto container=openswx::InspectContainer(input);
-        if(!container.ok()) return js(e,"{\"ok\":false,\"message\":\""+esc(container.error())+"\"}");
+        
         auto resolution=openswx::ResolveSavedGeometry(container.value(),config);
         if(!resolution.ok()) return js(e,"{\"ok\":false,\"message\":\""+esc(resolution.error().message)+"\"}");
         const openswx::SavedGeometryCandidate* chosen=nullptr;
