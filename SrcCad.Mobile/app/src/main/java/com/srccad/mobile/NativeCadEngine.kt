@@ -38,4 +38,16 @@ object NativeCadEngine {
         bodyId: Int,
         outputStepPath: String
     ): String
+    /** Inspect SolidWorks document metadata, configurations and saved-geometry candidates as JSON. */
+    external fun nativeInspectSolidWorks(absolutePath: String): String
+    /** Embedded preview PNG, or an empty byte array when unavailable. */
+    external fun nativeSolidWorksPreview(absolutePath: String): ByteArray
+    /** Export only the explicitly selected configuration/payload/solid BODY to STEP. */
+    external fun nativeSolidWorksToStepSelected(
+        absolutePath: String,
+        configuration: String,
+        payloadIndex: Int,
+        bodyId: Int,
+        outputStepPath: String
+    ): String
 }
