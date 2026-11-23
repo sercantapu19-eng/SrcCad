@@ -1,5 +1,6 @@
 package com.srccad.mobile
 
+import android.app.AlertDialog
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
@@ -448,8 +449,78 @@ class MainActivity : ComponentActivity() {
             if (drawing.skipped.isEmpty()) "" else "\nÇizilmeyen nesneler: " + drawing.skippedSummary()
     }
 
+    private fun importSolidWorks(uri: Uri, displayName: String) {
+        if (!stepReaderAvailable) { statusText = "SolidWorks aktarımı için OCCT STEP okuyucusu gerekli."; return }
+        isBusy = true; fileName = displayName; statusText = "SolidWorks dosyası inceleniyor…"; hasModel = false
+        lifecycleScope.launch {
+            var source: File? = null
+            try {
+                val json = withContext(Dispatchers.IO) {
+                    val dir = File(cacheDir, "solidworks").apply { mkdirs() }
+                    source = File(dir, UUID.randomUUID().toString() + ".sldprt")
+                    contentResolver.openInputStream(uri)?.use { input -> source!!.outputStream().use { input.copyTo(it) } }
+                        ?: throw IllegalStateException("Dosya okunamadı.")
+                    JSONObject(NativeCadEngine.nativeInspectSolidWorks(source!!.absolutePath))
+                }
+                if (!json.optBoolean("ok")) throw IllegalStateException(json.optString("message", "SolidWorks incelenemedi."))
+                val configs = json.optJSONArray("configurations") ?: throw IllegalStateException("Konfigürasyon bulunamadı.")
+                isBusy = false
+                val names = Array(configs.length()) { i -> configs.optJSONObject(i)?.optString("name").orEmpty().ifBlank { "Configuration " + (i+1) } }
+                AlertDialog.Builder(this@MainActivity).setTitle("Konfigürasyon seç").setItems(names) { _, i ->
+                    val cfg = configs.optJSONObject(i) ?: return@setItems
+                    val all = cfg.optJSONArray("candidates") ?: org.json.JSONArray()
+                    val valid = mutableListOf<JSONObject>()
+                    val labels = mutableListOf<String>()
+                    for (j in 0 until all.length()) {
+                        val item = all.optJSONObject(j) ?: continue
+                        if (!item.optBoolean("selectedPartition") || !item.optBoolean("decodedComplete") || item.optString("role") != "PARTITION") continue
+                        val bodies = item.optJSONArray("bodies") ?: continue
+                        if ((0 until bodies.length()).none { bodies.optJSONObject(it)?.optString("kind") == "SOLID" }) continue
+                        valid.add(item); labels.add("Payload " + item.optInt("payloadIndex"))
+                    }
+                    if (valid.isEmpty()) { source?.delete(); statusText = "Bu konfigürasyonda güvenli aktarım için uygun katı gövde bulunamadı."; return@setItems }
+                    AlertDialog.Builder(this@MainActivity).setTitle("Geometri kaynağı").setItems(labels.toTypedArray()) { _, k ->
+                        val item = valid[k]; val bodies = item.optJSONArray("bodies") ?: org.json.JSONArray()
+                        val ids = mutableListOf<Int>(); val bodyLabels = mutableListOf<String>()
+                        for (n in 0 until bodies.length()) { val b = bodies.optJSONObject(n) ?: continue; if (b.optString("kind") == "SOLID") { ids.add(b.optInt("id")); bodyLabels.add("Katı BODY #" + b.optInt("id")) } }
+                        AlertDialog.Builder(this@MainActivity).setTitle("Katı gövde seç").setItems(bodyLabels.toTypedArray()) { _, n ->
+                            convertSolidWorksBody(source!!, displayName, cfg.optString("name"), item.optInt("payloadIndex"), ids[n])
+                        }.setOnCancelListener { source?.delete() }.show()
+                    }.setOnCancelListener { source?.delete() }.show()
+                }.setOnCancelListener { source?.delete() }.show()
+            } catch (e: Exception) { source?.delete(); isBusy = false; statusText = e.message ?: "SolidWorks açılamadı." }
+        }
+    }
+
+    private fun convertSolidWorksBody(source: File, displayName: String, config: String, payload: Int, body: Int) {
+        isBusy = true; statusText = "SolidWorks gövdesi STEP formatına dönüştürülüyor…"
+        lifecycleScope.launch {
+            var step: File? = null
+            try {
+                val model = withContext(Dispatchers.IO) {
+                    val dir = File(cacheDir, "solidworks-step").apply { mkdirs() }
+                    step = File(dir, UUID.randomUUID().toString() + ".step")
+                    val export = JSONObject(NativeCadEngine.nativeSolidWorksToStepSelected(source.absolutePath, config, payload, body, step!!.absolutePath))
+                    if (!export.optBoolean("ok")) throw IllegalStateException(export.optString("message", "STEP dönüşümü başarısız."))
+                    val loaded = JSONObject(NativeCadEngine.nativeLoadCad(nativeHandle, step!!.absolutePath, "step"))
+                    if (!loaded.optBoolean("ok")) throw IllegalStateException(loaded.optString("message", "STEP açılamadı."))
+                    val v = NativeCadEngine.nativeGetVertices(nativeHandle); val ix = NativeCadEngine.nativeGetIndices(nativeHandle)
+                    val f = NativeCadEngine.nativeGetTriangleFaceIndices(nativeHandle); val bounds = NativeCadEngine.nativeGetBounds(nativeHandle)
+                    if (v.isEmpty() || ix.isEmpty() || bounds.size != 6) throw IllegalStateException("Görüntülenebilir geometri üretilemedi.")
+                    ImportResult(displayName, step, loaded.optInt("faces"), loaded.optInt("triangles"), v, ix, bounds, f)
+                }
+                source.delete(); presentModel(model, enableMeasurement = true); statusText = displayName + " • " + config + " • BODY #" + body + " açıldı."
+            } catch (e: Exception) { source.delete(); step?.delete(); hasModel = false; statusText = e.message ?: "SolidWorks aktarımı başarısız." }
+            finally { isBusy = false }
+        }
+    }
     private fun importStep(uri: Uri) {
         if (isBusy) return
+        val candidateName = queryDisplayName(uri) ?: uri.lastPathSegment?.substringAfterLast('/') ?: "model.step"
+        if (candidateName.substringAfterLast('.', "").lowercase(Locale.ROOT) == "sldprt") {
+            importSolidWorks(uri, candidateName)
+            return
+        }
         // Update the selected filename immediately so a failed import cannot leave
         // the previous model name beside the new file's error message.
         val selectedName = queryDisplayName(uri)
