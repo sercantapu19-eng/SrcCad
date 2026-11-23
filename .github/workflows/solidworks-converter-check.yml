@@ -1,0 +1,25 @@
+name: SolidWorks converter adapter checks
+
+on:
+  push:
+    branches: [mobile-multiformat]
+    paths:
+      - "tools/solidworks-converter/**"
+      - ".github/workflows/solidworks-converter-check.yml"
+  pull_request:
+    paths:
+      - "tools/solidworks-converter/**"
+      - ".github/workflows/solidworks-converter-check.yml"
+
+jobs:
+  validate-adapter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile Python adapter
+        run: python -m py_compile tools/solidworks-converter/convert.py
+      - name: Check command-line help
+        run: python tools/solidworks-converter/convert.py --help
