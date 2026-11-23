@@ -31,17 +31,39 @@ jobs:
         uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
-      - name: Install Android NDK and CMake
+      - name: Locate SDK manager and install build packages
+        shell: bash
         run: |
-          yes | sdkmanager --licenses
-          sdkmanager --install "ndk;28.2.13676358" "cmake;3.22.1" "platforms;android-36" "build-tools;36.0.0"
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [[ -z "$SDK_ROOT" ]]; then
+            echo "::error::ANDROID_HOME and ANDROID_SDK_ROOT are both empty"
+            env | sort | grep -E 'ANDROID|JAVA_HOME' || true
+            exit 1
+          fi
+          SDKMANAGER="$(find "$SDK_ROOT" -type f -name sdkmanager -print -quit)"
+          if [[ -z "$SDKMANAGER" ]]; then
+            echo "::error::sdkmanager was not found under $SDK_ROOT"
+            find "$SDK_ROOT" -maxdepth 4 -type d -print | head -100
+            exit 1
+          fi
+          echo "Using sdkmanager: $SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses || true
+          "$SDKMANAGER" --install "ndk;28.2.13676358" "cmake;3.22.1" "platforms;android-36" "build-tools;36.0.0"
+      - name: Verify Android SDK packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d "$ANDROID_HOME/platforms/android-36"
+          test -d "$ANDROID_HOME/ndk/28.2.13676358"
+          test -d "$ANDROID_HOME/cmake/3.22.1"
       - name: Build debug APK
         working-directory: SrcCad.Mobile
         run: |
           chmod +x ./gradlew
           ./gradlew --no-daemon --stacktrace :app:assembleDebug
       - name: Upload APK
-        if: always() && hashFiles('SrcCad.Mobile/app/build/outputs/apk/debug/app-debug.apk') != ''
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: srccad-mobile-sldprt-debug
