@@ -25,4 +25,17 @@ object NativeCadEngine {
     ): DoubleArray
     /** Returns distance, delta-X, delta-Y, delta-Z in model units. */
     external fun nativeMeasurePoints(handle: Long, pointA: DoubleArray, pointB: DoubleArray): DoubleArray
+
+    /** Reads SolidWorks metadata/configurations and saved-geometry BODY candidates as JSON. */
+    external fun nativeInspectSolidWorks(absolutePath: String): String
+    /** Embedded SolidWorks preview PNG, or an empty byte array when absent. */
+    external fun nativeSolidWorksPreview(absolutePath: String): ByteArray
+    /** Exports only the explicitly selected configuration/payload/solid BODY to STEP. */
+    external fun nativeSolidWorksToStepSelected(
+        absolutePath: String,
+        configuration: String,
+        payloadIndex: Int,
+        bodyId: Int,
+        outputStepPath: String
+    ): String
 }
