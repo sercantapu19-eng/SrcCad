@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.22.1)
 project(srccad_mobile_native LANGUAGES CXX)
 
 option(SRCCAD_ENABLE_OCCT "Build STEP import support against an Android OCCT installation" OFF)
-option(SRCCAD_ENABLE_OPENSWX "Build open-source SolidWorks reader and STEP exporter" OFF)
+option(SRCCAD_ENABLE_OPENSWX "Build open-source SolidWorks reader and STEP exporter" ON)
 set(SRCCAD_OCCT_ROOT "" CACHE PATH "Prefix containing OCCT include/ and lib/ directories")
 
 add_library(srccad_mobile SHARED native-lib.cpp)
@@ -21,6 +21,8 @@ target_link_options(srccad_mobile PRIVATE
 
 if(SRCCAD_ENABLE_OPENSWX)
     include(FetchContent)
+
+    # NDK provides zlib; expose it as the imported target expected by OpenSWX.
     find_library(SRCCAD_ZLIB_LIBRARY z REQUIRED)
     if(NOT TARGET ZLIB::ZLIB)
         add_library(ZLIB::ZLIB UNKNOWN IMPORTED)
@@ -35,24 +37,43 @@ if(SRCCAD_ENABLE_OPENSWX)
         GIT_SHALLOW TRUE)
     FetchContent_MakeAvailable(pugixml)
 
-    set(OPENSWX_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/third_party/openswx")
-    foreach(required_file
-        "${OPENSWX_ROOT}/libopenswx/CMakeLists.txt"
-        "${OPENSWX_ROOT}/libopenparasolid/CMakeLists.txt"
-        "${OPENSWX_ROOT}/libopenswstep/CMakeLists.txt")
-        if(NOT EXISTS "${required_file}")
-            message(FATAL_ERROR "OpenSWX source missing: ${required_file}")
+    # Fetch the upstream source snapshot; no binary SDK or SolidWorks runtime is needed.
+    FetchContent_Declare(openswx
+        GIT_REPOSITORY https://github.com/schwitters/openswx.git
+        GIT_TAG main
+        GIT_SHALLOW TRUE)
+    FetchContent_GetProperties(openswx)
+    if(NOT openswx_POPULATED)
+        FetchContent_Populate(openswx)
+    endif()
+
+    set(OPENSWX_ROOT "${openswx_SOURCE_DIR}")
+    foreach(module libopenparasolid libopenswx libopenswstep)
+        if(NOT EXISTS "${OPENSWX_ROOT}/${module}/CMakeLists.txt")
+            message(FATAL_ERROR "OpenSWX source module missing: ${OPENSWX_ROOT}/${module}")
         endif()
     endforeach()
+
+    # Upstream currently requires a package config even when the parent already
+    # created pugixml::pugixml via FetchContent. Make that lookup conditional.
+    set(OPENSWX_CMAKE "${OPENSWX_ROOT}/libopenswx/CMakeLists.txt")
+    file(READ "${OPENSWX_CMAKE}" OPENSWX_CMAKE_TEXT)
+    string(REPLACE
+        "find_package(pugixml CONFIG REQUIRED)"
+        "if(NOT TARGET pugixml::pugixml)\n  find_package(pugixml CONFIG REQUIRED)\nendif()"
+        OPENSWX_CMAKE_TEXT "${OPENSWX_CMAKE_TEXT}")
+    file(WRITE "${OPENSWX_CMAKE}" "${OPENSWX_CMAKE_TEXT}")
 
     set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
     set(OPENPARASOLID_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
     add_subdirectory("${OPENSWX_ROOT}/libopenparasolid" "${CMAKE_CURRENT_BINARY_DIR}/openparasolid")
     add_subdirectory("${OPENSWX_ROOT}/libopenswx" "${CMAKE_CURRENT_BINARY_DIR}/openswx")
     add_subdirectory("${OPENSWX_ROOT}/libopenswstep" "${CMAKE_CURRENT_BINARY_DIR}/openswstep")
+
     target_sources(srccad_mobile PRIVATE solidworks_jni_bridge.cpp)
     target_link_libraries(srccad_mobile PRIVATE openswstep openswx openparasolid)
     target_compile_definitions(srccad_mobile PRIVATE SRCCAD_WITH_OPENSWX=1)
+    message(STATUS "SrcCad Mobile: OpenSWX SolidWorks import enabled")
 endif()
 
 if(SRCCAD_ENABLE_OCCT)
