@@ -104,7 +104,7 @@ std::string token_storage(token);
     endif()
     string(REPLACE "${OPENSWX_MASS_FROM_CHARS}" "${OPENSWX_MASS_STRTOD}" OPENSWX_XML_READERS_TEXT "${OPENSWX_XML_READERS_TEXT}")
     string(REPLACE "${OPENSWX_TRANSFORM_FROM_CHARS}" "${OPENSWX_TRANSFORM_STRTOD}" OPENSWX_XML_READERS_TEXT "${OPENSWX_XML_READERS_TEXT}")
-    string(REPLACE "#include <charconv>" "#include <cerrno>\n#include <cstdlib>" OPENSWX_XML_READERS_TEXT "${OPENSWX_XML_READERS_TEXT}")
+    string(REPLACE "#include <charconv>" "#include <charconv>\n#include <cerrno>\n#include <cstdlib>" OPENSWX_XML_READERS_TEXT "${OPENSWX_XML_READERS_TEXT}")
     file(WRITE "${OPENSWX_XML_READERS}" "${OPENSWX_XML_READERS_TEXT}")
 
     set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
