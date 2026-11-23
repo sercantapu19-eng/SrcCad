@@ -97,10 +97,11 @@ android {
         ndk { abiFilters += listOf("arm64-v8a") }
         externalNativeBuild {
             cmake {
-                cppFlags += listOf("-std=c++17", "-fexceptions", "-frtti")
+                cppFlags += listOf("-std=c++20", "-fexceptions", "-frtti")
                 arguments += listOf(
                     "-DANDROID_STL=c++_shared",
                     "-DSRCCAD_ENABLE_OCCT=" + if (occtRoot.isBlank()) "OFF" else "ON",
+                    "-DSRCCAD_ENABLE_OPENSWX=ON",
                     "-DSRCCAD_OCCT_ROOT=" + occtRoot
                 )
             }

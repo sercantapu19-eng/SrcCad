@@ -14,6 +14,12 @@
 #include <BRepAdaptor_Curve.hxx>
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepBuilderAPI_MakeVertex.hxx>
+#include <BRepTools.hxx>
+#include <BRep_Builder.hxx>
+#if __has_include(<IGESControl_Reader.hxx>)
+#include <IGESControl_Reader.hxx>
+#define SRCCAD_HAS_IGES_READER 1
+#endif
 #include <BRepExtrema_DistShapeShape.hxx>
 #include <BRepGProp.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
@@ -95,20 +101,42 @@ std::string loadError(const std::string& message) {
 }
 
 #if defined(SRCCAD_WITH_OCCT)
-std::string loadStep(CadDocument& document, const std::string& path) {
+std::string loadStep(CadDocument& document, const std::string& path, const std::string& format) {
     document.clear();
-    STEPControl_Reader reader; // initializes the STEP controller and its Interface_Static parameters
-    // Normalize every STEP source unit to millimetres for predictable CAD measurement.
-    if (!Interface_Static::SetCVal("xstep.cascade.unit", "MM")) {
-        return loadError("OCCT STEP unit parameter xstep.cascade.unit is unavailable.");
-    }
-    if (reader.ReadFile(path.c_str()) != IFSelect_RetDone)
-        return loadError("OCCT STEP okuyucusu dosyayı açamadı (ReadFile).");
-    if (reader.TransferRoots() <= 0)
-        return loadError("STEP dosyasında aktarılabilir geometrik kök bulunamadı.");
+    TopoDS_Shape shape;
+    if (format == "brep") {
+        BRep_Builder builder;
+        if (!BRepTools::Read(shape, path.c_str(), builder) || shape.IsNull())
+            return loadError("OCCT BREP okuyucusu dosyayı açamadı (BRepTools::Read).");
+    } else if (format == "iges") {
+#if defined(SRCCAD_HAS_IGES_READER)
+        IGESControl_Reader igesReader;
+        if (!Interface_Static::SetCVal("xstep.cascade.unit", "MM")) {
+            return loadError("OCCT birim parametresi xstep.cascade.unit kullanılamıyor.");
+        }
+        if (igesReader.ReadFile(path.c_str()) != IFSelect_RetDone)
+            return loadError("OCCT IGES okuyucusu dosyayı açamadı (ReadFile).");
+        if (igesReader.TransferRoots() <= 0)
+            return loadError("IGES dosyasında aktarılabilir geometrik kök bulunamadı.");
+        shape = igesReader.OneShape();
+        if (shape.IsNull()) return loadError("IGES dosyasından geçerli B-rep şekli üretilemedi.");
+#else
+        return loadError("Bu Android OCCT paketinde IGESControl_Reader.hxx bulunmadığı için IGES desteği derlenemiyor.");
+#endif
+    } else {
+        STEPControl_Reader reader; // initializes the STEP controller and its Interface_Static parameters
+        // Normalize every STEP source unit to millimetres for predictable CAD measurement.
+        if (!Interface_Static::SetCVal("xstep.cascade.unit", "MM")) {
+            return loadError("OCCT STEP unit parameter xstep.cascade.unit is unavailable.");
+        }
+        if (reader.ReadFile(path.c_str()) != IFSelect_RetDone)
+            return loadError("OCCT STEP okuyucusu dosyayı açamadı (ReadFile).");
+        if (reader.TransferRoots() <= 0)
+            return loadError("STEP dosyasında aktarılabilir geometrik kök bulunamadı.");
 
-    TopoDS_Shape shape = reader.OneShape();
-    if (shape.IsNull()) return loadError("STEP dosyasından geçerli B-rep şekli üretilemedi.");
+        shape = reader.OneShape();
+        if (shape.IsNull()) return loadError("STEP dosyasından geçerli B-rep şekli üretilemedi.");
+    }
 
     Bnd_Box box;
     BRepBndLib::Add(shape, box);
@@ -170,7 +198,8 @@ std::string loadStep(CadDocument& document, const std::string& path) {
     document.shape = shape;
     document.loaded = true;
     std::ostringstream result;
-    result << R"({"ok":true,"message":"STEP modeli yüklendi","faces":)" << document.faceCount
+    const char* label = (format == "brep") ? "BREP" : (format == "iges") ? "IGES" : "STEP";
+    result << R"({"ok":true,"message":")" << label << R"( modeli yüklendi","faces":)" << document.faceCount
            << R"(,"triangles":)" << document.triangleCount << "}";
     return result.str();
 }
@@ -494,7 +523,7 @@ Java_com_srccad_mobile_NativeCadEngine_nativeLoadStep(JNIEnv* env, jobject, jlon
     env->ReleaseStringUTFChars(javaPath, pathChars);
 #if defined(SRCCAD_WITH_OCCT)
     try {
-        return toJavaString(env, loadStep(*document, path));
+        return toJavaString(env, loadStep(*document, path, "step"));
     } catch (const std::exception& error) {
         document->clear();
         return toJavaString(env, loadError(error.what()));
@@ -510,6 +539,38 @@ Java_com_srccad_mobile_NativeCadEngine_nativeLoadStep(JNIEnv* env, jobject, jlon
         "kütüphanelerini üretin ve uygulamayı SRCCAD_OCCT_ROOT ile derleyin."));
 #endif
 }
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_srccad_mobile_NativeCadEngine_nativeLoadCad(
+    JNIEnv* env, jobject, jlong handle, jstring javaPath, jstring javaFormat) {
+    CadDocument* document = fromHandle(handle);
+    if (document == nullptr || javaPath == nullptr || javaFormat == nullptr)
+        return toJavaString(env, loadError("Geçersiz native model tutamacı, dosya yolu veya biçim."));
+    const char* pathChars = env->GetStringUTFChars(javaPath, nullptr);
+    if (pathChars == nullptr) return toJavaString(env, loadError("Dosya yolu belleğe alınamadı."));
+    const std::string path(pathChars);
+    env->ReleaseStringUTFChars(javaPath, pathChars);
+    const char* formatChars = env->GetStringUTFChars(javaFormat, nullptr);
+    if (formatChars == nullptr) return toJavaString(env, loadError("Biçim adı belleğe alınamadı."));
+    const std::string format(formatChars);
+    env->ReleaseStringUTFChars(javaFormat, formatChars);
+    if (format != "step" && format != "iges" && format != "brep")
+        return toJavaString(env, loadError("Desteklenmeyen OCCT biçimi: " + format));
+#if defined(SRCCAD_WITH_OCCT)
+    try {
+        return toJavaString(env, loadStep(*document, path, format));
+    } catch (const std::exception& error) {
+        document->clear();
+        return toJavaString(env, loadError(error.what()));
+    } catch (...) {
+        document->clear();
+        return toJavaString(env, loadError("OCCT içe aktarma sırasında bilinmeyen hata oluştu."));
+    }
+#else
+    document->clear();
+    return toJavaString(env, loadError("OCCT okuyucu bu APK'da derlenmemiş."));
+#endif
+}
+
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_srccad_mobile_NativeCadEngine_nativeLoadDemoBox(JNIEnv* env, jobject, jlong handle) {
     CadDocument* document = fromHandle(handle);

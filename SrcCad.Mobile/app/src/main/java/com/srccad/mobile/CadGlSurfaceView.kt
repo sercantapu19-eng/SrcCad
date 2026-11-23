@@ -48,6 +48,11 @@ class CadGlSurfaceView(context: Context) : GLSurfaceView(context) {
         queueEvent { cadRenderer.setHighlightedEdges(picks.toList()); requestRender() }
     }
 
+    /** Draws a persistent, model-space dimension line with inward arrowheads. */
+    fun setMeasurementDimension(pointA: DoubleArray?, pointB: DoubleArray?) {
+        queueEvent { cadRenderer.setMeasurementDimension(pointA, pointB); requestRender() }
+    }
+
     fun clearMesh() {
         queueEvent { cadRenderer.clearMesh(); requestRender() }
     }
@@ -164,6 +169,8 @@ private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer
     private var edgeVertexCount = 0
     private var modelEdgeBufferId = 0
     private var modelEdgeVertexCount = 0
+    private var dimensionBufferId = 0
+    private var dimensionVertexCount = 0
     private var edgeRanges = emptyList<Pair<Int, Int>>()
     private var vertexBufferId = 0
     private var indexBufferId = 0
@@ -194,11 +201,12 @@ private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer
         program = createProgram(VERTEX_SHADER, FRAGMENT_SHADER)
         val bufferIds = IntArray(2)
         GLES30.glGenBuffers(2, bufferIds, 0)
-        val highlightIds = IntArray(3)
-        GLES30.glGenBuffers(3, highlightIds, 0)
+        val highlightIds = IntArray(4)
+        GLES30.glGenBuffers(4, highlightIds, 0)
         highlightIndexBufferId = highlightIds[0]
         edgeVertexBufferId = highlightIds[1]
         modelEdgeBufferId = highlightIds[2]
+        dimensionBufferId = highlightIds[3]
         vertexBufferId = bufferIds[0]
         indexBufferId = bufferIds[1]
         meshUploaded = false
@@ -270,10 +278,29 @@ private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer
             // slightly toward the camera so the depth buffer does not hide the highlight.
             GLES30.glEnable(GLES30.GL_POLYGON_OFFSET_FILL)
             GLES30.glPolygonOffset(-1.5f, -2.0f)
+            // The model-edge pass above leaves GL_ARRAY_BUFFER and the attribute pointers
+            // on the edge buffer (no VAO is used). The highlight indices refer to the MODEL
+            // vertex buffer, so it must be restored or the wrong vertices are drawn.
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, vertexBufferId)
+            GLES30.glEnableVertexAttribArray(0)
+            GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 24, 0)
+            GLES30.glEnableVertexAttribArray(1)
+            GLES30.glVertexAttribPointer(1, 3, GLES30.GL_FLOAT, false, 24, 12)
             GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, highlightIndexBufferId)
             GLES30.glDrawElements(GLES30.GL_TRIANGLES, highlightIndexCount, GLES30.GL_UNSIGNED_INT, 0)
             GLES30.glDisable(GLES30.GL_POLYGON_OFFSET_FILL)
             GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uHighlight"), 0)
+        }
+        if (dimensionVertexCount > 0) {
+            GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uDimension"), 1)
+            GLES30.glLineWidth(2.8f)
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, dimensionBufferId)
+            GLES30.glEnableVertexAttribArray(0)
+            GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 24, 0)
+            GLES30.glEnableVertexAttribArray(1)
+            GLES30.glVertexAttribPointer(1, 3, GLES30.GL_FLOAT, false, 24, 12)
+            GLES30.glDrawArrays(GLES30.GL_LINES, 0, dimensionVertexCount)
+            GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uDimension"), 0)
         }
         if (edgeVertexCount > 0) {
             GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uEdgeHighlight"), 1)
@@ -465,12 +492,55 @@ private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
     }
 
+    fun setMeasurementDimension(pointA: DoubleArray?, pointB: DoubleArray?) {
+        if (pointA == null || pointB == null || pointA.size < 3 || pointB.size < 3) {
+            dimensionVertexCount = 0
+            return
+        }
+        val ax = pointA[0].toFloat(); val ay = pointA[1].toFloat(); val az = pointA[2].toFloat()
+        val bx = pointB[0].toFloat(); val by = pointB[1].toFloat(); val bz = pointB[2].toFloat()
+        val dx = bx - ax; val dy = by - ay; val dz = bz - az
+        val length = sqrt(dx * dx + dy * dy + dz * dz)
+        if (!length.isFinite() || length < 1.0e-6f) {
+            dimensionVertexCount = 0
+            return
+        }
+        val ux = dx / length; val uy = dy / length; val uz = dz / length
+        val hx = if (kotlin.math.abs(uz) < 0.85f) 0f else 0f
+        val hy = if (kotlin.math.abs(uz) < 0.85f) 0f else 1f
+        val hz = if (kotlin.math.abs(uz) < 0.85f) 1f else 0f
+        var sx = uy * hz - uz * hy
+        var sy = uz * hx - ux * hz
+        var sz = ux * hy - uy * hx
+        val sideLength = sqrt(sx * sx + sy * sy + sz * sz).coerceAtLeast(1.0e-6f)
+        sx /= sideLength; sy /= sideLength; sz /= sideLength
+        val arrow = (length * 0.045f).coerceIn(0.8f, 8f)
+        val vertices = floatArrayOf(
+            ax, ay, az, 0f, 0f, 1f, bx, by, bz, 0f, 0f, 1f,
+            ax + ux * arrow + sx * arrow * 0.45f, ay + uy * arrow + sy * arrow * 0.45f, az + uz * arrow + sz * arrow * 0.45f, 0f, 0f, 1f,
+            ax, ay, az, 0f, 0f, 1f,
+            ax + ux * arrow - sx * arrow * 0.45f, ay + uy * arrow - sy * arrow * 0.45f, az + uz * arrow - sz * arrow * 0.45f, 0f, 0f, 1f,
+            ax, ay, az, 0f, 0f, 1f,
+            bx - ux * arrow + sx * arrow * 0.45f, by - uy * arrow + sy * arrow * 0.45f, bz - uz * arrow + sz * arrow * 0.45f, 0f, 0f, 1f,
+            bx, by, bz, 0f, 0f, 1f,
+            bx - ux * arrow - sx * arrow * 0.45f, by - uy * arrow - sy * arrow * 0.45f, bz - uz * arrow - sz * arrow * 0.45f, 0f, 0f, 1f,
+            bx, by, bz, 0f, 0f, 1f
+        )
+        val buffer = ByteBuffer.allocateDirect(vertices.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer()
+        buffer.put(vertices).position(0)
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, dimensionBufferId)
+        GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, vertices.size * 4, buffer, GLES30.GL_DYNAMIC_DRAW)
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
+        dimensionVertexCount = vertices.size / 6
+    }
+
     fun clearMesh() {
         triangleFaceIds = IntArray(0)
         selectedFaceIds = IntArray(0)
         highlightIndexCount = 0
         edgeVertexCount = 0
         modelEdgeVertexCount = 0
+        dimensionVertexCount = 0
         edgeRanges = emptyList()
         vertexBuffer = null
         indexBuffer = null
@@ -571,8 +641,10 @@ private class CadGlRenderer(private val density: Float) : GLSurfaceView.Renderer
             uniform int uHighlight;
             uniform int uEdgeHighlight;
             uniform int uModelEdge;
+            uniform int uDimension;
             out vec4 outColor;
             void main() {
+                if (uDimension == 1) { outColor = vec4(0.98, 0.94, 0.22, 1.0); return; }
                 vec3 n = normalize(vNormal);
                 vec3 lightDirection = normalize(vec3(-0.45, 0.75, 0.55));
                 float diffuse = max(dot(n, lightDirection), 0.0);

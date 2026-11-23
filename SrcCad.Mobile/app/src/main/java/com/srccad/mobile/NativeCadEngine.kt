@@ -8,6 +8,8 @@ object NativeCadEngine {
     external fun nativeEngineStatus(): String
     /** JSON: { ok, message, faces, triangles }. */
     external fun nativeLoadStep(handle: Long, absolutePath: String): String
+    /** Loads STEP, IGES, or BREP using the matching OCCT reader. */
+    external fun nativeLoadCad(handle: Long, absolutePath: String, format: String): String
     /** Loads a self-contained 100 x 50 x 20 mm display-only sample box. */
     external fun nativeLoadDemoBox(handle: Long): String
     /** Interleaved XYZ + normal data (6 floats per vertex). */
@@ -23,4 +25,17 @@ object NativeCadEngine {
     ): DoubleArray
     /** Returns distance, delta-X, delta-Y, delta-Z in model units. */
     external fun nativeMeasurePoints(handle: Long, pointA: DoubleArray, pointB: DoubleArray): DoubleArray
+
+    /** Reads SolidWorks metadata/configurations and saved-geometry BODY candidates as JSON. */
+    external fun nativeInspectSolidWorks(absolutePath: String): String
+    /** Embedded SolidWorks preview PNG, or an empty byte array when absent. */
+    external fun nativeSolidWorksPreview(absolutePath: String): ByteArray
+    /** Exports only the explicitly selected configuration/payload/solid BODY to STEP. */
+    external fun nativeSolidWorksToStepSelected(
+        absolutePath: String,
+        configuration: String,
+        payloadIndex: Int,
+        bodyId: Int,
+        outputStepPath: String
+    ): String
 }
