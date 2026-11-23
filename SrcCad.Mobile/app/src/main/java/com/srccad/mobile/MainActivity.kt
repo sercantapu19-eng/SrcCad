@@ -169,6 +169,20 @@ class MainActivity : ComponentActivity() {
                                 if (dxf != null) {
                                     DxfCanvasView(dxf, dxfFitToken, Modifier.fillMaxSize(), measurementMode, dxfMeasurePoints) { x, y -> handleDxfMeasurePoint(x, y) }
                                 }
+                                if (measurementMode && (measurementText.contains("mesafe:") || measurementText.contains("uzaklık:"))) {
+                                    Surface(
+                                        modifier = Modifier.align(Alignment.TopCenter).padding(10.dp),
+                                        color = Color(0xE6222B35),
+                                        shape = MaterialTheme.shapes.medium
+                                    ) {
+                                        Text(
+                                            measurementText.lineSequence().firstOrNull { it.contains("mesafe:") || it.contains("uzaklık:") } ?: "",
+                                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+                                            color = Color(0xFFFFD166),
+                                            style = MaterialTheme.typography.titleMedium
+                                        )
+                                    }
+                                }
                                 if (!hasModel) {
                                     Column(
                                         modifier = Modifier.align(Alignment.Center).padding(20.dp),
