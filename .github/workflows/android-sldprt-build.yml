@@ -3,6 +3,8 @@ name: Android SolidWorks integration build
 on:
   push:
     branches: [mobile-multiformat]
+  pull_request:
+    branches: [mobile-viewer, main]
     paths:
       - "SrcCad.Mobile/**"
       - ".github/workflows/android-sldprt-build.yml"
@@ -28,8 +30,6 @@ jobs:
         run: sdkmanager "ndk;28.2.13676358" "cmake;3.22.1" "platforms;android-36" "build-tools;36.0.0"
       - name: Build debug APK
         working-directory: SrcCad.Mobile
-        env:
-          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/28.2.13676358
         run: |
           chmod +x ./gradlew
           ./gradlew --no-daemon --stacktrace :app:assembleDebug
