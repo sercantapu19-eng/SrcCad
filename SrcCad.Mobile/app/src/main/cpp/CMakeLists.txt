@@ -62,7 +62,50 @@ if(SRCCAD_ENABLE_OPENSWX)
         "find_package(pugixml CONFIG REQUIRED)"
         "if(NOT TARGET pugixml::pugixml)\n  find_package(pugixml CONFIG REQUIRED)\nendif()"
         OPENSWX_CMAKE_TEXT "${OPENSWX_CMAKE_TEXT}")
-    file(WRITE "${OPENSWX_CMAKE}" "${OPENSWX_CMAKE_TEXT}")
+    file(WRITE "\${OPENSWX_CMAKE}" "\${OPENSWX_CMAKE_TEXT}")
+
+    # Android NDK libc++ does not expose floating-point std::from_chars on all
+    # supported toolchain revisions. Replace the two double parsers in OpenSWX
+    # with checked strtod conversions so the native reader also builds on Android.
+    set(OPENSWX_XML_READERS "\${OPENSWX_ROOT}/libopenswx/src/internal/xml_readers.cc")
+    file(READ "\${OPENSWX_XML_READERS}" OPENSWX_XML_READERS_TEXT)
+    set(OPENSWX_MASS_FROM_CHARS [=[
+auto [ptr, ec] = std::from_chars(token.data(), token.data() + token.size(),
+                                     v, std::chars_format::general);
+    if (ec != std::errc{}) return std::nullopt;
+]=])
+    set(OPENSWX_MASS_STRTOD [=[
+std::string token_storage(token);
+    char* parse_end = nullptr;
+    errno = 0;
+    v = std::strtod(token_storage.c_str(), &parse_end);
+    if (errno == ERANGE || parse_end == token_storage.c_str())
+      return std::nullopt;
+]=])
+    set(OPENSWX_TRANSFORM_FROM_CHARS [=[
+const auto [ptr, ec] = std::from_chars(
+        token.data(), token.data() + token.size(), values[idx],
+        std::chars_format::general);
+    if (ec != std::errc{} || ptr != token.data() + token.size())
+      return std::nullopt;
+]=])
+    set(OPENSWX_TRANSFORM_STRTOD [=[
+std::string token_storage(token);
+    char* parse_end = nullptr;
+    errno = 0;
+    values[idx] = std::strtod(token_storage.c_str(), &parse_end);
+    if (errno == ERANGE || parse_end != token_storage.c_str() + token_storage.size())
+      return std::nullopt;
+]=])
+    string(FIND "\${OPENSWX_XML_READERS_TEXT}" "\${OPENSWX_MASS_FROM_CHARS}" OPENSWX_MASS_PATTERN_INDEX)
+    string(FIND "\${OPENSWX_XML_READERS_TEXT}" "\${OPENSWX_TRANSFORM_FROM_CHARS}" OPENSWX_TRANSFORM_PATTERN_INDEX)
+    if(OPENSWX_MASS_PATTERN_INDEX EQUAL -1 OR OPENSWX_TRANSFORM_PATTERN_INDEX EQUAL -1)
+        message(FATAL_ERROR "OpenSWX xml_readers.cc floating-point parser changed; Android compatibility patch must be reviewed")
+    endif()
+    string(REPLACE "\${OPENSWX_MASS_FROM_CHARS}" "\${OPENSWX_MASS_STRTOD}" OPENSWX_XML_READERS_TEXT "\${OPENSWX_XML_READERS_TEXT}")
+    string(REPLACE "\${OPENSWX_TRANSFORM_FROM_CHARS}" "\${OPENSWX_TRANSFORM_STRTOD}" OPENSWX_XML_READERS_TEXT "\${OPENSWX_XML_READERS_TEXT}")
+    string(REPLACE "#include <charconv>" "#include <cerrno>\n#include <cstdlib>" OPENSWX_XML_READERS_TEXT "\${OPENSWX_XML_READERS_TEXT}")
+    file(WRITE "\${OPENSWX_XML_READERS}" "\${OPENSWX_XML_READERS_TEXT}")
 
     set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
     set(OPENPARASOLID_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
