@@ -709,32 +709,56 @@ class MainActivity : ComponentActivity() {
                 }
 
                 val first = firstMeasurePick
+                val pickedFaceId = picked.getOrElse(10) { -1.0 }.toInt()
                 if (first == null) {
                     firstMeasurePick = picked
                     hasFirstMeasurePick = true
                     viewer.setMeasurementDimension(null, null)
-                    viewer.highlightFaces(intArrayOf(picked.getOrElse(10) { -1.0 }.toInt()))
+                    viewer.highlightFaces(intArrayOf(pickedFaceId))
                     viewer.highlightEdges(picked)
                     measurementText = describePick(picked) +
-                        "\nİkinci kenar/yüzeyi seçin; modeli sürükleyerek döndürebilirsiniz."
-                    statusText = "Geometri seçildi. Ölçü otomatik hesaplandı."
+                        "\nİkinci kenar/yüzeyi seçin; aynı yüzeye tekrar dokunursanız seçim kalkar."
+                    statusText = "İlk geometri seçildi. İkinci yüzeyi seçin."
+                } else if (first.getOrElse(10) { -1.0 }.toInt() == pickedFaceId && pickedFaceId >= 0) {
+                    firstMeasurePick = null
+                    hasFirstMeasurePick = false
+                    viewer.setMeasurementDimension(null, null)
+                    viewer.highlightFaces(intArrayOf())
+                    viewer.highlightEdges()
+                    measurementText = "Yüzey seçimi iptal edildi. Yeni bir yüzey seçin."
+                    statusText = "Aynı yüzeye tekrar dokunuldu; seçim kaldırıldı."
                 } else {
                     val pointA = first.copyOfRange(1, 4)
                     val pointB = picked.copyOfRange(1, 4)
+                    val parallelPlanes = first[0].toInt() == 4 && picked[0].toInt() == 4 &&
+                        first[9] > 0.5 && picked[9] > 0.5
+                    val nx = first[6]; val ny = first[7]; val nz = first[8]
+                    val normalDot = nx * picked[6] + ny * picked[7] + nz * picked[8]
+                    val usePlaneGap = parallelPlanes && kotlin.math.abs(normalDot) > 0.98
+                    val gap = if (usePlaneGap) kotlin.math.abs(
+                        (pointB[0] - pointA[0]) * nx +
+                        (pointB[1] - pointA[1]) * ny +
+                        (pointB[2] - pointA[2]) * nz
+                    ) else 0.0
+                    val dimensionEnd = if (usePlaneGap) doubleArrayOf(
+                        pointA[0] + nx * gap * if ((pointB[0]-pointA[0])*nx + (pointB[1]-pointA[1])*ny + (pointB[2]-pointA[2])*nz >= 0) 1 else -1,
+                        pointA[1] + ny * gap * if ((pointB[0]-pointA[0])*nx + (pointB[1]-pointA[1])*ny + (pointB[2]-pointA[2])*nz >= 0) 1 else -1,
+                        pointA[2] + nz * gap * if ((pointB[0]-pointA[0])*nx + (pointB[1]-pointA[1])*ny + (pointB[2]-pointA[2])*nz >= 0) 1 else -1
+                    ) else pointB
                     val values = withContext(Dispatchers.Default) {
-                        NativeCadEngine.nativeMeasurePoints(nativeHandle, pointA, pointB)
+                        NativeCadEngine.nativeMeasurePoints(nativeHandle, pointA, dimensionEnd)
                     }
                     firstMeasurePick = null
                     hasFirstMeasurePick = false
                     viewer.highlightFaces(intArrayOf(first.getOrElse(10) { -1.0 }.toInt(), picked.getOrElse(10) { -1.0 }.toInt()))
                     viewer.highlightEdges(first, picked)
-                    viewer.setMeasurementDimension(first.copyOfRange(1, 4), picked.copyOfRange(1, 4))
+                    viewer.setMeasurementDimension(pointA, dimensionEnd)
 
                     val output = StringBuilder()
                     output.append("1) ").append(describePick(first))
                     output.append("\n2) ").append(describePick(picked))
                     if (values.size >= 4) {
-                        output.append("\nNoktalar arası uzaklık: ").append(formatMm(values[0])).append(" mm")
+                        output.append(if (usePlaneGap) "\nİki paralel yüzey arası mesafe: " else "\nSeçim noktaları arası mesafe: ").append(formatMm(values[0])).append(" mm")
                         output.append("\nΔX: ").append(formatMm(values[1]))
                             .append(" mm   ΔY: ").append(formatMm(values[2]))
                             .append(" mm   ΔZ: ").append(formatMm(values[3])).append(" mm")
@@ -756,7 +780,7 @@ class MainActivity : ComponentActivity() {
                     measurementHistory = (listOf(
                         fileName + " • " + output.toString().replace("\n", " | ")
                     ) + measurementHistory).take(20)
-                    statusText = "Ölçü tamamlandı. Yeni ölçüm için başka bir kenar/yüzeye dokunun."
+                    statusText = if (usePlaneGap) "İki yüzey arası dik mesafe ölçüldü." else "Ölçü tamamlandı. Yeni ölçüm için başka bir kenar/yüzeye dokunun."
                 }
             } catch (error: Exception) {
                 statusText = error.message ?: "Geometri ölçümü sırasında hata oluştu."
