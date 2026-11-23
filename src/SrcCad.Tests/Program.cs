@@ -97,4 +97,205 @@ foreach (var plane in StandardPlanes.All)
         "Circular hole was not recognized.");
 }
 
-Console.WriteLine("SrcCad V1.4 usable part smoke tests: PASS");
+
+
+// Two connected lines: angle dimension must rotate real geometry around the shared vertex.
+{
+    var sketch = new SketchModel(StandardPlanes.Front);
+    var pivot = sketch.CreatePointExact(new Point2d(0, 0));
+    var p1 = sketch.CreatePointExact(new Point2d(100, 0));
+    var p2 = sketch.CreatePointExact(new Point2d(0, 80));
+    var first = sketch.AddLine(pivot, p1);
+    var second = sketch.AddLine(pivot, p2);
+    var dim = sketch.AddDimension(
+        SketchDimensionType.Angle,
+        new Point2d(30, 30),
+        entityA: first.Id,
+        entityB: second.Id);
+
+    Check(sketch.SetDimensionValue(dim.Id, 30), "Driving angle dimension failed.");
+    Check(Near(sketch.Measure(sketch.Dimension(dim.Id)!), 30),
+        "Driving angle changed the label but not the geometry.");
+    Check(Near(Point2d.Distance(sketch.Point(pivot).Position, sketch.Point(p2).Position), 80),
+        "Angle edit changed the driven line length.");
+}
+
+// Equal relation must really make the second line the same length.
+{
+    var sketch = new SketchModel(StandardPlanes.Front);
+    var a0 = sketch.CreatePointExact(new Point2d(0, 0));
+    var a1 = sketch.CreatePointExact(new Point2d(120, 0));
+    var b0 = sketch.CreatePointExact(new Point2d(0, 50));
+    var b1 = sketch.CreatePointExact(new Point2d(40, 50));
+    var first = sketch.AddLine(a0, a1);
+    var second = sketch.AddLine(b0, b1);
+    Check(sketch.ApplyRelationToSelection(
+        SketchRelationType.Equal,
+        new[] { first.Id, second.Id },
+        Array.Empty<int>()), "Equal relation could not be applied.");
+    Check(Near(
+        Point2d.Distance(sketch.Point(second.StartPointId).Position, sketch.Point(second.EndPointId).Position),
+        120), "Equal relation did not drive geometry.");
+}
+
+
+// Moving a dimension label must never change the driven geometry or its value.
+{
+    var sketch = new SketchModel(StandardPlanes.Front);
+    var p0 = sketch.CreatePointExact(new Point2d(0, 0));
+    var p1 = sketch.CreatePointExact(new Point2d(75, 0));
+    var line = sketch.AddLine(p0, p1);
+    var dim = sketch.AddDimension(
+        SketchDimensionType.LineLength,
+        new Point2d(30, 10),
+        entityA: line.Id);
+    Check(sketch.SetDimensionValue(dim.Id, 150), "Dimension setup failed.");
+    sketch.SetDimensionLabel(dim.Id, new Point2d(400, 250));
+    Check(Near(sketch.Measure(sketch.Dimension(dim.Id)!), 150),
+        "Moving a dimension label changed the driven geometry.");
+    Check(sketch.Dimension(dim.Id)!.LabelPosition == new Point2d(400, 250),
+        "Dimension label position was not updated.");
+}
+
+
+// Acceptance case from the real workflow: 250x200 plate + 3xØ15 must be
+// interpreted as one outer region and three EMPTY circular holes.
+{
+    var sketch = new SketchModel(StandardPlanes.Front);
+    sketch.AddCornerRectangle(new Point2d(-125, -100), new Point2d(125, 100), 0.01);
+    foreach (var centerPos in new[]
+    {
+        new Point2d(-80, 0),
+        new Point2d(0, 0),
+        new Point2d(80, 0)
+    })
+    {
+        var centerId = sketch.CreatePointExact(centerPos);
+        sketch.AddCircle(centerId, 7.5);
+    }
+
+    Check(sketch.TryGetExtrusionProfile(out var outer, out var holes),
+        "250x200 + 3xØ15 extrusion profile was rejected.");
+    Check(outer.Count == 4, "250x200 plate must have one 4-edge outer loop.");
+    Check(holes.Count == 3 && holes.All(h => Near(h.Radius * 2.0, 15)),
+        "Three Ø15 circles must be recognized as three empty holes.");
+}
+
+// Invalid inner contours must be rejected before OCCT preview.
+{
+    var sketch = new SketchModel(StandardPlanes.Front);
+    sketch.AddCornerRectangle(new Point2d(-50, -50), new Point2d(50, 50), 0.01);
+    var c0 = sketch.CreatePointExact(new Point2d(45, 0));
+    sketch.AddCircle(c0, 10); // crosses the outer boundary
+    Check(!sketch.TryGetExtrusionProfile(out _, out _),
+        "A hole crossing the outer boundary was accepted.");
+}
+
+{
+    var sketch = new SketchModel(StandardPlanes.Front);
+    sketch.AddCornerRectangle(new Point2d(-50, -50), new Point2d(50, 50), 0.01);
+    var c0 = sketch.CreatePointExact(new Point2d(-5, 0));
+    var c1 = sketch.CreatePointExact(new Point2d(5, 0));
+    sketch.AddCircle(c0, 10);
+    sketch.AddCircle(c1, 10); // overlaps first hole
+    Check(!sketch.TryGetExtrusionProfile(out _, out _),
+        "Overlapping circular holes were accepted.");
+}
+
+
+// Snapshot restore is the foundation of sketch Undo/Redo. IDs, geometry,
+// relations and dimensions must return exactly to the captured state.
+{
+    var sketch = new SketchModel(StandardPlanes.Front);
+    sketch.AddCornerRectangle(new Point2d(0, 0), new Point2d(100, 60), 0.01);
+    var snapshot = sketch.CaptureSnapshot();
+    var originalEntityCount = sketch.Entities.Count;
+    var originalRelationCount = sketch.Relations.Count;
+
+    var center = sketch.CreatePointExact(new Point2d(50, 30));
+    sketch.AddCircle(center, 10);
+    Check(sketch.Entities.Count == originalEntityCount + 1, "Snapshot mutation setup failed.");
+
+    sketch.RestoreSnapshot(snapshot);
+    Check(sketch.Entities.Count == originalEntityCount, "Undo snapshot did not restore entities.");
+    Check(sketch.Relations.Count == originalRelationCount, "Undo snapshot did not restore relations.");
+    Check(!sketch.Circles(false).Any(), "Undo snapshot left newly-created geometry behind.");
+
+    var nextPoint = sketch.CreatePointExact(new Point2d(10, 10));
+    Check(nextPoint == snapshot.NextPointId, "Snapshot restore did not restore deterministic point IDs.");
+}
+
+
+// Collinear must project the second line onto the first line without changing topology.
+{
+    var sketch = new SketchModel(StandardPlanes.Front);
+    var a = sketch.CreatePointExact(new Point2d(0, 0));
+    var b = sketch.CreatePointExact(new Point2d(100, 0));
+    var c = sketch.CreatePointExact(new Point2d(20, 30));
+    var d = sketch.CreatePointExact(new Point2d(80, 45));
+    var first = sketch.AddLine(a, b);
+    var second = sketch.AddLine(c, d);
+    Check(sketch.ApplyRelationToSelection(SketchRelationType.Collinear, new[] { first.Id, second.Id }, Array.Empty<int>()), "Collinear relation rejected valid lines.");
+    Check(Math.Abs(sketch.Point(c).Position.Y) < 1e-8 && Math.Abs(sketch.Point(d).Position.Y) < 1e-8, "Collinear relation did not project second line.");
+}
+
+// Concentric must drive two circle centers together while preserving both radii.
+{
+    var sketch = new SketchModel(StandardPlanes.Front);
+    var c1 = sketch.CreatePointExact(new Point2d(10, 20));
+    var c2 = sketch.CreatePointExact(new Point2d(80, 90));
+    var a = sketch.AddCircle(c1, 15);
+    var b = sketch.AddCircle(c2, 30);
+    Check(sketch.ApplyRelationToSelection(SketchRelationType.Concentric, new[] { a.Id, b.Id }, Array.Empty<int>()), "Concentric relation rejected valid circles.");
+    Check(Point2d.Distance(sketch.Point(c1).Position, sketch.Point(c2).Position) < 1e-8, "Concentric relation did not merge circle centers.");
+    Check(Math.Abs(((SketchCircle)sketch.Entity(a.Id)!).Radius - 15) < 1e-8 && Math.Abs(((SketchCircle)sketch.Entity(b.Id)!).Radius - 30) < 1e-8, "Concentric relation changed circle radii.");
+}
+
+Console.WriteLine("SrcCad CAD core smoke tests: PASS");
+
+
+var regressionFailures=new List<string>();
+void RunSuite(string name,Action run)
+{
+    try
+    {
+        run();
+        Console.WriteLine($"SUITE PASS: {name}");
+    }
+    catch(Exception ex)
+    {
+        regressionFailures.Add($"{name}: {ex.GetType().Name}: {ex.Message}");
+        Console.Error.WriteLine($"SUITE FAIL: {name}");
+        Console.Error.WriteLine(ex);
+    }
+}
+
+RunSuite(nameof(AcceptanceTests),AcceptanceTests.Run);
+RunSuite(nameof(FeatureHistoryTests),FeatureHistoryTests.Run);
+RunSuite(nameof(InteractionRegressionTests),InteractionRegressionTests.Run);
+RunSuite(nameof(SourceSketchEditTests),SourceSketchEditTests.Run);
+RunSuite(nameof(SketchFoundationTests),SketchFoundationTests.Run);
+RunSuite(nameof(PartFileTests),PartFileTests.Run);
+RunSuite(nameof(GeneralConstraintTests),GeneralConstraintTests.Run);
+RunSuite(nameof(ParallelDimensionTests),ParallelDimensionTests.Run);
+RunSuite(nameof(TrimInteractionTests),TrimInteractionTests.Run);
+RunSuite(nameof(WindowSelectionTests),WindowSelectionTests.Run);
+RunSuite(nameof(DimensionEditingTests),DimensionEditingTests.Run);
+RunSuite(nameof(DeletionHistoryTests),DeletionHistoryTests.Run);
+RunSuite(nameof(FeatureGraphTests),FeatureGraphTests.Run);
+RunSuite(nameof(ThreePointToolTests),ThreePointToolTests.Run);
+RunSuite(nameof(PerformanceSmokeTests),PerformanceSmokeTests.Run);
+RunSuite(nameof(AssemblyDocumentTests),AssemblyDocumentTests.Run);
+RunSuite(nameof(DrawingDocumentTests),DrawingDocumentTests.Run);
+
+#if NATIVE_ACCEPTANCE
+RunSuite(nameof(NativeAcceptanceBootstrap),NativeAcceptanceBootstrap.Run);
+#endif
+
+if(regressionFailures.Count>0)
+{
+    Console.Error.WriteLine();
+    Console.Error.WriteLine($"REGRESSION SUMMARY: {regressionFailures.Count} SUITE FAIL");
+    foreach(var failure in regressionFailures)Console.Error.WriteLine(" - "+failure);
+    Environment.ExitCode=1;
+}

@@ -1,0 +1,11 @@
+Third-party component: Open CASCADE Technology (OCCT) 8.0.0
+Copyright Open CASCADE SAS and contributors.
+
+This application may bundle OCCT shared libraries for Android arm64-v8a as separate
+.so files. OCCT 8.0.0 is distributed under the GNU Lesser General Public License
+version 2.1, together with the Open CASCADE exception version 1.0.
+
+The corresponding upstream source for the bundled version is available at:
+https://github.com/Open-Cascade-SAS/OCCT/tree/V8_0_0
+
+See OCCT_LICENSE_LGPL_2.1.txt and OCCT_EXCEPTION_1.0.txt for the license texts.

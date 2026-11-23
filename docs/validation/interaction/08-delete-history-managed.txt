@@ -1,0 +1,77 @@
+SrcCad CAD core smoke tests: PASS
+SM-001 PASS Ön Düzlem düzlem dönüşümü
+SM-002 PASS Ön Düzlem sağ elli birim eksenler
+SM-003 PASS Üst Düzlem düzlem dönüşümü
+SM-004 PASS Üst Düzlem sağ elli birim eksenler
+SM-005 PASS Sağ Düzlem düzlem dönüşümü
+SM-006 PASS Sağ Düzlem sağ elli birim eksenler
+SM-007 PASS NaN nokta reddi
+SM-008 PASS Sonsuz nokta reddi
+SM-009 PASS Aynı koordinatta sıfır çizgi reddi
+SM-010 PASS Eksik noktalı çizgi reddi
+SM-011 PASS NaN yarıçap reddi
+SM-012 PASS Eksik merkezli daire reddi
+SM-013 PASS Horizontal gerçek geometri
+SM-014 PASS Vertical gerçek geometri
+SM-015 PASS Çakışık iki nokta
+SM-016 PASS Parallel iki çizgi
+SM-017 PASS Perpendicular iki çizgi
+SM-018 PASS Equal iki çizgi
+SM-019 PASS Collinear iki çizgi
+SM-020 PASS Eşmerkezli iki daire
+SM-021 PASS Sabitle ve sürüklemeyi engelle
+SM-022 PASS Parallel daire seçimi reddi
+SM-023 PASS Perpendicular daire seçimi reddi
+SM-024 PASS Collinear daire seçimi reddi
+SM-025 PASS Eşmerkezli çizgi seçimi reddi
+SM-026 PASS Eşit karma geometri reddi
+SM-027 PASS Aynı objeye ilişki reddi
+SM-028 PASS Eksik noktaya sabitle reddi
+SM-029 PASS LineLength sürücü ölçü
+SM-030 PASS PointDistance sürücü ölçü
+SM-031 PASS HorizontalDistance sürücü ölçü
+SM-032 PASS VerticalDistance sürücü ölçü
+SM-033 PASS Çap sürücü ölçüsü
+SM-034 PASS Ters yönlü ikinci çizgi açısı
+SM-035 PASS Geçersiz ölçü reddi NaN
+SM-036 PASS Geçersiz ölçü reddi Infinity
+SM-037 PASS Geçersiz ölçü reddi -1
+SM-038 PASS Geçersiz ölçü reddi 0
+SM-039 PASS Çakışan ölçü atomik geri alma
+SM-040 PASS 180 üstü açı reddi
+SM-041 PASS Snapshot tam geri yükleme
+SM-042 PASS Snapshot yineleme
+SM-043 PASS Silinen nokta ölçüsünü temizle
+SM-044 PASS Origin silinemez
+SM-045 PASS Ölçü etiketini taşımak geometriyi korur
+SM-046 PASS Tek dikdörtgen konturu
+SM-047 PASS Üç dairesel delik
+SM-048 PASS Poligon delik
+SM-049 PASS Kendini kesen kontur reddi
+SM-050 PASS Sıfır alan konturu reddi
+SM-051 PASS Çakışan poligon delikler reddi
+SM-052 PASS Daire poligon deliğini kesemez
+SM-053 PASS Dış sınıra teğet delik reddi
+SM-054 PASS Açık zincir reddi
+SM-055 PASS Kontur yönlerini normalize et
+SM-056 PASS Çizgi komutu geometri üretir
+SM-057 PASS Dikdörtgen iptali geometri üretmez
+SM-058 PASS Daire komutu geometri üretir
+SM-059 PASS Merkez dikdörtgen komutu
+SM-060 PASS Önizleme modeli değiştirmez
+ACCEPTANCE: 60/60 PASS, 0 FAIL
+FEATURE HISTORY: 12/12 PASS (managed state transitions; native/UI still require Windows)
+INTERACTION REGRESSION: 50 PASS (geometry; Windows event routing pending)
+SOURCE SKETCH EDIT: 18 PASS (managed transaction contract)
+SKETCH FOUNDATION: 102 PASS (shared selection, solver, dimension, rank; Windows UI pending)
+PART ROUNDTRIP: 33 PASS (real JSON/file IO and post-open solver; native pending)
+GENERAL CONSTRAINTS: 51 PASS (midpoint, point-line, tangency, persistence)
+PARALLEL DIMENSIONS: 205 PASS (shared selection, solver, DOF, persistence, rollback)
+TRIM INTERACTION: 36 PASS (shared hover/commit command geometry; Windows HWND pending)
+WINDOW SELECTION: 18 PASS (geometry; Windows drag routing pending)
+DIMENSION EDITING: 80 PASS (shared transaction, solver, revision, locale; Windows pending)
+DELETION HISTORY: 309 PASS (shared app transaction/restore; Windows input and native rebuild pending; Arc unsupported)
+THREE POINT TOOLS: 39 PASS (real command geometry, constraints, round-trip)
+PERFORMANCE OBSERVATION: 100 entities, 200 body hits, 3.417 ms (host-specific, not a Windows UI latency gate)
+PERFORMANCE OBSERVATION: 500 entities, 200 body hits, 15.566 ms (host-specific, not a Windows UI latency gate)
+PERFORMANCE SMOKE: 2/2 PASS (hit-test correctness at scale)

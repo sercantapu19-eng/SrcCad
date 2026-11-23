@@ -1,0 +1,9 @@
+DEPLOYMENT PASS complete x64 deployment with spaces
+DEPLOYMENT PASS manifest lists all runtime files
+DEPLOYMENT PASS missing bridge rejected
+DEPLOYMENT PASS missing ijwhost rejected
+DEPLOYMENT PASS x86 dependency rejected
+DEPLOYMENT PASS stale dependency rejected
+DEPLOYMENT PASS corrupt host rejected
+DEPLOYMENT PASS missing source dependency rejected
+DEPLOYMENT INFRASTRUCTURE: 8/8 PASS (filesystem fixtures; NOT native B-Rep tests)

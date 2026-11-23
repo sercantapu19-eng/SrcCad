@@ -7,7 +7,15 @@ namespace SrcCad::Kernel::Occt
         Object = 0,
         Vertex = 1,
         Edge = 2,
-        Face = 4
+        Face = 4,
+        AnyTopology = 7
+    };
+
+    public enum class CadDisplayStyle
+    {
+        ShadedWithEdges = 0,
+        Shaded = 1,
+        Wireframe = 2
     };
 
     public value struct CadPoint3D
@@ -15,6 +23,14 @@ namespace SrcCad::Kernel::Occt
         double X;
         double Y;
         double Z;
+    };
+
+    public value struct CadPlane3D
+    {
+        CadPoint3D Origin;
+        CadPoint3D U;
+        CadPoint3D V;
+        CadPoint3D Normal;
     };
 
     class OcctViewportState;
@@ -33,8 +49,11 @@ namespace SrcCad::Kernel::Occt
         void FitAll();
         void SetOrthographic(bool enabled);
         void SetFrontView();
+        void SetBackView();
         void SetTopView();
+        void SetBottomView();
         void SetRightView();
+        void SetLeftView();
         void SetIsoView();
         void SetNormalView(double nx, double ny, double nz,
                            double upx, double upy, double upz);
@@ -43,12 +62,23 @@ namespace SrcCad::Kernel::Occt
         void Rotate(int x, int y);
         void Pan(int dx, int dy);
         void ZoomWheel(int delta);
+        void ZoomWheelAt(int x, int y, int delta);
 
         void MoveTo(int x, int y);
         bool SelectDetected(bool toggle);
         void ClearSelection();
         void SetSelectionMode(CadSelectionMode mode);
         System::String^ SelectionSummary();
+        cli::array<System::String^>^ SelectedEdgeReferences();
+        System::String^ SelectedFaceReference();
+        cli::array<System::String^>^ SelectedFaceReferences();
+        System::String^ SelectedAssemblyComponentId();
+        System::String^ SelectedAssemblyFaceReference();
+        cli::array<double>^ SelectedTopologyMeasure();
+        cli::array<double>^ DetectedTopologyMeasure();
+        bool TryGetSelectedPlanarFace([System::Runtime::InteropServices::Out] CadPlane3D% plane);
+        void SetCommittedSolidTransparency(double transparency);
+        void SetDisplayStyle(CadDisplayStyle style);
 
         bool ScreenToPlane(int x, int y,
                            double ox, double oy, double oz,
@@ -89,7 +119,17 @@ namespace SrcCad::Kernel::Occt
                               double ux, double uy, double uz,
                               double radius);
 
+        static double MeasureExtrudedProfileVolume(cli::array<double>^ outerUvPairs,
+                                   cli::array<double>^ innerLoopData,
+                                   cli::array<double>^ circleHoles,
+                                   double ox, double oy, double oz,
+                                   double ux, double uy, double uz,
+                                   double vx, double vy, double vz,
+                                   double nx, double ny, double nz,
+                                   double depth);
+
         bool PreviewExtrudeProfile(cli::array<double>^ outerUvPairs,
+                                   cli::array<double>^ innerLoopData,
                                    cli::array<double>^ circleHoles,
                                    double ox, double oy, double oz,
                                    double ux, double uy, double uz,
@@ -108,7 +148,18 @@ namespace SrcCad::Kernel::Occt
                                   double vx, double vy, double vz,
                                   double nx, double ny, double nz,
                                   double depth);
+        bool PreviewFeatureBody(System::String^ body);
+        bool PublishFeatureBody(System::String^ body);
+        void ClearAssemblyBodies();
+        bool AddAssemblyBody(System::String^ body,
+                             double tx, double ty, double tz,
+                             double rxDegrees, double ryDegrees, double rzDegrees);
+        bool AddAssemblyBody(System::String^ body,System::String^ componentId,
+                             double tx, double ty, double tz,
+                             double rxDegrees, double ryDegrees, double rzDegrees);
         bool CommitExtrusion();
+        void HideCommittedSolid();
+        void ShowCommittedSolid();
         void CancelExtrusionPreview();
         void ClearModel();
 
@@ -117,3 +168,4 @@ namespace SrcCad::Kernel::Occt
         void ReleaseNative();
     };
 }
+

@@ -1,0 +1,107 @@
+name: SrcCad Mobile Full Android APK
+
+on:
+  push:
+    branches:
+      - mobile-viewer
+      - mobile-multiformat
+    paths:
+      - "SrcCad.Mobile/app/src/main/cpp/**"
+      - "SrcCad.Mobile/app/src/main/java/**"
+      - "SrcCad.Mobile/app/build.gradle.kts"
+      - "SrcCad.Mobile/scripts/**"
+      - "SrcCad.Mobile/BUILD_ANDROID.bat"
+      - ".github/workflows/mobile-android-full.yml"
+  pull_request:
+    paths:
+      - "SrcCad.Mobile/app/src/main/cpp/**"
+      - "SrcCad.Mobile/app/src/main/java/**"
+      - "SrcCad.Mobile/app/build.gradle.kts"
+      - "SrcCad.Mobile/scripts/**"
+      - "SrcCad.Mobile/BUILD_ANDROID.bat"
+      - ".github/workflows/mobile-android-full.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: srccad-mobile-full-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-step-enabled-apk:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install Android build packages
+        shell: pwsh
+        run: |
+          $packages = @(
+            "platforms;android-36",
+            "build-tools;36.0.0",
+            "ndk;28.2.13676358",
+            "cmake;3.22.1"
+          )
+          & sdkmanager $packages
+
+      - name: Build OCCT and STEP-enabled APK
+        shell: cmd
+        working-directory: SrcCad.Mobile
+        run: BUILD_ANDROID.bat
+
+      - name: Verify APK exists
+        shell: pwsh
+        run: |
+          $apk = "SrcCad.Mobile/app/build/outputs/apk/debug/app-debug.apk"
+          if (-not (Test-Path $apk)) { throw "Expected STEP-enabled APK was not created: $apk" }
+          Get-Item $apk | Format-List FullName,Length,LastWriteTime
+
+      - name: Verify OCCT runtime libraries inside APK
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $apk = "SrcCad.Mobile/app/build/outputs/apk/debug/app-debug.apk"
+          $archive = [IO.Compression.ZipFile]::OpenRead((Resolve-Path $apk))
+          try {
+            $entries = @($archive.Entries | ForEach-Object { $_.FullName })
+            $required = @(
+              "lib/arm64-v8a/libsrccad_mobile.so",
+              "lib/arm64-v8a/libc++_shared.so",
+              "lib/arm64-v8a/libTKDESTEP.so",
+              "lib/arm64-v8a/libTKTopAlgo.so",
+              "lib/arm64-v8a/libTKernel.so",
+              "lib/arm64-v8a/libTKMath.so"
+            )
+            $missing = @($required | Where-Object { $_ -notin $entries })
+            if ($missing.Count -gt 0) {
+              throw "APK is missing required ARM64 libraries: $($missing -join ', ')"
+            }
+            Write-Host "Verified required OCCT and SrcCad ARM64 shared libraries in APK."
+          }
+          finally {
+            $archive.Dispose()
+          }
+
+      - name: Upload STEP-enabled APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: srccad-mobile-step-enabled-debug-apk
+          path: SrcCad.Mobile/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14

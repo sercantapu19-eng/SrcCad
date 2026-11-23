@@ -8,7 +8,10 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using SrcCad.Commands;
 using SrcCad.Core.Geometry;
+using SrcCad.Core.Features;
+using SrcCad.Core.History;
 using SrcCad.Core.Sketch;
+using SrcCad.Core.Persistence;
 using SrcCad.Kernel.Occt;
 using WinForms = System.Windows.Forms;
 
@@ -17,7 +20,7 @@ namespace SrcCad.App;
 public partial class MainWindow : Window
 {
     private readonly OcctViewportBridge _viewer = new();
-    private readonly WinForms.Panel _viewportPanel;
+    private readonly CadViewportPanel _viewportPanel;
     private readonly CadCommandManager _commandManager = new();
 
     private PlaneFrame _selectedPlane = StandardPlanes.Front;
@@ -27,9 +30,18 @@ public partial class MainWindow : Window
     private bool _inSketch;
     private bool _extrudeCommandActive;
     private bool _hasSolid;
+    private double _extrudeDepth = 20.0;
+    private ExtrusionState? _sourceSketchEditBefore;
+    private bool _editingExtrude;
+    private readonly ExtrusionDepthWheel _depthWheel = new();
+    private readonly TransactionalHistory<ExtrusionState> _featureHistory = new();
 
+    private bool ControlPressed => Keyboard.Modifiers.HasFlag(ModifierKeys.Control) ||
+        (WinForms.Control.ModifierKeys & WinForms.Keys.Control) != 0;
     private bool _middleDown;
     private bool _panMode;
+    private bool _inspectMeasureMode;
+    private bool _pendingSheetMetalBaseAfterSketch;
     private int _lastMouseX;
     private int _lastMouseY;
 
@@ -42,12 +54,21 @@ public partial class MainWindow : Window
     private int _hoverSketchEntityId = -1;
     private int _hoverSketchPointId = -1;
     private int _hoverSketchDimensionId = -1;
+    private SketchPointerTarget? _pointerTarget;
     private int _dragSketchPointId = -1;
+    private int _dragSketchEntityId = -1;
+    private int _dragSketchDimensionId = -1;
+    private Point2d? _dragSketchLastUv;
+    private SketchSnapshot? _dragSketchSnapshot;
+    private bool _dragSketchChanged;
 
+    private bool _selectionContextPending;
     private bool _smartDimensionMode;
-    private readonly List<int> _smartDimensionEntities = new();
-    private readonly List<int> _smartDimensionPoints = new();
-    private bool _smartDimensionWaitingPlacement;
+    private readonly SmartDimensionSession _dimensionSession = new();
+    private bool _smartDimensionWaitingPlacement => _dimensionSession.CanPlace;
+
+    private readonly Stack<SketchSnapshot> _sketchUndo = new();
+    private readonly Stack<SketchSnapshot> _sketchRedo = new();
 
     private readonly WinForms.ContextMenuStrip _viewportContextMenu = new();
 
@@ -55,7 +76,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
-        _viewportPanel = new WinForms.Panel
+        _viewportPanel = new CadViewportPanel
         {
             Dock = WinForms.DockStyle.Fill,
             BackColor = System.Drawing.Color.FromArgb(233, 241, 247),
@@ -70,7 +91,25 @@ public partial class MainWindow : Window
         _viewportPanel.MouseUp += ViewportPanel_MouseUp;
         _viewportPanel.MouseMove += ViewportPanel_MouseMove;
         _viewportPanel.MouseWheel += ViewportPanel_MouseWheel;
+        _viewportPanel.MouseLeave += (_,_) =>
+        {
+            _pointerTarget=null;
+            _hoverSketchDimensionId=_hoverSketchPointId=_hoverSketchEntityId=-1;
+            if(_inSketch)RenderSketch();
+        };
+        // Preserve the native modifier snapshot. Do not manufacture WPF events or
+        // query WPF keyboard state while the WinForms HWND owns the input.
+        _viewportPanel.CommandKey = (keyData) => HandleWindowKey(
+            KeyInterop.KeyFromVirtualKey((int)(keyData & WinForms.Keys.KeyCode)),
+            (keyData & WinForms.Keys.Control) != 0, nativeViewport: true);
+        _viewportPanel.KeyDown += (_, e) =>
+        {
+            if (HandleWindowKey(KeyInterop.KeyFromVirtualKey((int)e.KeyCode), e.Control, nativeViewport: true))
+            { e.Handled = true; e.SuppressKeyPress = true; }
+        };
 
+        _viewportPanel.KeyUp += (_,e) => {if(e.KeyCode is WinForms.Keys.ControlKey or WinForms.Keys.LControlKey or WinForms.Keys.RControlKey) ShowPendingSelectionContext();};
+        PreviewKeyUp += (_,e) => {if(e.Key is Key.LeftCtrl or Key.RightCtrl) ShowPendingSelectionContext();};
         BuildViewportContextMenu();
     }
 
@@ -80,6 +119,8 @@ public partial class MainWindow : Window
         FrontPlaneNode.IsSelected = true;
         RefreshCommandState();
         Status("Ön Düzlem seçili. Çizim komutuyla başlayabilirsiniz.");
+        if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("SRCCAD_UI_REGRESSION_REPORT")))
+            Dispatcher.BeginInvoke(new Action(RunWindowsInteractionRegression));
     }
 
     private void Window_Closing(object? sender, CancelEventArgs e)
@@ -88,13 +129,23 @@ public partial class MainWindow : Window
         _viewer.Dispose();
     }
 
+    private void FeatureTree_PreviewMouseRightButtonDown(object sender,MouseButtonEventArgs e)
+    {
+        if(e.OriginalSource is not DependencyObject source)return;
+        if(ItemsControl.ContainerFromElement(FeatureTree,source) is not TreeViewItem item)return;
+        item.IsSelected=true;
+        item.Focus();
+    }
+
     private void ViewportPanel_HandleCreated(object? sender, EventArgs e)
     {
         if (_viewer.IsInitialized()) return;
+        WindowsRegressionJournal.Write(new {Completed=false,Passed=0,Failed=0,Step="OCCT viewport initialization"});
         var ok = _viewer.Init(_viewportPanel.Handle);
         if (!ok)
         {
             Status("OCCT viewport başlatılamadı. COLLECT_DIAGNOSTICS.bat çalıştırın.");
+            if(WindowsRegressionJournal.Active)throw new InvalidOperationException("OCCT viewport initialization failed");
             MessageBox.Show("OCCT 3B görüntüleyici başlatılamadı.", "SrcCad", MessageBoxButton.OK, MessageBoxImage.Error);
             return;
         }
@@ -105,34 +156,155 @@ public partial class MainWindow : Window
         Status("OCCT 3B viewport hazır • Orta tuş: döndür • Ctrl+Orta: kaydır • Wheel: zoom");
     }
 
+    private string _lastKeyRoute = "No keyboard input";
+    private string _lastHistoryCommand = "None";
     private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        => e.Handled = HandleWindowKey(e.Key, Keyboard.Modifiers.HasFlag(ModifierKeys.Control), nativeViewport: false);
+
+    private void UndoActiveDocument_Click(object sender,RoutedEventArgs e)
     {
-        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && e.Key == Key.N)
+        if(_inSketch){UndoSketch();return;}
+        if(InDrawingMode){UndoDrawing();return;}
+        if(InAssemblyMode){UndoAssembly();return;}
+        UndoFeature();
+    }
+
+    private void RedoActiveDocument_Click(object sender,RoutedEventArgs e)
+    {
+        if(_inSketch){RedoSketch();return;}
+        if(InDrawingMode){RedoDrawing();return;}
+        if(InAssemblyMode){RedoAssembly();return;}
+        RedoFeature();
+    }
+
+    private bool HandleWindowKey(Key key, bool control, bool nativeViewport)
+    {
+        _lastKeyRoute = $"{(nativeViewport ? "HWND" : "WPF")} {key} Ctrl={control} undo={_sketchUndo.Count} redo={_sketchRedo.Count}";
+        // A value editor owns Delete, F and text Undo/Redo while it has focus.
+        if (!nativeViewport && !_viewportPanel.ContainsFocus && Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase && key != Key.Escape)
+            return false;
+        if (_inSketch && control && key == Key.Z)
+        {
+            UndoSketch();
+            return true;
+        }
+
+        if (_inSketch && control && key == Key.Y)
+        {
+            RedoSketch();
+            return true;
+        }
+
+        if (!_inSketch && !_extrudeCommandActive &&
+            control && key == Key.Z)
+        {
+            if(InDrawingMode)UndoDrawing();
+            else if(InAssemblyMode)UndoAssembly();
+            else UndoFeature();
+            return true;
+        }
+
+        if (!_inSketch && !_extrudeCommandActive &&
+            control && key == Key.Y)
+        {
+            if(InDrawingMode)RedoDrawing();
+            else if(InAssemblyMode)RedoAssembly();
+            else RedoFeature();
+            return true;
+        }
+
+        if (control && key is Key.S or Key.O)
+        {
+            if(InDrawingMode)
+            {
+                if(key==Key.S)SaveDrawing_Click(this,new RoutedEventArgs());
+                else OpenDrawing_Click(this,new RoutedEventArgs());
+            }
+            else if(InAssemblyMode)
+            {
+                if(key==Key.S)SaveAssembly_Click(this,new RoutedEventArgs());
+                else OpenAssembly_Click(this,new RoutedEventArgs());
+            }
+            else
+            {
+                if (key == Key.S) SavePart_Click(this,new RoutedEventArgs());
+                else OpenPart_Click(this,new RoutedEventArgs());
+            }
+            return true;
+        }
+
+        if (control && key == Key.N)
         {
             NewPart_Click(this, new RoutedEventArgs());
-            e.Handled = true;
-            return;
+            return true;
         }
 
-        if (e.Key == Key.F)
+        if (key == Key.Space)
+        {
+            ShowViewOrientation();return true;
+        }
+        if (control && key is Key.D8 or Key.NumPad8)
+        {
+            NormalToSelectedSupport();
+            return true;
+        }
+        if (key == Key.F)
         {
             _viewer.FitAll();
-            e.Handled = true;
-            return;
+            return true;
         }
 
-        if (e.Key == Key.Delete && _inSketch)
+        if(key==Key.Delete&&!_inSketch&&!_extrudeCommandActive&&FeatureTree.IsKeyboardFocusWithin)
         {
-            DeleteSketchSelection();
-            e.Handled = true;
-            return;
+            if(InDrawingMode&&DeleteSelectedDrawingTreeItem())return true;
+            if(InAssemblyMode&&DeleteSelectedAssemblyTreeItem())return true;
         }
 
-        if (e.Key == Key.Escape)
+        if(key==Key.Delete&&!_inSketch&&!_extrudeCommandActive&&_partSession is not null&&FeatureTree.IsKeyboardFocusWithin&&SelectedGraphId is Guid graphId)
+        {DeleteGraphFeature(graphId);return true;}
+        if (key == Key.Delete && !_inSketch && !_extrudeCommandActive &&
+            FeatureTree.IsKeyboardFocusWithin && FeatureTree.SelectedItem == _extrudeNode && _hasSolid)
         {
+            DeleteExtrusionFeature();
+            return true;
+        }
+
+        if (key == Key.Delete && _inSketch)
+        {
+            if (!_viewportPanel.ContainsFocus && SketchRelationsList.IsKeyboardFocusWithin)
+                DeleteRelation_Click(this,new RoutedEventArgs());
+            else if (!_viewportPanel.ContainsFocus && SketchDimensionsList.IsKeyboardFocusWithin && SketchDimensionsList.SelectedItem is ListBoxItem selected && selected.Tag is int id)
+            {
+                CommitSketchDeletion(dimensions: new[] { id });
+            }
+            else DeleteSketchSelection();
+            return true;
+        }
+
+        if (key == Key.Escape)
+        {
+            if(_boxStart is not null){FinishWindowSelection(0,0,true);return true;}
+            if(!_inSketch&&_inspectMeasureMode)
+            {
+                _inspectMeasureMode=false;
+                MeasureStatusText.Text="";
+                StatusUnitText.Text="mm";
+                _viewer.ClearSelection();
+                _viewer.SetSelectionMode(CadSelectionMode.Face);
+                Status("Ölç kapatıldı • yüz seçimi aktif.");
+                return true;
+            }
             if (_extrudeCommandActive)
             {
                 CancelExtrude();
+            }
+            else if(InAssemblyMode&&CancelActiveAssemblyCommand())
+            {
+                return true;
+            }
+            else if(InDrawingMode&&CancelActiveDrawingCommand())
+            {
+                return true;
             }
             else if (_inSketch && _smartDimensionMode)
             {
@@ -141,13 +313,30 @@ public partial class MainWindow : Window
                 ClearSketchSelection();
                 Status("Akıllı Ölçülendirme kapatıldı • seçim modu.");
             }
+            else if (_inSketch && _sketchCommand is null && (_sourceSketchEditBefore is not null || _graphSketchEdit is not null))
+            {
+                CancelSourceSketchEdit_Click(this, new RoutedEventArgs());
+            }
             else if (_inSketch)
             {
                 LeaveSketchCommand();
             }
-            e.Handled = true;
+            return true;
         }
+        return false;
     }
+
+    private bool FeatureSelectionAccumulatesWithoutCtrl()
+        => _graphFeatureEdit?.Parameters is
+            FilletFeatureParameters or ChamferFeatureParameters or WeldBeadFeatureParameters or
+            SheetMetalHemFeatureParameters or SheetMetalRipFeatureParameters or SheetMetalCornerReliefFeatureParameters or
+            SheetMetalEdgeFlangeFeatureParameters or SheetMetalMiterFlangeFeatureParameters or SheetMetalJogFeatureParameters or
+            ShellFeatureParameters or DraftFeatureParameters;
+
+    private bool MouseWheelEditsDepth()
+        => _extrudeCommandActive &&
+           (_graphFeatureEdit is null ||
+            _graphFeatureEdit.Parameters is ExtrudeFeatureParameters or CutFeatureParameters or SheetMetalCutFeatureParameters);
 
     private void ViewportPanel_MouseDown(object? sender, WinForms.MouseEventArgs e)
     {
@@ -158,7 +347,11 @@ public partial class MainWindow : Window
         if (e.Button == WinForms.MouseButtons.Middle)
         {
             _middleDown = true;
-            _panMode = (WinForms.Control.ModifierKeys & WinForms.Keys.Control) == WinForms.Keys.Control;
+            // Technical drawings are a 2D sheet: middle-drag pans the sheet and
+            // must never tilt it into 3D. Other workbenches keep CAD rotate;
+            // Ctrl+MMB remains pan.
+            _panMode = InDrawingMode ||
+                       (WinForms.Control.ModifierKeys & WinForms.Keys.Control) == WinForms.Keys.Control;
             if (!_panMode) _viewer.StartRotation(e.X, e.Y);
             return;
         }
@@ -190,6 +383,13 @@ public partial class MainWindow : Window
 
         if (_inSketch)
         {
+            var dimensionHit=FindDimensionAtScreen(e.X,e.Y);
+            if(e.Clicks>=2&&dimensionHit>=0)
+            {
+                LeaveSketchCommand();_smartDimensionMode=false;ResetSmartDimensionTargets();
+                _selectedSketchDimensionId=dimensionHit;
+                EditDimension(dimensionHit);return;
+            }
             if (_sketchCommand is not null)
                 HandleSketchClick(e.X, e.Y, e.Clicks);
             else
@@ -198,9 +398,34 @@ public partial class MainWindow : Window
         else
         {
             _viewer.MoveTo(e.X, e.Y);
-            var toggle = (WinForms.Control.ModifierKeys & WinForms.Keys.Control) == WinForms.Keys.Control;
+
+            // Measure is an inspection command, not a feature-selection command.
+            // Always replace the measured topology on a plain click and do not let
+            // active fillet/flange/shell multi-selection rules consume the pick.
+            if(_inspectMeasureMode)
+            {
+                var selected=_viewer.SelectDetected(false);
+                UpdateInspectMeasureFromSelection();
+                if(!selected)
+                    Status("Ölç aktif • imleci gerçek bir kenar, yüz veya köşe üzerine getirip tıklayın.");
+                return;
+            }
+
+            var ctrl = (WinForms.Control.ModifierKeys & WinForms.Keys.Control) == WinForms.Keys.Control;
+            var toggle = ctrl || FeatureSelectionAccumulatesWithoutCtrl();
             var selected = _viewer.SelectDetected(toggle);
+            if(InAssemblyMode)SyncAssemblySelectionFromViewport();
+            UpdateActiveEdgeFeatureSelection();
+            UpdateActiveHoleSelection();
+            UpdateActiveHoleWizardSelection();
+            UpdateActiveDomeSelection();
+            UpdateActiveShellSelection();
+            UpdateActiveDraftSelection();
+            UpdateActiveEdgeFlangeSelection();
+            UpdateActiveEndCapSelection();
             Status(selected ? _viewer.SelectionSummary() : "Seçim yok");
+            if (selected && e.Clicks >= 2 && !toggle)
+                NormalToSelectedSupport();
         }
     }
 
@@ -213,11 +438,29 @@ public partial class MainWindow : Window
         }
 
         if (e.Button == WinForms.MouseButtons.Left)
+        {
+            if(_boxStart is not null){FinishWindowSelection(e.X,e.Y);return;}
+            if (_dragSketchChanged && _dragSketchSnapshot is not null)
+            {
+                _sketchUndo.Push(_dragSketchSnapshot);
+                _sketchRedo.Clear();
+                MarkSourceSketchDirty();
+                UpdateSketchPropertyPanel();
+                RefreshCommandState();
+            }
+
             _dragSketchPointId = -1;
+            _dragSketchEntityId = -1;
+            _dragSketchDimensionId = -1;
+            _dragSketchLastUv = null;
+            _dragSketchSnapshot = null;
+            _dragSketchChanged = false;
+        }
     }
 
     private void ViewportPanel_MouseMove(object? sender, WinForms.MouseEventArgs e)
     {
+        if(_boxStart is not null){UpdateWindowSelection(e.X,e.Y);return;}
         if (_middleDown)
         {
             if (_panMode)
@@ -235,9 +478,25 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (_inSketch && _sketchCommand?.HasPendingStep == true)
+        if (_inSketch && _sketchCommand is not null)
         {
-            UpdateSketchCommandPreview(e.X, e.Y);
+            UpdateSketchHover(e.X,e.Y);
+            UpdateSketchCommandPreview(e.X,e.Y);
+            return;
+        }
+
+        if (_inSketch &&
+            _sketchCommand is null &&
+            !_smartDimensionMode &&
+            _dragSketchDimensionId >= 0 &&
+            e.Button == WinForms.MouseButtons.Left &&
+            _sketch is not null &&
+            TryGetSketchCursor(e.X, e.Y, out var dimensionLabelUv, out _, snap: false))
+        {
+            _sketch.SetDimensionLabel(_dragSketchDimensionId, dimensionLabelUv);
+            _dragSketchChanged = true;
+            RenderSketch();
+            Status($"Ölçü{_dragSketchDimensionId} konumu taşınıyor • sürücü değeri değişmedi.");
             return;
         }
 
@@ -251,11 +510,37 @@ public partial class MainWindow : Window
         {
             if (!_sketch.Point(_dragSketchPointId).Fixed)
             {
-                _sketch.SetPointPosition(_dragSketchPointId, dragUv);
-                _sketch.SolveRelations();
+                if (!_sketch.TryMovePoint(_dragSketchPointId, dragUv))
+                {
+                    Status("Nokta bu konuma taşınamadı; ilişkiler korunarak işlem geri alındı.");
+                    return;
+                }
+                _dragSketchChanged = true;
                 RenderSketch();
                 Status($"P{_dragSketchPointId} sürükleniyor • ilişkiler ve sürücü ölçüler korunuyor.");
             }
+            return;
+        }
+
+        if (_inSketch &&
+            _sketchCommand is null &&
+            !_smartDimensionMode &&
+            _dragSketchEntityId >= 0 &&
+            _dragSketchLastUv is Point2d lastDragUv &&
+            e.Button == WinForms.MouseButtons.Left &&
+            _sketch is not null &&
+            TryGetSketchCursor(e.X, e.Y, out var entityDragUv, out _, snap: false))
+        {
+            var delta=new Point2d(entityDragUv.X-lastDragUv.X,entityDragUv.Y-lastDragUv.Y);
+            if (!_sketch.TryTranslateEntity(_dragSketchEntityId,delta))
+            {
+                Status("Geometri bu yönde sürüklenemedi; sabit ilişkiler ve sürücü ölçüler korunuyor.");
+                return;
+            }
+            _dragSketchLastUv=entityDragUv;
+            _dragSketchChanged=true;
+            RenderSketch();
+            Status($"E{_dragSketchEntityId} tutulup sürükleniyor • ilişkiler ve ölçüler korunuyor.");
             return;
         }
 
@@ -263,6 +548,7 @@ public partial class MainWindow : Window
             _sketchCommand is null &&
             TryGetSketchCursor(e.X, e.Y, out var dimensionUv, out _, snap: false))
         {
+            UpdateSketchHover(e.X,e.Y);
             RenderSketch();
             var previewDimension = BuildPendingSmartDimension(dimensionUv);
             if (previewDimension is not null)
@@ -280,23 +566,51 @@ public partial class MainWindow : Window
         }
 
         if (!_inSketch)
+        {
             _viewer.MoveTo(e.X, e.Y); // OCCT dynamic pre-highlight.
+            if(_inspectMeasureMode)
+                UpdateInspectMeasureFromSelection(hoverPreview:true);
+        }
+    }
+
+    private void Window_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (!MouseWheelEditsDepth()) return;
+        AdjustExtrusionDepth(e.Delta);
+        e.Handled = true;
+    }
+
+    private void AdjustExtrusionDepth(int delta)
+    {
+        if(_graphFeatureEdit is not null)
+        {
+            if(_graphFeatureEdit.Parameters is FilletFeatureParameters or ChamferFeatureParameters or HoleFeatureParameters or RevolveFeatureParameters or RevolveCutFeatureParameters or SweepFeatureParameters or SweepCutFeatureParameters or LoftFeatureParameters or LoftCutFeatureParameters or ShellFeatureParameters or DraftFeatureParameters or RibFeatureParameters or MirrorFeatureParameters or LinearPatternFeatureParameters or CircularPatternFeatureParameters or ReferencePlaneFeatureParameters or ReferenceAxisFeatureParameters or ReferencePointFeatureParameters or SheetMetalBaseFeatureParameters or SheetMetalEdgeFlangeFeatureParameters)return;
+            if(DimensionNumbers.TryParseScalar(GraphDepth.Text,out var value))
+                GraphDepth.Text=_depthWheel.Apply(value,delta).ToString("G17",CultureInfo.CurrentCulture);
+            return;
+        }
+        // Keep invalid/zero input visible; never silently substitute a different solid.
+        var text = ExtrudeDepthTextBox.Text.Trim().Replace(',', '.');
+        if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var depth) ||
+            !double.IsFinite(depth)) return;
+        depth = _depthWheel.Apply(depth, delta);
+        ExtrudeDepthTextBox.Text = depth.ToString("0.###", CultureInfo.CurrentCulture);
+        ExtrudeDepthTextBox.CaretIndex = ExtrudeDepthTextBox.Text.Length;
+        // TextChanged rebuilds the real OCCT candidate; zero invalidates the preview.
+        Status($"Ekstrüzyon derinliği: {depth:0.###} mm • mouse tekeri ±10 mm");
     }
 
     private void ViewportPanel_MouseWheel(object? sender, WinForms.MouseEventArgs e)
     {
-        if (_extrudeCommandActive)
+        if (MouseWheelEditsDepth())
         {
-            if (!TryReadDepth(out var depth)) depth = 20.0;
-            var step = e.Delta > 0 ? 10.0 : -10.0;
-            depth = Math.Max(10.0, depth + step);
-            ExtrudeDepthTextBox.Text = depth.ToString("0.###", CultureInfo.CurrentCulture);
-            ExtrudeDepthTextBox.CaretIndex = ExtrudeDepthTextBox.Text.Length;
-            Status($"Ekstrüzyon derinliği: {depth:0.###} mm • mouse tekeri ±10 mm");
+            AdjustExtrusionDepth(e.Delta);
             return;
         }
 
-        _viewer.ZoomWheel(e.Delta);
+        // Every other PropertyManager / measurement / sheet-metal command keeps
+        // normal viewport navigation active, like SOLIDWORKS.
+        _viewer.ZoomWheelAt(e.X,e.Y,e.Delta);
     }
 
     private bool TryGetSketchCursor(int x, int y, out Point2d uv, out int snappedPointId, bool snap = true)
@@ -316,30 +630,37 @@ public partial class MainWindow : Window
         if (snap)
         {
             var tolerance = Math.Max(1e-6, _viewer.PixelToWorldLength(10));
-            snappedPointId = _sketch.FindPointNear(uv, tolerance);
-            if (snappedPointId >= 0)
-                uv = _sketch.Point(snappedPointId).Position;
+            var target = SketchPointerProbe.Probe(_sketch,uv,tolerance);
+            if (target?.Reference.IsPointLike == true)
+            {
+                snappedPointId = target.PointId;
+                uv = target.Position;
+            }
         }
         return true;
     }
 
     private void UpdateSketchHover(int x, int y)
     {
-        if (_sketch is null || !TryGetSketchCursor(x, y, out var uv, out _)) return;
+        if (_sketch is null || !TryGetSketchCursor(x, y, out var uv, out _, snap:false)) return;
         var tolerance = Math.Max(1e-6, _viewer.PixelToWorldLength(10));
 
-        var dimensionId = _sketch.FindDimensionNear(uv, tolerance);
-        var pointId = dimensionId < 0 ? _sketch.FindPointNear(uv, tolerance) : -1;
-        var entityId = dimensionId < 0 && pointId < 0 ? _sketch.FindEntityNear(uv, tolerance) : -1;
+        var dimensionId = _sketchCommand is null ? FindDimensionAtScreen(x,y) : -1;
+        var target = dimensionId < 0 ? SketchPointerProbe.Probe(_sketch,uv,tolerance) : null;
+        var reference = target?.Reference;
+        var markerChanged = target != _pointerTarget;
+        _pointerTarget = target;
+        var pointId = reference is { IsPointLike: true } ? _sketch.ReferencePointId(reference) : -1;
+        var entityId = reference is { IsPointLike: false } ? reference.Id : -1;
 
         if (dimensionId == _hoverSketchDimensionId &&
             pointId == _hoverSketchPointId &&
-            entityId == _hoverSketchEntityId)
+            entityId == _hoverSketchEntityId && !markerChanged)
             return;
 
         _hoverSketchDimensionId = dimensionId;
         _hoverSketchPointId = pointId;
-        _hoverSketchEntityId = entityId;
+        _hoverSketchEntityId = reference?.Kind == GeometryReferenceKind.Midpoint ? reference.Id : entityId;
         RenderSketch();
     }
 
@@ -348,9 +669,10 @@ public partial class MainWindow : Window
         if (_sketch is null || !TryGetSketchCursor(x, y, out var uv, out _)) return false;
         var tolerance = Math.Max(1e-6, _viewer.PixelToWorldLength(10));
 
-        var dimensionId = _sketch.FindDimensionNear(uv, tolerance);
-        var pointId = dimensionId < 0 ? _sketch.FindPointNear(uv, tolerance) : -1;
-        var entityId = dimensionId < 0 && pointId < 0 ? _sketch.FindEntityNear(uv, tolerance) : -1;
+        var dimensionId = FindDimensionAtScreen(x,y);
+        var reference = dimensionId < 0 ? _sketch.HitReference(uv, tolerance) : null;
+        var pointId = reference is { IsPointLike: true } ? _sketch.ReferencePointId(reference) : -1;
+        var entityId = reference is { IsPointLike: false } ? reference.Id : -1;
 
         var alreadySelected =
             dimensionId >= 0 && _selectedSketchDimensionId == dimensionId ||
@@ -400,7 +722,7 @@ public partial class MainWindow : Window
         if (_sketch is null || !TryGetSketchCursor(x, y, out var uv, out _)) return;
         var tolerance = Math.Max(1e-6, _viewer.PixelToWorldLength(10));
 
-        var dimensionId = _sketch.FindDimensionNear(uv, tolerance);
+        var dimensionId = FindDimensionAtScreen(x,y);
         if (clickCount >= 2 && dimensionId >= 0)
         {
             EditDimension(dimensionId);
@@ -414,241 +736,112 @@ public partial class MainWindow : Window
         }
 
         var toggle = (WinForms.Control.ModifierKeys & WinForms.Keys.Control) == WinForms.Keys.Control;
-        SelectSketchAt(x, y, toggle);
+        if(!SelectSketchAt(x, y, toggle))
+        {
+            BeginWindowSelection(x,y,toggle);return;
+        }
+        _selectionContextPending = toggle && CurrentSketchReferences().Length >= 2;
 
-        var pointId = _sketch.FindPointNear(uv, tolerance);
-        if (pointId > 0 && !_sketch.Point(pointId).Fixed)
+        // Ölçü metni tek tıkla seçilip SOLIDWORKS'teki gibi sürüklenebilir.
+        // Değer yalnız çift tıklamada düzenlenir; sürükleme sadece label konumunu değiştirir.
+        if (dimensionId >= 0)
+        {
+            _dragSketchDimensionId = dimensionId;
+            _dragSketchPointId = -1;
+            _dragSketchEntityId = -1;
+            _dragSketchLastUv = null;
+            _dragSketchSnapshot = _sketch.CaptureSnapshot();
+            _dragSketchChanged = false;
+            return;
+        }
+
+        // Prefer an endpoint/center handle for dragging even when the adjacent
+        // line is also inside the hit tolerance. This makes line lengthening /
+        // shortening behave like SOLIDWORKS when an under-defined endpoint is grabbed.
+        var dragTolerance=Math.Max(tolerance,_viewer.PixelToWorldLength(16));
+        var dragTarget=SketchPointerProbe.Probe(_sketch,uv,dragTolerance);
+        var pointId=dragTarget?.Reference.IsPointLike==true
+            ?_sketch.ReferencePointId(dragTarget.Reference)
+            :_sketch.FindPointNear(uv,dragTolerance);
+        if (!toggle && pointId > 0 && !_sketch.Point(pointId).Fixed)
+        {
             _dragSketchPointId = pointId;
+            _dragSketchEntityId = -1;
+            _dragSketchDimensionId = -1;
+            _dragSketchLastUv = uv;
+            _dragSketchSnapshot = _sketch.CaptureSnapshot();
+            _dragSketchChanged = false;
+            return;
+        }
+
+        var dragReference=_sketch.HitReference(uv,tolerance);
+        if(!toggle&&dragReference is {IsPointLike:false}&&_sketch.Entity(dragReference.Id) is not null)
+        {
+            _dragSketchPointId=-1;
+            _dragSketchEntityId=dragReference.Id;
+            _dragSketchDimensionId=-1;
+            _dragSketchLastUv=uv;
+            _dragSketchSnapshot=_sketch.CaptureSnapshot();
+            _dragSketchChanged=false;
+        }
     }
 
     private void HandleSmartDimensionPick(Point2d uv, double tolerance)
     {
         if (_sketch is null) return;
-
-        var pointId = _sketch.FindPointNear(uv, tolerance);
-        var entityId = pointId < 0 ? _sketch.FindEntityNear(uv, tolerance) : -1;
-
-        if (_smartDimensionWaitingPlacement)
+        if (_dimensionSession.Pick(_sketch, uv, tolerance)) CreateSmartDimensionAt(uv);
+        else
         {
-            // SOLIDWORKS benzeri akış: tek geometri seçildikten sonraki normal tık
-            // artık ÖLÇÜ KONUMUDUR. İkinci çizgiyi açı için eklemek istenirse Ctrl basılı tutulur.
-            var ctrl = (WinForms.Control.ModifierKeys & WinForms.Keys.Control) == WinForms.Keys.Control;
-            if (ctrl &&
-                _smartDimensionEntities.Count == 1 &&
-                _sketch.Entity(_smartDimensionEntities[0]) is SketchLine &&
-                entityId >= 0 &&
-                entityId != _smartDimensionEntities[0] &&
-                _sketch.Entity(entityId) is SketchLine)
-            {
-                _smartDimensionEntities.Add(entityId);
-                Status("Akıllı Ölçülendirme: açı ölçüsünün konumunu tıklayın.");
-                RenderSketch();
-                return;
-            }
-
-            CreateSmartDimensionAt(uv);
-            return;
-        }
-
-        if (pointId >= 0)
-        {
-            if (!_smartDimensionPoints.Contains(pointId))
-                _smartDimensionPoints.Add(pointId);
-
-            if (_smartDimensionPoints.Count >= 2)
-            {
-                _smartDimensionWaitingPlacement = true;
-                Status("Akıllı Ölçülendirme: ölçünün konumunu tıklayın.");
-            }
-            else
-            {
-                Status("Akıllı Ölçülendirme: ikinci noktayı seçin.");
-            }
+            Status(_dimensionSession.CanPlace ? "Ölçüyü üst/alta veya sağ/sola taşıyın; konumu tıklayın." : "Nokta, merkez, Origin veya kenar seçin.");
             RenderSketch();
-            return;
         }
-
-        if (entityId >= 0)
-        {
-            var entity = _sketch.Entity(entityId);
-            if (entity is SketchCircle)
-            {
-                _smartDimensionEntities.Clear();
-                _smartDimensionEntities.Add(entityId);
-                _smartDimensionWaitingPlacement = true;
-                Status("Akıllı Ölçülendirme: çap ölçüsünün konumunu tıklayın.");
-            }
-            else if (entity is SketchLine)
-            {
-                _smartDimensionEntities.Clear();
-                _smartDimensionEntities.Add(entityId);
-                _smartDimensionWaitingPlacement = true;
-                Status("Akıllı Ölçülendirme: ölçünün konumunu tıklayın • açı için Ctrl+ikinci çizgi.");
-            }
-            RenderSketch();
-            return;
-        }
-
-        Status("Akıllı Ölçülendirme: önce çizgi, daire veya nokta seçin.");
     }
 
     private SketchDimension? BuildPendingSmartDimension(Point2d label)
-    {
-        if (_sketch is null) return null;
-
-        if (_smartDimensionEntities.Count == 2 &&
-            _sketch.Entity(_smartDimensionEntities[0]) is SketchLine &&
-            _sketch.Entity(_smartDimensionEntities[1]) is SketchLine)
-        {
-            return new SketchDimension(
-                -1, SketchDimensionType.Angle, 0, label,
-                EntityA: _smartDimensionEntities[0],
-                EntityB: _smartDimensionEntities[1]);
-        }
-
-        if (_smartDimensionEntities.Count == 1)
-        {
-            var entity = _sketch.Entity(_smartDimensionEntities[0]);
-            if (entity is SketchLine)
-                return new SketchDimension(
-                    -1, SketchDimensionType.LineLength, 0, label,
-                    EntityA: entity.Id);
-
-            if (entity is SketchCircle)
-                return new SketchDimension(
-                    -1, SketchDimensionType.CircleDiameter, 0, label,
-                    EntityA: entity.Id);
-        }
-
-        if (_smartDimensionPoints.Count == 2)
-        {
-            var a = _sketch.Point(_smartDimensionPoints[0]).Position;
-            var b = _sketch.Point(_smartDimensionPoints[1]).Position;
-            var dx = Math.Abs(b.X - a.X);
-            var dy = Math.Abs(b.Y - a.Y);
-
-            var type = dx > dy * 8
-                ? SketchDimensionType.HorizontalDistance
-                : dy > dx * 8
-                    ? SketchDimensionType.VerticalDistance
-                    : SketchDimensionType.PointDistance;
-
-            return new SketchDimension(
-                -1, type, 0, label,
-                PointA: _smartDimensionPoints[0],
-                PointB: _smartDimensionPoints[1]);
-        }
-
-        return null;
-    }
+        => _sketch is null ? null : _dimensionSession.Preview(_sketch, label);
 
     private void CreateSmartDimensionAt(Point2d label)
     {
         if (_sketch is null) return;
-
-        SketchDimension? dimension = null;
-
-        if (_smartDimensionEntities.Count == 2 &&
-            _sketch.Entity(_smartDimensionEntities[0]) is SketchLine &&
-            _sketch.Entity(_smartDimensionEntities[1]) is SketchLine)
-        {
-            dimension = _sketch.AddDimension(
-                SketchDimensionType.Angle,
-                label,
-                entityA: _smartDimensionEntities[0],
-                entityB: _smartDimensionEntities[1]);
-        }
-        else if (_smartDimensionEntities.Count == 1)
-        {
-            var entity = _sketch.Entity(_smartDimensionEntities[0]);
-            if (entity is SketchLine)
-            {
-                dimension = _sketch.AddDimension(
-                    SketchDimensionType.LineLength,
-                    label,
-                    entityA: entity.Id);
-            }
-            else if (entity is SketchCircle)
-            {
-                dimension = _sketch.AddDimension(
-                    SketchDimensionType.CircleDiameter,
-                    label,
-                    entityA: entity.Id);
-            }
-        }
-        else if (_smartDimensionPoints.Count == 2)
-        {
-            var a = _sketch.Point(_smartDimensionPoints[0]).Position;
-            var b = _sketch.Point(_smartDimensionPoints[1]).Position;
-            var dx = Math.Abs(b.X - a.X);
-            var dy = Math.Abs(b.Y - a.Y);
-
-            var type = dx > dy * 8
-                ? SketchDimensionType.HorizontalDistance
-                : dy > dx * 8
-                    ? SketchDimensionType.VerticalDistance
-                    : SketchDimensionType.PointDistance;
-
-            dimension = _sketch.AddDimension(
-                type,
-                label,
-                pointA: _smartDimensionPoints[0],
-                pointB: _smartDimensionPoints[1]);
-        }
-
+        var candidate = _dimensionSession.Preview(_sketch, label);
+        if (candidate is null) { Status("Bu referanslar arasında ölçü oluşturulamadı."); return; }
+        var before = _sketch.CaptureSnapshot();
+        var dimension = _sketch.AddInferredDimension(candidate);
         ResetSmartDimensionTargets();
-
-        if (dimension is null)
+        RenderSketch();
+        if (EditDimension(dimension.Id, removeOnCancel: true))
         {
-            Status("Bu seçim için ölçü oluşturulamadı.");
-            return;
+            _sketchUndo.Push(before);
+            _sketchRedo.Clear();
+            Status($"Ölçü{dimension.Id} geometriye uygulandı.");
         }
-
+        else _sketch.RestoreSnapshot(before);
         RenderSketch();
         UpdateSketchPropertyPanel();
-
-        if (!EditDimension(dimension.Id, removeOnCancel: true))
-            Status("Ölçü oluşturma iptal edildi.");
-        else
-            Status($"Ölçü{dimension.Id} oluşturuldu ve geometriye uygulandı.");
     }
 
-    private void ResetSmartDimensionTargets()
-    {
-        _smartDimensionEntities.Clear();
-        _smartDimensionPoints.Clear();
-        _smartDimensionWaitingPlacement = false;
-    }
+    private void ResetSmartDimensionTargets() => _dimensionSession.Reset();
 
     private bool EditDimension(int dimensionId, bool removeOnCancel = false)
     {
         if (_sketch?.Dimension(dimensionId) is not SketchDimension dimension)
             return false;
 
-        var unit = dimension.Type == SketchDimensionType.Angle ? "°" : "mm";
-        var dialog = new DimensionEditDialog("Ölçüyü Değiştir", _sketch.Measure(dimension), unit)
+        var session=new DimensionEditSession(_sketch,dimensionId);
+        var beforeEdit=session.Before;
+        var unit=dimension.Type==SketchDimensionType.Angle?"°":"mm";
+        var dialog=new DimensionEditDialog("Ölçüyü Değiştir",dimension.Value,unit,
+            text=>session.TryCommit(text,out var error,ValidateDependentDimension)?null:error){Owner=this};
+        if(dialog.ShowDialog()!=true)
         {
-            Owner = this
-        };
-
-        if (dialog.ShowDialog() != true)
-        {
-            if (removeOnCancel)
-                _sketch.DeleteDimension(dimensionId);
-            RenderSketch();
-            UpdateSketchPropertyPanel();
-            return false;
+            if(removeOnCancel)_sketch.DeleteDimension(dimensionId);
+            RenderSketch();UpdateSketchPropertyPanel();return false;
         }
-
-        if (!_sketch.SetDimensionValue(dimensionId, dialog.Value))
+        MarkSourceSketchDirty();
+        if (!removeOnCancel && !SameSketch(beforeEdit, _sketch.CaptureSnapshot()))
         {
-            MessageBox.Show(
-                this,
-                "Bu ölçü mevcut sabit geometri nedeniyle sürücü olarak uygulanamadı.",
-                "SrcCad",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
-            _sketch.SetDimensionDriving(dimensionId, false);
+            _sketchUndo.Push(beforeEdit);
+            _sketchRedo.Clear();
         }
 
         _selectedSketchDimensionId = dimensionId;
@@ -659,6 +852,9 @@ public partial class MainWindow : Window
 
     private void ClearSketchSelection(bool render = true)
     {
+        _selectionContextPending=false;
+        _viewportContextMenu.Close();
+        _selectedBoxDimensions.Clear();
         _selectedSketchEntities.Clear();
         _selectedSketchPoints.Clear();
         _selectedSketchDimensionId = -1;
@@ -689,19 +885,7 @@ public partial class MainWindow : Window
 
             _viewportContextMenu.Items.Add(new WinForms.ToolStripSeparator());
 
-            AddContextRelationItem("Yatay", SketchRelationType.Horizontal);
-            AddContextRelationItem("Dikey", SketchRelationType.Vertical);
-            AddContextRelationItem("Çakışık", SketchRelationType.Coincident);
-            AddContextRelationItem("Paralel", SketchRelationType.Parallel);
-            AddContextRelationItem("Dik", SketchRelationType.Perpendicular);
-            AddContextRelationItem("Eşit", SketchRelationType.Equal);
-            AddContextRelationItem("Sabitle", SketchRelationType.Fixed);
-
-            _viewportContextMenu.Items.Add(new WinForms.ToolStripSeparator());
-
-            var smart = new WinForms.ToolStripMenuItem("Akıllı Ölçülendirme");
-            smart.Click += (_, _) => StartSmartDimensionMode();
-            _viewportContextMenu.Items.Add(smart);
+            PopulateSelectionActions();
 
             var clear = new WinForms.ToolStripMenuItem("Seçimi Temizle");
             clear.Click += (_, _) => ClearSketchSelection();
@@ -711,6 +895,27 @@ public partial class MainWindow : Window
         {
             var summary = new WinForms.ToolStripMenuItem(_viewer.SelectionSummary()) { Enabled = false };
             _viewportContextMenu.Items.Add(summary);
+
+            if ((_hasSolid || _partSession is not null) && _viewer.TryGetSelectedPlanarFace(out _))
+            {
+                var normalTo = new WinForms.ToolStripMenuItem("Yüzeye Dik Bak (Ctrl+8)");
+                normalTo.Click += (_, _) => Dispatcher.BeginInvoke(new Action(() => NormalToSelectedSupport()));
+                _viewportContextMenu.Items.Add(normalTo);
+
+                var sketchOnFace = new WinForms.ToolStripMenuItem("Bu Yüzde Çizim Başlat");
+                sketchOnFace.Click += (_, _) => Dispatcher.BeginInvoke(new Action(() =>
+                    NewProfileSketch_Click(this,new RoutedEventArgs())));
+                _viewportContextMenu.Items.Add(sketchOnFace);
+            }
+
+            if (CutButton.IsEnabled)
+            {
+                var cut = new WinForms.ToolStripMenuItem("Ekstrüzyon Kes");
+                cut.Click += (_, _) => Dispatcher.BeginInvoke(new Action(() =>
+                    Cut_Click(this,new RoutedEventArgs())));
+                _viewportContextMenu.Items.Add(cut);
+            }
+
             _viewportContextMenu.Items.Add(new WinForms.ToolStripSeparator());
 
             AddSolidSelectionModeMenu("Yüz seçimi", CadSelectionMode.Face);
@@ -738,6 +943,7 @@ public partial class MainWindow : Window
     private void AddContextRelationItem(string title, SketchRelationType type)
     {
         var item = new WinForms.ToolStripMenuItem(title);
+        item.Tag=type;
         item.Click += (_, _) => ApplySketchRelation(type);
         _viewportContextMenu.Items.Add(item);
     }
@@ -753,21 +959,98 @@ public partial class MainWindow : Window
         _viewportContextMenu.Items.Add(item);
     }
 
+    private void ResetSketchInteraction()
+    {
+        if(_boxStart is not null)FinishWindowSelection(0,0,true);
+        _sketchCommand?.CancelStep();
+        _viewer.ClearPreview();
+        _dragSketchPointId = _dragSketchEntityId = _dragSketchDimensionId = -1;
+        _dragSketchLastUv = null;
+        _hoverSketchPointId = _hoverSketchEntityId = _hoverSketchDimensionId = -1;
+        _dragSketchSnapshot = null;
+        _dragSketchChanged = false;
+    }
+
+    private static bool SameSketch(SketchSnapshot a, SketchSnapshot b)
+        => a.NextPointId == b.NextPointId && a.NextEntityId == b.NextEntityId &&
+           a.NextRelationId == b.NextRelationId && a.NextDimensionId == b.NextDimensionId &&
+           a.Points.OrderBy(p => p.Key).SequenceEqual(b.Points.OrderBy(p => p.Key)) &&
+           a.Entities.SequenceEqual(b.Entities) && a.Relations.SequenceEqual(b.Relations) &&
+           a.Dimensions.SequenceEqual(b.Dimensions) && a.CenterRectangles.SequenceEqual(b.CenterRectangles);
+
+    private void UndoSketch()
+    {
+        _lastHistoryCommand = "UndoSketch from " + _lastKeyRoute;
+        if (_sketch is null || _sketchUndo.Count == 0)
+        {
+            Status("Geri alınacak çizim işlemi yok.");
+            return;
+        }
+
+        ResetSketchInteraction();
+        SketchSnapshotHistory.Restore(_sketch, _sketchUndo, _sketchRedo);
+        MarkSourceSketchDirty();
+        ClearSketchSelection(false);
+        ResetSmartDimensionTargets();
+        RenderSketch();
+        UpdateSketchPropertyPanel();
+        RefreshCommandState();
+        Status("Çizim işlemi geri alındı • Ctrl+Y ile yineleyebilirsiniz.");
+    }
+
+    private void RedoSketch()
+    {
+        _lastHistoryCommand = "RedoSketch from " + _lastKeyRoute;
+        if (_sketch is null || _sketchRedo.Count == 0)
+        {
+            Status("Yinelenecek çizim işlemi yok.");
+            return;
+        }
+
+        ResetSketchInteraction();
+        SketchSnapshotHistory.Restore(_sketch, _sketchRedo, _sketchUndo);
+        MarkSourceSketchDirty();
+        ClearSketchSelection(false);
+        ResetSmartDimensionTargets();
+        RenderSketch();
+        UpdateSketchPropertyPanel();
+        RefreshCommandState();
+        Status("Çizim işlemi yinelendi • Ctrl+Z ile geri alabilirsiniz.");
+    }
+
+    private void CommitSketchDeletion(int[]? dimensions = null, int[]? relations = null)
+    {
+        if (_sketch is null) return;
+        var before = SketchDeletion.Apply(_sketch, dimensions: dimensions, relations: relations);
+        if (before is null) return;
+        _sketchUndo.Push(before);
+        _sketchRedo.Clear();
+        ResetSketchInteraction();
+        ClearSketchSelection(false);
+        ResetSmartDimensionTargets();
+        MarkSourceSketchDirty();
+        RenderSketch();
+        UpdateSketchPropertyPanel();
+        RefreshCommandState();
+    }
+
     private void DeleteSketchSelection()
     {
         if (_sketch is null) return;
+        if (_selectedSketchDimensionId < 0 && _selectedBoxDimensions.Count == 0 &&
+            _selectedSketchEntities.Count == 0 &&
+            !_selectedSketchPoints.Any(id => id != 0))
+            return;
 
-        if (_selectedSketchDimensionId >= 0)
-            _sketch.DeleteDimension(_selectedSketchDimensionId);
-
-        foreach (var entityId in _selectedSketchEntities.ToList())
-            _sketch.DeleteEntity(entityId);
-
-        foreach (var pointId in _selectedSketchPoints.Where(id => id != 0).ToList())
-            _sketch.DeletePoint(pointId);
-
+        var before = SketchDeletion.Apply(_sketch, _selectedSketchEntities, _selectedSketchPoints,
+            _selectedBoxDimensions.Append(_selectedSketchDimensionId));
+        if (before is null) return;
+        _sketchUndo.Push(before);
+        _sketchRedo.Clear();
+        ResetSketchInteraction();
         ClearSketchSelection(false);
-        _sketch.SolveRelations();
+        ResetSmartDimensionTargets();
+        MarkSourceSketchDirty();
         RenderSketch();
         UpdateSketchPropertyPanel();
         RefreshCommandState();
@@ -776,7 +1059,7 @@ public partial class MainWindow : Window
 
     private void HandleSketchClick(int x, int y, int clickCount)
     {
-        if (_sketch is null || !TryGetSketchCursor(x, y, out var uv, out var snapId)) return;
+        if (_sketch is null || !TryGetSketchCursor(x, y, out var uv, out var snapId, snap:_sketchCommand is not TrimSketchCommand)) return;
 
         if (_sketchCommand is null)
         {
@@ -790,13 +1073,22 @@ public partial class MainWindow : Window
             Math.Max(1e-6, _viewer.PixelToWorldLength(10)),
             clickCount);
 
+        var before = _sketch.CaptureSnapshot();
         try
         {
             _sketchCommand.Pick(pick);
+            if (!SameSketch(before, _sketch.CaptureSnapshot()))
+            {
+                _sketchUndo.Push(before);
+                _sketchRedo.Clear();
+            }
             _viewer.ClearPreview();
         }
         catch (Exception ex)
         {
+            _sketch.RestoreSnapshot(before);
+            _sketchCommand.CancelStep();
+            RenderSketch();
             Status($"{_sketchCommand.Title}: {ex.Message}");
         }
 
@@ -806,9 +1098,10 @@ public partial class MainWindow : Window
     private void UpdateSketchCommandPreview(int x, int y)
     {
         if (_sketch is null || _sketchCommand is null ||
-            !TryGetSketchCursor(x, y, out var current, out _))
+            !TryGetSketchCursor(x, y, out var current, out _, snap:_sketchCommand is not TrimSketchCommand))
             return;
 
+        if(_sketchCommand is TrimSketchCommand trim)trim.Tolerance=Math.Max(1e-6,_viewer.PixelToWorldLength(10));
         _viewer.ClearPreview();
         foreach (var primitive in _sketchCommand.Preview(current))
         {
@@ -874,11 +1167,8 @@ public partial class MainWindow : Window
             var a = _sketch.Plane.SketchToWorld(aUv.X, aUv.Y);
             var b = _sketch.Plane.SketchToWorld(bUv.X, bUv.Y);
 
-            var state = line.Construction
-                ? 1
-                : _selectedSketchEntities.Contains(line.Id) || _hoverSketchEntityId == line.Id
-                    ? 2
-                    : baseGeometryState;
+            var state = _selectedSketchEntities.Contains(line.Id) || _hoverSketchEntityId == line.Id
+                ? 2 : line.Construction ? 1 : baseGeometryState;
 
             _viewer.AddStyledSketchLine(a.X, a.Y, a.Z, b.X, b.Y, b.Z, state);
         }
@@ -889,11 +1179,8 @@ public partial class MainWindow : Window
             var center = _sketch.Plane.SketchToWorld(centerUv.X, centerUv.Y);
             var p = _sketch.Plane;
 
-            var state = circle.Construction
-                ? 1
-                : _selectedSketchEntities.Contains(circle.Id) || _hoverSketchEntityId == circle.Id
-                    ? 2
-                    : baseGeometryState;
+            var state = _selectedSketchEntities.Contains(circle.Id) || _hoverSketchEntityId == circle.Id
+                ? 2 : circle.Construction ? 1 : baseGeometryState;
 
             _viewer.AddStyledSketchCircle(
                 center.X, center.Y, center.Z,
@@ -901,6 +1188,32 @@ public partial class MainWindow : Window
                 p.U.X, p.U.Y, p.U.Z,
                 circle.Radius,
                 state);
+        }
+
+        foreach(var arc in _sketch.Arcs())
+        {
+            var state=_selectedSketchEntities.Contains(arc.Id)||_hoverSketchEntityId==arc.Id
+                ?2:arc.Construction?1:baseGeometryState;
+            var sampled=_sketch.SampleArc(arc,32);
+            for(var i=0;i+1<sampled.Count;i++)
+            {
+                var a=_sketch.Plane.SketchToWorld(sampled[i].X,sampled[i].Y);
+                var b=_sketch.Plane.SketchToWorld(sampled[i+1].X,sampled[i+1].Y);
+                _viewer.AddStyledSketchLine(a.X,a.Y,a.Z,b.X,b.Y,b.Z,state);
+            }
+        }
+
+        foreach(var ellipse in _sketch.Ellipses())
+        {
+            var state=_selectedSketchEntities.Contains(ellipse.Id)||_hoverSketchEntityId==ellipse.Id
+                ?2:ellipse.Construction?1:baseGeometryState;
+            var sampled=_sketch.SampleEllipse(ellipse,64);
+            for(var i=0;i<sampled.Count;i++)
+            {
+                var a=_sketch.Plane.SketchToWorld(sampled[i].X,sampled[i].Y);
+                var b=_sketch.Plane.SketchToWorld(sampled[(i+1)%sampled.Count].X,sampled[(i+1)%sampled.Count].Y);
+                _viewer.AddStyledSketchLine(a.X,a.Y,a.Z,b.X,b.Y,b.Z,state);
+            }
         }
 
         foreach (var point in _sketch.Points.Values)
@@ -916,6 +1229,18 @@ public partial class MainWindow : Window
             _viewer.AddStyledSketchPoint(w.X, w.Y, w.Z, state);
         }
 
+        if (_pointerTarget is { Reference.IsPointLike: true } target)
+        {
+            var p=World(target.Position);var size=Math.Max(1e-6,_viewer.PixelToWorldLength(5));
+            foreach(var pair in new[]{(new Point2d(target.Position.X-size,target.Position.Y-size),new Point2d(target.Position.X+size,target.Position.Y+size)),
+                (new Point2d(target.Position.X-size,target.Position.Y+size),new Point2d(target.Position.X+size,target.Position.Y-size))})
+            {
+                var a=World(pair.Item1);var b=World(pair.Item2);
+                _viewer.AddStyledSketchLine(a.X,a.Y,a.Z,b.X,b.Y,b.Z,2);
+            }
+            var label=World(new Point2d(target.Position.X+size*2,target.Position.Y+size*2));
+            _viewer.AddSketchText(label.X,label.Y,label.Z,target.Label,2);
+        }
         foreach (var dimension in _sketch.Dimensions)
             RenderDimension(dimension);
 
@@ -927,10 +1252,29 @@ public partial class MainWindow : Window
     {
         if (_sketch is null) return;
 
-        var state = _selectedSketchDimensionId == dimension.Id ||
+        var state = _selectedBoxDimensions.Contains(dimension.Id) || _selectedSketchDimensionId == dimension.Id ||
                     _hoverSketchDimensionId == dimension.Id
             ? 2
             : 5;
+
+        if (dimension.ReferenceA is not null)
+        {
+            var (a,b) = _sketch.DimensionReferencePoints(dimension);
+            if (dimension.Type == SketchDimensionType.HorizontalDistance)
+            {
+                var q0 = new Point2d(a.X,dimension.LabelPosition.Y); var q1 = new Point2d(b.X,dimension.LabelPosition.Y);
+                AddDimensionLine(a,q0,state); AddDimensionLine(b,q1,state); AddDimensionLine(q0,q1,state);
+                AddDimensionText(dimension.LabelPosition,dimension,state);
+            }
+            else if (dimension.Type == SketchDimensionType.VerticalDistance)
+            {
+                var q0 = new Point2d(dimension.LabelPosition.X,a.Y); var q1 = new Point2d(dimension.LabelPosition.X,b.Y);
+                AddDimensionLine(a,q0,state); AddDimensionLine(b,q1,state); AddDimensionLine(q0,q1,state);
+                AddDimensionText(dimension.LabelPosition,dimension,state);
+            }
+            else RenderAlignedLinearDimension(a,b,dimension.LabelPosition,dimension,state);
+            return;
+        }
 
         if (dimension.Type == SketchDimensionType.LineLength &&
             _sketch.Entity(dimension.EntityA) is SketchLine line)
@@ -980,7 +1324,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (dimension.Type == SketchDimensionType.CircleDiameter &&
+        if (dimension.Type is SketchDimensionType.CircleDiameter or SketchDimensionType.CircleRadius &&
             _sketch.Entity(dimension.EntityA) is SketchCircle circle)
         {
             var center = _sketch.Point(circle.CenterPointId).Position;
@@ -1128,7 +1472,7 @@ public partial class MainWindow : Window
             return new Point2d((a.X + b.X) / 2.0, (a.Y + b.Y) / 2.0);
         }
 
-        if (dimension.Type == SketchDimensionType.CircleDiameter &&
+        if (dimension.Type is SketchDimensionType.CircleDiameter or SketchDimensionType.CircleRadius &&
             _sketch.Entity(dimension.EntityA) is SketchCircle circle)
             return _sketch.Point(circle.CenterPointId).Position;
 
@@ -1162,7 +1506,12 @@ public partial class MainWindow : Window
     {
         if (_sketch is null) return string.Empty;
         var value = _sketch.Measure(dimension);
-        var prefix = dimension.Type == SketchDimensionType.CircleDiameter ? "Ø" : "";
+        var prefix = dimension.Type switch
+        {
+            SketchDimensionType.CircleDiameter => "Ø",
+            SketchDimensionType.CircleRadius => "R",
+            _ => ""
+        };
         var suffix = dimension.Type == SketchDimensionType.Angle ? "°" : "";
         var driven = dimension.Driving ? "" : " (Ref)";
         return $"{prefix}{value:0.###}{suffix}{driven}";
@@ -1185,12 +1534,28 @@ public partial class MainWindow : Window
         RenderSketch();
     }
 
+    private void Trim_Click(object sender,RoutedEventArgs e)
+    {
+        if(_sketch is null)return;
+        ActivateSketchCommand(new TrimSketchCommand(_sketch,Math.Max(1e-6,_viewer.PixelToWorldLength(10))));
+        Status("Çizgi Kırp • Turuncu bölüm silinecek • Çizgi/daire kesişimlerinde durur • Esc: çık");
+    }
+
+    private void SelectTool_Click(object sender,RoutedEventArgs e)
+    {
+        LeaveSketchCommand();
+        _smartDimensionMode=false;
+        ResetSmartDimensionTargets();
+        _viewportPanel.Focus();
+        UpdateSketchPropertyPanel();
+    }
+
     private void LeaveSketchCommand()
     {
         _commandManager.Cancel();
         _sketchCommand = null;
         _viewer.ClearPreview();
-        Status("Seçim modu");
+        Status("Seçim modu • Sol tık: seç • Ctrl: seçime ekle • Delete: sil • Esc: araçtan çık");
     }
 
     private void UpdateSketchPropertyPanel()
@@ -1242,6 +1607,10 @@ public partial class MainWindow : Window
 
     private string RelationText(SketchRelation relation)
     {
+        if (relation.Type==SketchRelationType.Symmetric && relation.ReferenceA is not null && relation.ReferenceB is not null && relation.ReferenceC is not null)
+            return $"Simetrik • {relation.ReferenceA.Kind}:{relation.ReferenceA.Id} ↔ {relation.ReferenceB.Kind}:{relation.ReferenceB.Id} • eksen {relation.ReferenceC.Kind}:{relation.ReferenceC.Id}";
+        if (relation.ReferenceA is not null)
+            return $"{relation.Type} • {relation.ReferenceA.Kind}:{relation.ReferenceA.Id} ↔ {relation.ReferenceB!.Kind}:{relation.ReferenceB.Id}";
         return relation.Type switch
         {
             SketchRelationType.Horizontal => $"Yatay • E{relation.EntityA}",
@@ -1250,6 +1619,8 @@ public partial class MainWindow : Window
             SketchRelationType.Parallel => $"Paralel • E{relation.EntityA} ↔ E{relation.EntityB}",
             SketchRelationType.Perpendicular => $"Dik • E{relation.EntityA} ↔ E{relation.EntityB}",
             SketchRelationType.Equal => $"Eşit • E{relation.EntityA} ↔ E{relation.EntityB}",
+            SketchRelationType.Collinear => $"Eşdoğrusal • E{relation.EntityA} ↔ E{relation.EntityB}",
+            SketchRelationType.Concentric => $"Eşmerkezli • E{relation.EntityA} ↔ E{relation.EntityB}",
             SketchRelationType.Fixed => $"Sabit • P{relation.PointA}",
             _ => relation.Type.ToString()
         };
@@ -1257,6 +1628,30 @@ public partial class MainWindow : Window
 
     private void SmartDimension_Click(object sender, RoutedEventArgs e)
         => StartSmartDimensionMode();
+
+    private void RadiusSketchDimension_Click(object sender,RoutedEventArgs e)
+    {
+        if(_sketch is null||!_inSketch)return;
+        var refs=CurrentSketchReferences();
+        if(refs.Length!=1||refs[0].Kind!=GeometryReferenceKind.Circle||
+           _sketch.Entity(refs[0].Id) is not SketchCircle circle)
+        {
+            Status("Yarıçap ölçüsü için tek bir daire seçin.");
+            return;
+        }
+        var before=_sketch.CaptureSnapshot();
+        var center=_sketch.Point(circle.CenterPointId).Position;
+        var label=new Point2d(center.X+circle.Radius*1.5,center.Y+circle.Radius*0.75);
+        var dimension=_sketch.AddDimension(SketchDimensionType.CircleRadius,label,entityA:circle.Id);
+        RenderSketch();
+        if(EditDimension(dimension.Id,removeOnCancel:true))
+        {
+            _sketchUndo.Push(before);_sketchRedo.Clear();
+            Status($"R{_sketch.Measure(_sketch.Dimension(dimension.Id)!):0.###} sürücü yarıçap ölçüsü oluşturuldu.");
+        }
+        else _sketch.RestoreSnapshot(before);
+        RenderSketch();UpdateSketchPropertyPanel();
+    }
 
     private void StartSmartDimensionMode()
     {
@@ -1266,22 +1661,8 @@ public partial class MainWindow : Window
         _smartDimensionMode = true;
         ResetSmartDimensionTargets();
 
-        // SOLIDWORKS benzeri selection-first davranışı:
-        // Kullanıcı geometriyi önce seçip sonra Smart Dimension'a basabilir.
-        var preselectedEntities = _selectedSketchEntities
-            .Where(id => _sketch.Entity(id) is SketchLine or SketchCircle)
-            .Take(2)
-            .ToList();
-        var preselectedPoints = _selectedSketchPoints.Take(2).ToList();
-
-        if (preselectedEntities.Count > 0)
-            _smartDimensionEntities.AddRange(preselectedEntities);
-        else if (preselectedPoints.Count > 0)
-            _smartDimensionPoints.AddRange(preselectedPoints);
-
-        _smartDimensionWaitingPlacement =
-            _smartDimensionEntities.Count >= 1 ||
-            _smartDimensionPoints.Count >= 2;
+        _viewportContextMenu.Close();
+        _dimensionSession.Preselect(CurrentSketchReferences());
 
         PropertyTitle.Text = "Akıllı Ölçülendirme";
         PropertyInfo.Text =
@@ -1293,7 +1674,7 @@ public partial class MainWindow : Window
 
         if (_smartDimensionWaitingPlacement)
             Status("Akıllı Ölçülendirme: ölçünün konumunu tıklayın.");
-        else if (_smartDimensionPoints.Count == 1)
+        else if (_dimensionSession.References.Count == 1)
             Status("Akıllı Ölçülendirme: ikinci noktayı seçin.");
         else
             Status("Akıllı Ölçülendirme: çizgi, daire veya iki nokta seçin.");
@@ -1303,9 +1684,13 @@ public partial class MainWindow : Window
     {
         if (!_inSketch) return;
         LeaveSketchCommand();
+        _smartDimensionMode = false;
+        ResetSmartDimensionTargets();
         ManagerTabs.SelectedItem = PropertyManagerTab;
         UpdateSketchPropertyPanel();
-        Status("Çizim ilişkileri: geometriyi seçip ilişki düğmesini kullanın.");
+        if(CurrentSketchReferences().Length==0)
+            Status("İlişki için Ctrl ile geometri seçin; Ctrl bırakıldığında seçenekler açılır.");
+        else ShowSelectionContext();
     }
 
     private void HorizontalRelation_Click(object sender, RoutedEventArgs e)
@@ -1326,28 +1711,46 @@ public partial class MainWindow : Window
     private void EqualRelation_Click(object sender, RoutedEventArgs e)
         => ApplySketchRelation(SketchRelationType.Equal);
 
+    private void TangentRelation_Click(object sender, RoutedEventArgs e)
+        => ApplySketchRelation(SketchRelationType.Tangent);
+
+    private void MidpointRelation_Click(object sender, RoutedEventArgs e)
+        => ApplySketchRelation(SketchRelationType.Midpoint);
+
+    private void SymmetricRelation_Click(object sender, RoutedEventArgs e)
+        => ApplySketchRelation(SketchRelationType.Symmetric);
+
     private void FixRelation_Click(object sender, RoutedEventArgs e)
         => ApplySketchRelation(SketchRelationType.Fixed);
+
+    private void CollinearRelation_Click(object sender, RoutedEventArgs e)
+        => ApplySketchRelation(SketchRelationType.Collinear);
+
+    private void ConcentricRelation_Click(object sender, RoutedEventArgs e)
+        => ApplySketchRelation(SketchRelationType.Concentric);
 
     private void ApplySketchRelation(SketchRelationType type)
     {
         if (_sketch is null || !_inSketch) return;
 
-        var ok = _sketch.ApplyRelationToSelection(
-            type,
-            _selectedSketchEntities.OrderBy(x => x).ToList(),
-            _selectedSketchPoints.OrderBy(x => x).ToList());
+        var before = _sketch.CaptureSnapshot();
+        var references = CurrentSketchReferences();
+        var ok = _sketch.ApplyReferenceRelation(type, references);
 
         if (!ok)
         {
             Status(type switch
             {
                 SketchRelationType.Horizontal or SketchRelationType.Vertical =>
-                    "Bu ilişki için tek bir çizgi seçin.",
+                    "Tek çizgi veya iki nokta/merkez/Origin referansı seçin.",
                 SketchRelationType.Coincident =>
                     "Çakışık için iki nokta seçin (Ctrl ile çoklu seçim).",
-                SketchRelationType.Parallel or SketchRelationType.Perpendicular or SketchRelationType.Equal =>
-                    "Bu ilişki için iki obje seçin (Ctrl ile çoklu seçim).",
+                SketchRelationType.Parallel or SketchRelationType.Perpendicular or SketchRelationType.Equal or SketchRelationType.Collinear =>
+                    "Bu ilişki için iki çizgi seçin (Ctrl ile çoklu seçim).",
+                SketchRelationType.Concentric =>
+                    "Eşmerkezli için iki daire seçin (Ctrl ile çoklu seçim).",
+                SketchRelationType.Symmetric =>
+                    "Simetrik için iki nokta ve bir Merkez Çizgisi seçin (Ctrl ile çoklu seçim).",
                 SketchRelationType.Fixed =>
                     "Sabitlemek için en az bir nokta seçin.",
                 _ => "Seçim bu ilişkiye uygun değil."
@@ -1355,6 +1758,8 @@ public partial class MainWindow : Window
             return;
         }
 
+        _sketchUndo.Push(before);
+        _sketchRedo.Clear();
         _sketch.SolveRelations();
         RenderSketch();
         UpdateSketchPropertyPanel();
@@ -1367,10 +1772,7 @@ public partial class MainWindow : Window
         if (_sketch is null || SketchRelationsList.SelectedItem is not ListBoxItem item || item.Tag is not int relationId)
             return;
 
-        _sketch.RemoveRelation(relationId);
-        _sketch.SolveRelations();
-        RenderSketch();
-        UpdateSketchPropertyPanel();
+        CommitSketchDeletion(relations: new[] { relationId });
         Status($"R{relationId} ilişkisi silindi.");
     }
 
@@ -1387,13 +1789,29 @@ public partial class MainWindow : Window
 
     private void StartSketch_Click(object sender, RoutedEventArgs e)
     {
-        if (_hasSolid)
+        if (_inSketch || _extrudeCommandActive) return;
+
+        // SolidWorks-like workflow: once a body exists, "Çizim" means create a
+        // new sketch on the selected planar face or standard plane. Existing
+        // sketches are edited from FeatureManager (double-click / context edit).
+        if (_hasSolid || _partSession is not null)
         {
-            Status("V1.2 Alpha taban katı oluştuktan sonra yeni yüz sketch'i henüz desteklemiyor. Yeni Parça ile başlayın.");
+            NewProfileSketch_Click(sender,e);
             return;
         }
 
         _sketch ??= new SketchModel(_selectedPlane);
+        if (!_inSketch)
+        {
+            if (!_hasSolid) _featureHistory.Clear();
+            _sketchUndo.Clear();
+            _sketchRedo.Clear();
+        }
+        BeginSketchInteraction();
+    }
+
+    private void BeginSketchInteraction()
+    {
         _inSketch = true;
         _smartDimensionMode = false;
         ResetSmartDimensionTargets();
@@ -1412,7 +1830,7 @@ public partial class MainWindow : Window
         SketchTab.IsEnabled = true;
         CommandTabs.SelectedItem = SketchTab;
 
-        if (_sketchNode is null)
+        if (_partSession is null && _sketchNode is null)
         {
             _sketchNode = new TreeViewItem { Header = "Çizim1", Tag = "sketch:1" };
             PartNode.Items.Add(_sketchNode);
@@ -1421,7 +1839,7 @@ public partial class MainWindow : Window
         var p = _sketch.Plane;
         _viewer.SetNormalView(p.Normal.X, p.Normal.Y, p.Normal.Z, p.V.X, p.V.Y, p.V.Z);
         RenderSketch();
-        _viewer.FitAll();
+        if(_partSession is null)_viewer.FitAll();
         PropertyTitle.Text = "Çizim1";
         PropertyInfo.Text = $"{p.Name} üzerinde gerçek 3B sketch. Origin ve mevcut endpoint'ler otomatik yakalanır.";
         ManagerTabs.SelectedItem = PropertyManagerTab;
@@ -1432,6 +1850,63 @@ public partial class MainWindow : Window
     private void ExitSketch_Click(object sender, RoutedEventArgs e)
     {
         if (!_inSketch) return;
+        if (_graphSketchEdit is not null && !CommitGraphSketch()) return;
+        if (_sourceSketchEditBefore is { } before)
+        {
+            var after = CaptureFeatureState();
+            if (!SameSketch(before.Sketch, after.Sketch))
+            {
+                if (!_featureHistory.TryCommit(before, after, ApplyFeatureState))
+                {
+                    _viewer.HideCommittedSolid();
+                    RenderSketch();
+                    Status("Kaynak çizimden katı oluşturulamadı. Çizimi düzeltin veya Düzenlemeyi İptal Et ile eski katıya dönün.");
+                    return;
+                }
+            }
+            _viewer.ShowCommittedSolid();
+            _viewer.ClearSketch();
+            _viewer.ClearPreview();
+            _sourceSketchEditBefore = null;
+        }
+        FinishSketchInteraction();
+
+        if(_pendingSheetMetalBaseAfterSketch)
+        {
+            _pendingSheetMetalBaseAfterSketch=false;
+            if(!EnsurePartSession()||_partSession is null)
+            {
+                Status("Sac Oluştur için çizim FeatureManager'a aktarılamadı.");
+                return;
+            }
+
+            var sheetSketch=BaseFlangeSketchCandidate();
+            if(sheetSketch is null)
+            {
+                Status("Sac Oluştur için kapalı bir profil gerekiyor. Çizimi kapalı hale getirip Sac Oluştur'a tekrar basın.");
+                return;
+            }
+
+            BeginSheetMetalBaseFeature(new FeatureNode(
+                Guid.NewGuid(),NextGraphName("Taban Flanş"),
+                new SheetMetalBaseFeatureParameters(sheetSketch.Id,2,2,0.5,false)));
+            Status("Kapalı çizim hazır • Taban Flanş parametrelerini onaylayın.");
+            return;
+        }
+
+        if(_partSession is not null){Status("Çizim onaylandı; bağımlı feature grafiği yeniden oluşturuldu.");return;}
+        if (_hasSolid)
+            Status("Çizim düzenlemesi uygulandı • bağımlı Ekstrüzyon1 yeniden oluşturuldu • Ctrl+Z ile geri alın.");
+        else if (_sketch is not null && _sketch.TryGetExtrusionRegions(out var regions) && regions.Count>0)
+            Status($"Çizimden çıkıldı • {regions.Count} kapalı malzeme bölgesi hazır • Ekstrüzyon kullanılabilir.");
+        else
+            Status("Çizimden çıkıldı • ekstrüzyon için geçerli kapalı bölge gerekiyor.");
+
+        RefreshCommandState();
+    }
+
+    private void FinishSketchInteraction()
+    {
         LeaveSketchCommand();
         _inSketch = false;
         _smartDimensionMode = false;
@@ -1443,17 +1918,51 @@ public partial class MainWindow : Window
         CommandTabs.SelectedItem = FeaturesTab;
         ManagerTabs.SelectedItem = FeatureManagerTab;
 
-        if (_sketch is not null && (_sketch.TryGetClosedPolyline(out _) || _sketch.TryGetSingleCircle(out _)))
-            Status("Çizimden çıkıldı • kapalı profil hazır • Ekstrüzyon kullanılabilir.");
-        else
-            Status("Çizimden çıkıldı • ekstrüzyon için tek kapalı profil gerekiyor.");
-
         RefreshCommandState();
+    }
+
+    private void CancelSourceSketchEdit_Click(object sender, RoutedEventArgs e)
+    {
+        if(_graphSketchEdit is not null){CancelGraphSketch();return;}
+        if (_sourceSketchEditBefore is not { } before || _sketch is null) return;
+        _sketch.RestoreSnapshot(before.Sketch,notifyChange:true);
+        MarkSourceSketchDirty();
+        // Exit sees the unchanged snapshot: no rebuild and no history entry.
+        ExitSketch_Click(sender, e);
+        Status("Çizim düzenlemesi iptal edildi • önceki katı ve parametreler korundu.");
+    }
+
+    private void CommandFamily_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button || button.ContextMenu is null) return;
+        button.ContextMenu.PlacementTarget = button;
+        button.ContextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+        button.ContextMenu.IsOpen = true;
+    }
+
+    private void Point_Click(object sender,RoutedEventArgs e)
+    {
+        if(_sketch is not null)ActivateSketchCommand(new PointSketchCommand(_sketch));
     }
 
     private void Line_Click(object sender, RoutedEventArgs e)
     {
         if (_sketch is not null) ActivateSketchCommand(new LineSketchCommand(_sketch));
+    }
+
+    private void ThreePointCircle_Click(object sender,RoutedEventArgs e)
+    {
+        if (_sketch is not null) ActivateSketchCommand(new ThreePointCircleCommand(_sketch));
+    }
+
+    private void ThreePointRectangle_Click(object sender,RoutedEventArgs e)
+    {
+        if (_sketch is not null) ActivateSketchCommand(new ThreePointRectangleCommand(_sketch));
+    }
+
+    private void Centerline_Click(object sender, RoutedEventArgs e)
+    {
+        if (_sketch is not null) ActivateSketchCommand(new LineSketchCommand(_sketch, construction: true));
     }
 
     private void CornerRectangle_Click(object sender, RoutedEventArgs e)
@@ -1471,50 +1980,170 @@ public partial class MainWindow : Window
         if (_sketch is not null) ActivateSketchCommand(new CircleSketchCommand(_sketch));
     }
 
-    private void Extrude_Click(object sender, RoutedEventArgs e)
+    private void Arc_Click(object sender,RoutedEventArgs e)
     {
-        if (_sketch is null || _inSketch) return;
-        if (!_sketch.TryGetExtrusionProfile(out _, out _) && !_sketch.TryGetSingleCircle(out _))
+        if(_sketch is not null)ActivateSketchCommand(new CenterArcSketchCommand(_sketch));
+    }
+
+    private void ThreePointArc_Click(object sender,RoutedEventArgs e)
+    {
+        if(_sketch is not null)ActivateSketchCommand(new ThreePointArcCommand(_sketch));
+    }
+
+    private void Slot_Click(object sender,RoutedEventArgs e)
+    {
+        if(_sketch is not null)ActivateSketchCommand(new StraightSlotSketchCommand(_sketch));
+    }
+
+    private void Ellipse_Click(object sender,RoutedEventArgs e)
+    {
+        if(_sketch is not null)ActivateSketchCommand(new EllipseSketchCommand(_sketch));
+    }
+
+    private void Polygon_Click(object sender,RoutedEventArgs e)
+    {
+        if(_sketch is null)return;
+        var sides=6;
+        var dialog=new DimensionEditDialog("Çokgen Kenar Sayısı",sides,"kenar",text=>
         {
-            Status("Ekstrüzyon için kapalı dış profil gerekiyor. İç daireler delik olarak kullanılabilir.");
-            return;
+            if(!int.TryParse(text,NumberStyles.Integer,CultureInfo.CurrentCulture,out var parsed)||parsed<3||parsed>100)
+                return "Kenar sayısı 3 ile 100 arasında tam sayı olmalı.";
+            sides=parsed;return null;
+        }){Owner=this};
+        if(dialog.ShowDialog()!=true)return;
+        ActivateSketchCommand(new PolygonSketchCommand(_sketch,sides));
+    }
+
+    private bool PromptSketchNumber(string title,string unit,double initial,Func<double,bool> valid,out double value)
+    {
+        var result=initial;
+        var dialog=new DimensionEditDialog(title,initial,unit,text=>
+        {
+            if(!DimensionNumbers.TryParseScalar(text,out var parsed)||!valid(parsed))return "Geçerli bir değer girin.";
+            result=parsed;return null;
+        }){Owner=this};
+        var ok=dialog.ShowDialog()==true;value=result;return ok;
+    }
+
+    private void ApplySketchTransform(Func<IReadOnlyList<int>> transform,string success)
+    {
+        if(_sketch is null||!_inSketch)return;
+        var before=_sketch.CaptureSnapshot();
+        try
+        {
+            var created=transform();
+            _sketchUndo.Push(before);_sketchRedo.Clear();
+            _selectedSketchEntities.Clear();
+            foreach(var id in created)_selectedSketchEntities.Add(id);
+            MarkSourceSketchDirty();RenderSketch();UpdateSketchPropertyPanel();RefreshCommandState();Status(success);
         }
-
-        _extrudeCommandActive = true;
-        ExtrudePanel.Visibility = Visibility.Visible;
-        PropertyTitle.Text = "Ekstrüzyon";
-        PropertyInfo.Text = "Kapalı Çizim1 profilini kendi düzlem normalinde gerçek OCCT B-Rep katıya dönüştürür.";
-        ManagerTabs.SelectedItem = PropertyManagerTab;
-        UpdateExtrudePreview();
-        Status("Ekstrüzyon önizlemesi • mouse tekeri: ±10 mm • ✓ ile onaylayın.");
+        catch(Exception ex)
+        {
+            _sketch.RestoreSnapshot(before);RenderSketch();Status(ex.Message);
+        }
     }
 
-    private void ExtrudeDepth_TextChanged(object sender, TextChangedEventArgs e)
+    private void SketchFillet_Click(object sender,RoutedEventArgs e)
     {
-        if (_extrudeCommandActive && IsLoaded) UpdateExtrudePreview();
+        if(_sketch is null||_selectedSketchEntities.Count!=2||
+           _selectedSketchEntities.Select(id=>_sketch.Entity(id)).Any(e=>e is not SketchLine))
+        {Status("Çizim Radyusu için ortak köşeli iki çizgi seçin.");return;}
+        if(!PromptSketchNumber("Çizim Radyusu","mm",5,v=>v>1e-9,out var radius))return;
+        var ids=_selectedSketchEntities.ToArray();
+        ApplySketchTransform(()=>new[]{_sketch.AddSketchFillet(ids[0],ids[1],radius)},
+            $"Çizim radyusu R{radius:0.###} oluşturuldu.");
     }
 
-    private bool TryReadDepth(out double depth)
+    private void SketchChamfer_Click(object sender,RoutedEventArgs e)
     {
-        var text = ExtrudeDepthTextBox.Text.Trim();
-        if (double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out depth)) return true;
-        return double.TryParse(text.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out depth);
+        if(_sketch is null||_selectedSketchEntities.Count!=2||
+           _selectedSketchEntities.Select(id=>_sketch.Entity(id)).Any(e=>e is not SketchLine))
+        {Status("Çizim Pahı için ortak köşeli iki çizgi seçin.");return;}
+        if(!PromptSketchNumber("Çizim Pahı","mm",5,v=>v>1e-9,out var distance))return;
+        var ids=_selectedSketchEntities.ToArray();
+        ApplySketchTransform(()=>new[]{_sketch.AddSketchChamfer(ids[0],ids[1],distance)},
+            $"Çizim pahı {distance:0.###} mm oluşturuldu.");
     }
 
-    private void UpdateExtrudePreview()
+    private void ExtendSketch_Click(object sender,RoutedEventArgs e)
     {
-        if (_sketch is null || !_extrudeCommandActive || !TryReadDepth(out var depth) || Math.Abs(depth) < 1e-9)
-            return;
+        if(_sketch is null||_selectedSketchEntities.Count==0){Status("Uzat için çizgi seçin.");return;}
+        var ids=_selectedSketchEntities.ToArray();
+        ApplySketchTransform(()=>
+        {
+            _sketch.ExtendLinesToNearest(ids);
+            return ids;
+        },"Seçili çizgiler en yakın çizgi/daire sınırına uzatıldı.");
+    }
+
+    private void OffsetSketch_Click(object sender,RoutedEventArgs e)
+    {
+        if(_sketch is null||_selectedSketchEntities.Count==0){Status("Ofset için çizgi veya daire seçin.");return;}
+        if(!PromptSketchNumber("Ofset Mesafesi","mm",10,v=>Math.Abs(v)>1e-9,out var distance))return;
+        var ids=_selectedSketchEntities.ToArray();
+        ApplySketchTransform(()=>_sketch.OffsetEntities(ids,distance),$"Seçili geometri {distance:0.###} mm ofsetlendi.");
+    }
+
+    private void MirrorSketch_Click(object sender,RoutedEventArgs e)
+    {
+        if(_sketch is null)return;
+        var axes=_selectedSketchEntities.Select(id=>_sketch.Entity(id)).OfType<SketchLine>().Where(l=>l.Construction).ToArray();
+        if(axes.Length!=1){Status("Aynala için aynalanacak geometriyle birlikte tam bir Merkez Çizgisi seçin.");return;}
+        var source=_selectedSketchEntities.Where(id=>id!=axes[0].Id).ToArray();
+        ApplySketchTransform(()=>_sketch.MirrorEntities(source,axes[0].Id),"Seçili çizim geometrisi merkez çizgisine göre aynalandı.");
+    }
+
+    private void LinearSketchPattern_Click(object sender,RoutedEventArgs e)
+    {
+        if(_sketch is null||_selectedSketchEntities.Count==0){Status("Doğrusal dizilim için geometri seçin.");return;}
+        if(!PromptSketchNumber("Dizilim Adedi","adet",3,v=>v>=2&&v<=500&&Math.Abs(v-Math.Round(v))<1e-9,out var countValue))return;
+        if(!PromptSketchNumber("Dizilim Aralığı","mm",20,v=>v>1e-9,out var spacing))return;
+        var axis=_selectedSketchEntities.Select(id=>_sketch.Entity(id)).OfType<SketchLine>().FirstOrDefault(l=>l.Construction);
+        double dx=1,dy=0;
+        var ids=_selectedSketchEntities.AsEnumerable();
+        if(axis is not null)
+        {
+            var a=_sketch.Point(axis.StartPointId).Position;var b=_sketch.Point(axis.EndPointId).Position;
+            dx=b.X-a.X;dy=b.Y-a.Y;ids=ids.Where(id=>id!=axis.Id);
+        }
+        var source=ids.ToArray();var count=(int)Math.Round(countValue);
+        ApplySketchTransform(()=>_sketch.LinearPatternEntities(source,dx,dy,spacing,count),$"{count} adet doğrusal çizim dizilimi oluşturuldu.");
+    }
+
+    private void CircularSketchPattern_Click(object sender,RoutedEventArgs e)
+    {
+        if(_sketch is null||_selectedSketchEntities.Count==0){Status("Dairesel dizilim için geometri seçin.");return;}
+        if(!PromptSketchNumber("Dizilim Adedi","adet",4,v=>v>=2&&v<=500&&Math.Abs(v-Math.Round(v))<1e-9,out var countValue))return;
+        if(!PromptSketchNumber("Toplam Açı","°",360,v=>v>1e-9&&v<=360,out var angle))return;
+        var center=_selectedSketchPoints.Count==1?_sketch.Point(_selectedSketchPoints.Single()).Position:_sketch.Point(0).Position;
+        var count=(int)Math.Round(countValue);var source=_selectedSketchEntities.ToArray();
+        ApplySketchTransform(()=>_sketch.CircularPatternEntities(source,center,angle,count),$"{count} adet dairesel çizim dizilimi oluşturuldu.");
+    }
+
+    private bool RebuildExtrusion(double depth)
+    {
+        if (_sketch is null || !double.IsFinite(depth) || Math.Abs(depth) < 1e-9) return false;
 
         var p = _sketch.Plane;
         bool ok;
-        if (_sketch.TryGetExtrusionProfile(out var loop, out var holes))
+        if (_sketch.TryGetExtrusionProfile(out var loop, out var polygonHoles, out var holes))
         {
             var uv = new double[loop.Count * 2];
             for (var i = 0; i < loop.Count; i++)
             {
                 uv[i * 2] = loop[i].X;
                 uv[i * 2 + 1] = loop[i].Y;
+            }
+
+            var polygonHoleData = new List<double>();
+            foreach (var hole in polygonHoles)
+            {
+                polygonHoleData.Add(hole.Count);
+                foreach (var point in hole)
+                {
+                    polygonHoleData.Add(point.X);
+                    polygonHoleData.Add(point.Y);
+                }
             }
 
             var holeData = new double[holes.Count * 3];
@@ -1527,7 +2156,166 @@ public partial class MainWindow : Window
                 holeData[i * 3 + 2] = circle.Radius;
             }
 
-            ok = _viewer.PreviewExtrudeProfile(uv, holeData,
+            ok = _viewer.PreviewExtrudeProfile(uv, polygonHoleData.ToArray(), holeData,
+                p.Origin.X, p.Origin.Y, p.Origin.Z,
+                p.U.X, p.U.Y, p.U.Z,
+                p.V.X, p.V.Y, p.V.Z,
+                p.Normal.X, p.Normal.Y, p.Normal.Z,
+                depth);
+        }
+        else if (_sketch.TryGetSingleCircle(out var circle))
+        {
+            var center = _sketch.Point(circle.CenterPointId).Position;
+            ok = _viewer.PreviewExtrudeCircle(center.X, center.Y, circle.Radius,
+                p.Origin.X, p.Origin.Y, p.Origin.Z,
+                p.U.X, p.U.Y, p.U.Z,
+                p.V.X, p.V.Y, p.V.Z,
+                p.Normal.X, p.Normal.Y, p.Normal.Z,
+                depth);
+        }
+        else return false;
+
+        if (!ok || !_viewer.CommitExtrusion()) return false;
+        _extrudeDepth = depth;
+        _hasSolid = true;
+        if(_extrudeNode is not null)_extrudeNode.Header="Ekstrüzyon1";
+        if(_sketchNode is not null)_sketchNode.Header="Çizim1";
+        _viewer.ClearSketch();
+        _viewer.ClearPreview();
+        _viewer.SetSelectionMode(CadSelectionMode.Face);
+        return true;
+    }
+
+    private ExtrusionState CaptureFeatureState()
+        => new(_sketch!.Plane, _sketch.CaptureSnapshot(), _hasSolid ? _extrudeDepth : null);
+
+    private bool ApplyFeatureState(ExtrusionState state)
+    {
+        var previousSketch = _sketch;
+        var candidate = new SketchModel(state.Plane);
+        candidate.RestoreSnapshot(state.Sketch);
+        _sketch = candidate;
+        if (state.Depth is double depth)
+        {
+            if (!RebuildExtrusion(depth))
+            {
+                _sketch = previousSketch;
+                _viewer.CancelExtrusionPreview();
+                _viewer.ShowCommittedSolid();
+                return false;
+            }
+            EnsureExtrudeNode();
+        }
+        else
+        {
+            _viewer.ClearModel();
+            _hasSolid = false;
+            if (_extrudeNode is not null) PartNode.Items.Remove(_extrudeNode);
+            _extrudeNode = null;
+            RenderSketch();
+        }
+        ResetSketchInteraction();
+        ClearSketchSelection(false);
+        RefreshCommandState();
+        return true;
+    }
+
+    private void EnsureExtrudeNode()
+    {
+        if (_extrudeNode is not null) return;
+        _extrudeNode = new TreeViewItem { Header = "Ekstrüzyon1", Tag = "feature:extrude1" };
+        PartNode.Items.Add(_extrudeNode);
+    }
+
+    private void UndoFeature()
+    {
+        if(_partSession is not null){GraphUndo(false);return;}
+        Status(_featureHistory.TryUndo(ApplyFeatureState)?"Özellik işlemi geri alındı.":"Geri alınacak işlem yok veya rebuild başarısız.");
+    }
+    private void RedoFeature()
+    {
+        if(_partSession is not null){GraphUndo(true);return;}
+        Status(_featureHistory.TryRedo(ApplyFeatureState)?"Özellik işlemi yinelendi.":"Yinelenecek işlem yok veya rebuild başarısız.");
+    }
+
+    private void DeleteExtrusionFeature()
+    {
+        if (_sketch is null || !_hasSolid || _extrudeCommandActive) return;
+        var before = CaptureFeatureState();
+        var after = before with { Depth = null };
+        if (!ApplyFeatureState(after)) return;
+        _featureHistory.Record(before, after);
+        Status("Ekstrüzyon1 silindi; Çizim1 korundu • Ctrl+Z ile geri alın.");
+    }
+
+    private void Extrude_Click(object sender, RoutedEventArgs e)
+    {
+        if(_inSketch||_extrudeCommandActive)return;
+        if(!EnsurePartSession()||_partSession is null)
+        {
+            Status("Ekstrüzyon için geçerli kapalı Çizim seçin.");
+            return;
+        }
+        BeginGraphExtrude();
+    }
+
+    private void ExtrudeDepth_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_extrudeCommandActive && IsLoaded) UpdateExtrudePreview();
+    }
+
+    private bool TryReadDepth(out double depth)
+    {
+        var text = ExtrudeDepthTextBox.Text.Trim();
+        var parsed = double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out depth) ||
+                     double.TryParse(text.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out depth);
+        return parsed && double.IsFinite(depth) && Math.Abs(depth) >= 1e-9;
+    }
+
+    private void UpdateExtrudePreview()
+    {
+        if (_sketch is null || !_extrudeCommandActive) return;
+        // Invalid input must invalidate the old candidate; OK cannot commit stale geometry.
+        _viewer.CancelExtrusionPreview();
+        if (!TryReadDepth(out var depth))
+        {
+            Status("Sonlu, sıfırdan farklı bir derinlik girin.");
+            return;
+        }
+
+        var p = _sketch.Plane;
+        bool ok;
+        if (_sketch.TryGetExtrusionProfile(out var loop, out var polygonHoles, out var holes))
+        {
+            var uv = new double[loop.Count * 2];
+            for (var i = 0; i < loop.Count; i++)
+            {
+                uv[i * 2] = loop[i].X;
+                uv[i * 2 + 1] = loop[i].Y;
+            }
+
+            var polygonHoleData = new List<double>();
+            foreach (var hole in polygonHoles)
+            {
+                polygonHoleData.Add(hole.Count);
+                foreach (var point in hole)
+                {
+                    polygonHoleData.Add(point.X);
+                    polygonHoleData.Add(point.Y);
+                }
+            }
+
+            var holeData = new double[holes.Count * 3];
+            for (var i = 0; i < holes.Count; i++)
+            {
+                var circle = holes[i];
+                var center = _sketch.Point(circle.CenterPointId).Position;
+                holeData[i * 3] = center.X;
+                holeData[i * 3 + 1] = center.Y;
+                holeData[i * 3 + 2] = circle.Radius;
+            }
+
+            ok = _viewer.PreviewExtrudeProfile(uv, polygonHoleData.ToArray(), holeData,
                 p.Origin.X, p.Origin.Y, p.Origin.Z,
                 p.U.X, p.U.Y, p.U.Z,
                 p.V.X, p.V.Y, p.V.Z,
@@ -1551,25 +2339,27 @@ public partial class MainWindow : Window
 
     private void ExtrudeOk_Click(object sender, RoutedEventArgs e)
     {
-        if (!_extrudeCommandActive) return;
+        if (!_extrudeCommandActive || _sketch is null || !TryReadDepth(out var committedDepth)) return;
+        var beforeFeature = CaptureFeatureState();
+        UpdateExtrudePreview();
         if (!_viewer.CommitExtrusion())
         {
             Status("Ekstrüzyon onaylanamadı.");
             return;
         }
 
+        _extrudeDepth = committedDepth;
         _hasSolid = true;
+        if (beforeFeature.Depth is null || Math.Abs(beforeFeature.Depth.Value - committedDepth) > 1e-9)
+            _featureHistory.Record(beforeFeature, CaptureFeatureState());
+        _editingExtrude = false;
         _extrudeCommandActive = false;
         ExtrudePanel.Visibility = Visibility.Collapsed;
         _viewer.ClearSketch();
         _viewer.ClearPreview();
         _viewer.SetSelectionMode(CadSelectionMode.Face);
 
-        if (_extrudeNode is null)
-        {
-            _extrudeNode = new TreeViewItem { Header = "Ekstrüzyon1", Tag = "feature:extrude1" };
-            PartNode.Items.Add(_extrudeNode);
-        }
+        EnsureExtrudeNode();
 
         ManagerTabs.SelectedItem = FeatureManagerTab;
         Status("Ekstrüzyon1 oluşturuldu • gerçek OCCT B-Rep katı • yüz seçimi aktif.");
@@ -1580,16 +2370,99 @@ public partial class MainWindow : Window
 
     private void CancelExtrude()
     {
+        if(_graphFeatureEdit is not null){EndGraphFeature();return;}
         _viewer.CancelExtrusionPreview();
+        if (_editingExtrude)
+        {
+            _viewer.ShowCommittedSolid();
+            _hasSolid = true;
+            _editingExtrude = false;
+            Status($"Ekstrüzyon1 düzenlemesi iptal edildi • önceki {_extrudeDepth:0.###} mm katı geri yüklendi.");
+        }
+        else
+        {
+            Status("Ekstrüzyon iptal edildi.");
+        }
+
         _extrudeCommandActive = false;
         ExtrudePanel.Visibility = Visibility.Collapsed;
         ManagerTabs.SelectedItem = FeatureManagerTab;
-        Status("Ekstrüzyon iptal edildi.");
+        RefreshCommandState();
+    }
+
+    private void FeatureTree_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if(FeatureTree.SelectedItem is TreeViewItem materialItem&&materialItem.Tag as string=="material")
+        {BeginMaterialEdit();e.Handled=true;return;}
+        if(_partSession is not null&&SelectedGraphId is Guid id){EditGraphFeature(id);e.Handled=true;return;}
+        if (_inSketch || _extrudeCommandActive) return;
+        if (FeatureTree.SelectedItem is TreeViewItem sketchItem && sketchItem.Tag as string == "sketch:1")
+        {
+            StartSketch_Click(sender, e);
+            e.Handled = true;
+            return;
+        }
+        if (FeatureTree.SelectedItem is not TreeViewItem item ||
+            item.Tag is not string tag ||
+            tag != "feature:extrude1" ||
+            _sketch is null ||
+            !_hasSolid)
+            return;
+
+        // Keep the last committed B-Rep alive so Cancel/Escape is lossless.
+        // Only hide its presentation while the candidate replacement is previewed.
+        _viewer.HideCommittedSolid();
+        _editingExtrude = true;
+        _depthWheel.Reset();
+        _extrudeCommandActive = true;
+        ExtrudeDepthTextBox.Text = _extrudeDepth.ToString("0.###", CultureInfo.CurrentCulture);
+        ExtrudePanel.Visibility = Visibility.Visible;
+        PropertyTitle.Text = "Ekstrüzyon1";
+        PropertyInfo.Text = "Mevcut özelliği düzenliyorsunuz. Derinliği değiştirin; önizleme gerçek B-Rep katıyı yeniden oluşturur.";
+        ManagerTabs.SelectedItem = PropertyManagerTab;
+        UpdateExtrudePreview();
+        Status($"Ekstrüzyon1 düzenleniyor • {_extrudeDepth:0.###} mm • mouse tekeri ±10 mm • ✓ ile onaylayın.");
+        e.Handled = true;
     }
 
     private void FeatureTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
+        if(_partSession is not null)RefreshCommandState();
+        if(e.NewValue is TreeViewItem graphItem&&graphItem.Tag is Guid graphId&&
+           _partSession?.Document.Features.FirstOrDefault(f=>f.Id==graphId) is FeatureNode graphNode)
+        {
+            switch(graphNode.Parameters)
+            {
+                case ReferencePlaneFeatureParameters referencePlane:
+                    _selectedPlane=ReferencePlaneFrame(referencePlane,graphNode.Name);
+                    _viewer.ClearSelection();
+                    PropertyTitle.Text=graphNode.Name;
+                    PropertyInfo.Text=$"Referans düzlem • {referencePlane.BasePlane.Name} • Ofset {referencePlane.Offset:0.###} mm";
+                    Status(graphNode.Name+" seçildi • Çizim/Dik Bak/Aynala/Draft için kullanılabilir.");
+                    return;
+                case ReferenceAxisFeatureParameters axis:
+                    PropertyTitle.Text=graphNode.Name;
+                    PropertyInfo.Text=$"Referans ekseni • O({axis.Origin.X:0.###},{axis.Origin.Y:0.###},{axis.Origin.Z:0.###}) • Yön({axis.Direction.X:0.###},{axis.Direction.Y:0.###},{axis.Direction.Z:0.###})";
+                    Status(graphNode.Name+" seçildi • Dairesel Dizilim ekseni olarak kullanılabilir.");
+                    return;
+                case ReferencePointFeatureParameters point:
+                    PropertyTitle.Text=graphNode.Name;
+                    PropertyInfo.Text=$"Referans noktası • X={point.Position.X:0.###}, Y={point.Position.Y:0.###}, Z={point.Position.Z:0.###}";
+                    Status(graphNode.Name+" seçildi.");
+                    return;
+            }
+        }
         if (e.NewValue is not TreeViewItem item || item.Tag is not string tag) return;
+        if(tag=="material"&&_partSession is not null)
+        {
+            var material=_partSession.Document.Properties??PartProperties.Default;
+            PropertyTitle.Text="Malzeme";
+            PropertyInfo.Text=material.DensityGPerCm3>0
+                ?$"{material.MaterialName} • {material.DensityGPerCm3:0.###} g/cm³ • düzenlemek için çift tıklayın."
+                :"Malzeme belirlenmedi • düzenlemek için çift tıklayın.";
+            Status("Malzeme seçildi • çift tıklayarak düzenleyin.");
+            return;
+        }
         switch (tag)
         {
             case "plane:front": _selectedPlane = StandardPlanes.Front; break;
@@ -1597,47 +2470,161 @@ public partial class MainWindow : Window
             case "plane:right": _selectedPlane = StandardPlanes.Right; break;
             default: return;
         }
+        _viewer.ClearSelection();
         PropertyTitle.Text = item.Header?.ToString() ?? "Düzlem";
         PropertyInfo.Text = "Çizim komutu başladığında sketch bu düzlemin gerçek 3B frame'i üzerinde oluşturulur.";
-        Status($"{_selectedPlane.Name} seçildi.");
+        Status($"{_selectedPlane.Name} seçildi • Çizim komutuna basın.");
+    }
+
+    private bool NormalToSelectedSupport()
+    {
+        if (_viewer.TryGetSelectedPlanarFace(out var face))
+        {
+            _viewer.SetNormalView(
+                face.Normal.X,face.Normal.Y,face.Normal.Z,
+                face.V.X,face.V.Y,face.V.Z);
+            _viewer.FitAll();
+            Status("Seçili yüzeye dik bakış • ekran yönü yüz kenarına hizalandı.");
+            return true;
+        }
+
+        if(SelectedGraphNode?.Parameters is ReferencePlaneFeatureParameters referencePlane)
+        {
+            var plane=ReferencePlaneFrame(referencePlane,SelectedGraphNode.Name);
+            _viewer.SetNormalView(plane.Normal.X,plane.Normal.Y,plane.Normal.Z,plane.V.X,plane.V.Y,plane.V.Z);
+            _viewer.FitAll();Status(plane.Name+" • dik bakış");return true;
+        }
+
+        if (FeatureTree.SelectedItem is TreeViewItem item && item.Tag is string tag && tag.StartsWith("plane:",StringComparison.Ordinal))
+        {
+            var plane=_selectedPlane;
+            _viewer.SetNormalView(
+                plane.Normal.X,plane.Normal.Y,plane.Normal.Z,
+                plane.V.X,plane.V.Y,plane.V.Z);
+            _viewer.FitAll();
+            Status(plane.Name+" • dik bakış");
+            return true;
+        }
+
+        Status("Dik Bak için düzlemsel bir yüz veya Ön/Üst/Sağ Düzlem seçin.");
+        return false;
     }
 
     private void Fit_Click(object sender, RoutedEventArgs e) => _viewer.FitAll();
+    private void NormalTo_Click(object sender,RoutedEventArgs e) => NormalToSelectedSupport();
     private void Iso_Click(object sender, RoutedEventArgs e) => _viewer.SetIsoView();
     private void Front_Click(object sender, RoutedEventArgs e) => _viewer.SetFrontView();
+    private void Back_Click(object sender, RoutedEventArgs e) => _viewer.SetBackView();
     private void Top_Click(object sender, RoutedEventArgs e) => _viewer.SetTopView();
+    private void Bottom_Click(object sender, RoutedEventArgs e) => _viewer.SetBottomView();
     private void Right_Click(object sender, RoutedEventArgs e) => _viewer.SetRightView();
+    private void Left_Click(object sender, RoutedEventArgs e) => _viewer.SetLeftView();
+
+    private void ShadedEdges_Click(object sender,RoutedEventArgs e)
+    {
+        _viewer.SetDisplayStyle(CadDisplayStyle.ShadedWithEdges);
+        Status("Görünüm: Gölgeli + Kenarlı");
+    }
+    private void Shaded_Click(object sender,RoutedEventArgs e)
+    {
+        _viewer.SetDisplayStyle(CadDisplayStyle.Shaded);
+        Status("Görünüm: Gölgeli");
+    }
+    private void Wireframe_Click(object sender,RoutedEventArgs e)
+    {
+        _viewer.SetDisplayStyle(CadDisplayStyle.Wireframe);
+        Status("Görünüm: Tel Kafes");
+    }
 
     private void FaceSelection_Click(object sender, RoutedEventArgs e)
     {
+        _inspectMeasureMode=false;MeasureStatusText.Text="";StatusUnitText.Text="mm";
         _viewer.SetSelectionMode(CadSelectionMode.Face);
         Status("Yüz seçimi aktif • mouse üstünde OCCT pre-highlight görünür.");
     }
 
     private void EdgeSelection_Click(object sender, RoutedEventArgs e)
     {
+        _inspectMeasureMode=false;MeasureStatusText.Text="";StatusUnitText.Text="mm";
         _viewer.SetSelectionMode(CadSelectionMode.Edge);
         Status("Kenar seçimi aktif • mouse üstünde OCCT pre-highlight görünür.");
     }
 
     private void VertexSelection_Click(object sender, RoutedEventArgs e)
     {
+        _inspectMeasureMode=false;MeasureStatusText.Text="";StatusUnitText.Text="mm";
         _viewer.SetSelectionMode(CadSelectionMode.Vertex);
         Status("Köşe seçimi aktif • mouse üstünde OCCT pre-highlight görünür.");
     }
 
+    private void SavePart_Click(object sender, RoutedEventArgs e)
+    {
+        if ((_sketch is null && _partSession is null) || _inSketch || _extrudeCommandActive)
+        { Status("Kaydetmeden önce çizim/özellik düzenlemesini onaylayın veya iptal edin."); return; }
+        var dialog = new Microsoft.Win32.SaveFileDialog { Filter = "SrcCad Parça (*.scpart)|*.scpart", DefaultExt = ".scpart", AddExtension = true };
+        if (dialog.ShowDialog(this) != true) return;
+        try
+        {
+            if(_partSession is not null)SrcCad.Core.Features.FeatureDocumentFile.Save(dialog.FileName,_partSession.Document);
+            else PartFile.Save(dialog.FileName,CaptureFeatureState());
+            Status("Parametrik parça kaydedildi: " + dialog.FileName);
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException or System.Text.Json.JsonException or InvalidOperationException)
+        { MessageBox.Show(this,ex.Message,"Parça kaydedilemedi",MessageBoxButton.OK,MessageBoxImage.Error); }
+    }
+
+    private void OpenPart_Click(object sender, RoutedEventArgs e)
+    {
+        if (_inSketch || _extrudeCommandActive)
+        { Status("Açmadan önce mevcut komutu onaylayın veya iptal edin."); return; }
+        var dialog = new Microsoft.Win32.OpenFileDialog { Filter = "SrcCad Parça (*.scpart)|*.scpart" };
+        if (dialog.ShowDialog(this) != true) return;
+        try
+        {
+            if(TryOpenGraphFile(dialog.FileName))return;
+            var state = PartFile.Load(dialog.FileName);
+            if (!ApplyFeatureState(state)) { Status("Dosya okundu fakat OCCT rebuild başarısız; mevcut belge korundu."); return; }
+            ResetPartWorkbench();
+            if (_sketchNode is null)
+            {
+                _sketchNode = new TreeViewItem { Header="Çizim1",Tag="sketch:1" };
+                PartNode.Items.Add(_sketchNode);
+            }
+            _featureHistory.Clear(); _sketchUndo.Clear(); _sketchRedo.Clear();
+            _selectedPlane = state.Plane;
+            _viewer.FitAll();
+            Status("Parametrik parça açıldı; ölçü ve ilişkiler düzenlenebilir: " + dialog.FileName);
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException or System.Text.Json.JsonException or InvalidOperationException)
+        { MessageBox.Show(this,ex.Message,"Parça açılamadı",MessageBoxButton.OK,MessageBoxImage.Error); }
+    }
+
     private void NewPart_Click(object sender, RoutedEventArgs e)
     {
+        ExitAssemblyMode();
+        ExitDrawingMode();
+        ResetPartWorkbench();
         _commandManager.Cancel();
         _sketchCommand = null;
         _commandContext = null;
         _viewer.ClearModel();
         _sketch = null;
+        _sourceSketchEditBefore = null;
+        ResetSketchInteraction();
+        _sketchUndo.Clear();
+        _sketchRedo.Clear();
+        _extrudeDepth = 20.0;
         _inSketch = false;
         _smartDimensionMode = false;
         ResetSmartDimensionTargets();
         ClearSketchSelection(false);
         _hasSolid = false;
+        _editingExtrude = false;
+        _featureHistory.Clear();
+        _inspectMeasureMode=false;
+        _pendingSheetMetalBaseAfterSketch=false;
+        MeasureStatusText.Text="";
+        StatusUnitText.Text="mm";
         _extrudeCommandActive = false;
         ExtrudePanel.Visibility = Visibility.Collapsed;
         SketchTab.IsEnabled = false;
@@ -1655,12 +2642,60 @@ public partial class MainWindow : Window
 
     private void Exit_Click(object sender, RoutedEventArgs e) => Close();
 
+    private void About_Click(object sender,RoutedEventArgs e)
+    {
+        MessageBox.Show(this,
+            "SrcCad\nParametrik CAD • OCCT B-Rep\n\nParça, Çizim, Sac Levha, Profiller, Montaj, Teknik Resim ve İnceleme çalışma alanları.",
+            "SrcCad Hakkında",MessageBoxButton.OK,MessageBoxImage.Information);
+    }
+
     private void RefreshCommandState()
     {
-        StartSketchButton.IsEnabled = !_inSketch && !_hasSolid;
+        if(_inspectMeasureMode&&(_inSketch||_extrudeCommandActive||InAssemblyMode||InDrawingMode))
+        {
+            _inspectMeasureMode=false;
+            MeasureStatusText.Text="";
+            StatusUnitText.Text="mm";
+        }
+        StartSketchButton.IsEnabled = !_inSketch && !_extrudeCommandActive;
+        StartSketchButton.Content = "Çizim";
+        CancelSourceSketchEditButton.Visibility = _sourceSketchEditBefore is null && _graphSketchEdit is null ? Visibility.Collapsed : Visibility.Visible;
+        NewProfileSketchButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&(_hasSolid||_partSession is not null);
+        CutButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid&&_partSession is not null&&CutProfileCandidate() is not null;
+        FilletButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
+        ChamferButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
+        HoleButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
+        RevolveButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&(_sketch is not null||_partSession is not null);
+        RevolveCutButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
+        SweepButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_partSession is not null;
+        LoftButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_partSession is not null;
+        ShellButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
+        DraftButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
+        RibButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid&&_partSession is not null&&RibSketchCandidate() is not null;
+        MirrorButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
+        LinearPatternButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
+        CircularPatternButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid;
+        ReferenceGeometryButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&(_sketch is not null||_partSession is not null);
+        // SOLIDWORKS-like entry: Taban Flanş is available on an empty part too.
+        // If no sketch exists, the command opens a sketch first and continues automatically.
+        BaseFlangeButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&!_hasSolid;
+        ConvertToSheetMetalButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid&&_partSession is not null&&
+            !_partSession.Document.Features.Any(n=>n.Kind is SrcCad.Core.Features.FeatureKind.SheetMetalBase or SrcCad.Core.Features.FeatureKind.SheetMetalConvert);
+        EdgeFlangeButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid&&_partSession is not null&&
+            _partSession.Document.Features.Any(n=>n.Kind is SrcCad.Core.Features.FeatureKind.SheetMetalBase or SrcCad.Core.Features.FeatureKind.SheetMetalConvert);
+        SheetCutButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid&&_partSession is not null&&
+            _partSession.Document.Features.Any(n=>n.Kind is SrcCad.Core.Features.FeatureKind.SheetMetalBase or SrcCad.Core.Features.FeatureKind.SheetMetalConvert)&&CutProfileCandidate() is not null;
+        EndCapButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid&&_partSession is not null;
+        WeldBeadButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&_hasSolid&&_partSession is not null;
+        if(_partSession is not null)
+        {
+            ExtrudeButton.IsEnabled=!_inSketch&&!_extrudeCommandActive&&!_hasSolid&&SelectedGraphId is Guid sketchId&&SelectedGraphNode?.Kind==SrcCad.Core.Features.FeatureKind.Sketch;
+            return;
+        }
         ExtrudeButton.IsEnabled = !_inSketch && !_hasSolid && _sketch is not null &&
-                                  (_sketch.TryGetExtrusionProfile(out _, out _) || _sketch.TryGetSingleCircle(out _));
+                                  (_sketch.TryGetExtrusionRegions(out var regions) && regions.Count>0);
     }
 
     private void Status(string text) => StatusText.Text = text;
 }
+

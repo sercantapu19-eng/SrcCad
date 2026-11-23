@@ -1,3 +1,6 @@
+Güncel 120 maddelik kabul kapısı: [docs/SOLID_ACCEPTANCE_120.md](docs/SOLID_ACCEPTANCE_120.md).
+Aşağıdaki önceki kullanıcı akışları regresyon testi olarak korunmaktadır.
+
 # SrcCad V1.2 CAD Alpha — Kabul Testi
 
 ## 0. Tek tık başlangıç
@@ -97,3 +100,4 @@ Proje kökünde `SrcCad_Diagnostics_YYYYMMDD-HHMMSS.zip` oluşur.
    Beklenen: derinlik -10 mm.
 8. Onayla.
    Beklenen: ortası delik gerçek OCCT B-Rep prizma.
+
