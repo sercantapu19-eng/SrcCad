@@ -40,9 +40,9 @@ Java_com_srccad_mobile_NativeCadEngine_nativeInspectSolidWorks(JNIEnv* e,jobject
     try {
         auto path=std::filesystem::path(str(e,jp));
         auto doc=openswx::SwxDocument::Open(path);
-        if(!doc.ok()) return js(e,"{\"ok\":false,\"message\":\""+esc(doc.error().message)+"\"}");
+        if(!doc.ok()) return js(e,"{\"ok\":false,\"message\":\""+esc(doc.error())+"\"}");
         auto container=openswx::InspectContainer(path);
-        if(!container.ok()) return js(e,"{\"ok\":false,\"message\":\""+esc(container.error().message)+"\"}");
+        if(!container.ok()) return js(e,"{\"ok\":false,\"message\":\""+esc(container.error())+"\"}");
         auto extracted=openswx::ExtractParasolidStreams(container.value());
         std::ostringstream o;
         const auto& d=doc.value().doc();
@@ -93,9 +93,9 @@ Java_com_srccad_mobile_NativeCadEngine_nativeSolidWorksToStepSelected(
         std::string config=str(e,jc);
         if(config.empty()||output.empty()) return js(e,"{\"ok\":false,\"message\":\"Konfigürasyon ve çıktı yolu zorunludur.\"}");
         auto container=openswx::InspectContainer(input);
-        if(!container.ok()) return js(e,"{\"ok\":false,\"message\":\""+esc(container.error().message)+"\"}");
+        if(!container.ok()) return js(e,"{\"ok\":false,\"message\":\""+esc(container.error())+"\"}");
         auto resolution=openswx::ResolveSavedGeometry(container.value(),config);
-        if(!resolution.ok()) return js(e,"{\"ok\":false,\"message\":\""+esc(resolution.error().message)+"\"}");
+        if(!resolution.ok()) return js(e,"{\"ok\":false,\"message\":\""+esc(resolution.error())+"\"}");
         const openswx::SavedGeometryCandidate* chosen=nullptr;
         for(const auto& c:resolution.value().candidates) if(c.payload_index==static_cast<size_t>(pi)){chosen=&c;break;}
         if(!chosen||!chosen->selected_partition||chosen->role!=openswx::GeometrySourceRole::kPartition||!chosen->decoded_complete)
