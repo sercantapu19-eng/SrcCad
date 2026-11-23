@@ -1,17 +1,22 @@
-# SolidWorks / OpenSWX Android integration (in progress)
+# SolidWorks / OpenSWX Android integration checkpoint
 
-This branch now contains the first native integration layer:
+This branch is an integration checkpoint, not a completed or tested APK.
 
-- `app/src/main/cpp/solidworks_jni_bridge.cpp`: JNI entry points for document inspection, embedded preview extraction, and explicit configuration + payload + solid BODY STEP export.
-- `NativeCadEngine.kt`: matching JNI declarations.
-- `app/src/main/cpp/CMakeLists.txt`: C++20 and an opt-in `SRCCAD_ENABLE_OPENSWX` target definition.
+## Changes committed
+- Native CMake is switched to C++20 and has an OpenSWX/OpenParasolid/OpenSWStep target.
+- Android Kotlin JNI declarations are added for document inspection, embedded preview and explicit selected-body STEP export.
+- Gradle C++ compiler flag is switched to C++20.
 
-## Important: not yet build-enabled
+## Required files still to be added before this can build
+1. Vendor the supplied OpenSWX source archive into `SrcCad.Mobile/app/src/main/cpp/third_party/openswx/`. Expected subfolders: `libopenswx`, `libopenparasolid`, `libopenswstep`.
+2. Add the JNI implementation as `SrcCad.Mobile/app/src/main/cpp/solidworks_jni_bridge.cpp`.
+3. Add the Kotlin configuration / payload / BODY selection UI. The JNI API must refuse implicit first-body selection.
+4. Verify OCCT Android shared libraries are present and configured for STEP loading.
 
-`SRCCAD_ENABLE_OPENSWX` intentionally defaults to OFF. The upstream OpenSWX source tree has **not yet been committed** under `app/src/main/cpp/third_party/openswx`, and the Android app import/picker flow has not yet been wired to call these methods. Turning the option on before adding those sources will fail CMake configuration.
-
-The bridge refuses ambiguous exports: caller must pass configuration name, payload index and solid BODY id. It rejects incomplete/unselected partitions, non-solid bodies, rebuild-required configurations and unsupported delta/history state. OpenSWX's saved-geometry limitations mean this is not a guarantee that every SolidWorks file can be reconstructed as the final feature-tree state.
+## Important parser limitation
+OpenSWX's saved-geometry resolver does not fully replay SolidWorks feature/delta history and cannot certify that every BODY candidate is the final displayed body. The app must show configuration, payload, BODY kind and parser limitations, and must not silently choose a candidate. Known rebuild / unsupported-delta states must be rejected.
 
 ## Validation
-
-No Android Gradle build, NDK/CMake build, APK, or real `.SLDPRT` import test is claimed by this commit. Next required work: vendor the OpenSWX source/dependencies, add the Kotlin selection/import flow and connect exported STEP to the existing OCCT loader; then build and test on Android.
+- No Android build was run for this branch.
+- No APK was produced.
+- The two supplied SLDPRT samples have not yet been runtime-tested on Android.
